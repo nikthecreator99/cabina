@@ -1,6 +1,6 @@
 // Service worker CABINA: приложение работает без интернета после первого открытия.
 // Пользовательские данные (IndexedDB) service worker не трогает.
-const VERSION = 'cabina-v1.4.0';
+const VERSION = 'cabina-v1.4.1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/ui.js', 'js/store.js', 'js/db.js', 'js/calc.js', 'js/calendar.js', 'js/forms.js', 'js/docs.js', 'js/backup.js', 'js/sun.js', 'js/tour.js', 'js/tours.js',

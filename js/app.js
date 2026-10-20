@@ -11,7 +11,7 @@ import { loadTours, resetTours, tourActive } from './tour.js';
 import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.4.0';
+export const VERSION = '1.4.1';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
@@ -183,6 +183,7 @@ function renderHome() {
   const cards = [
     { cls: 'c-night', icon: I.moon, label: 'Ночные часы', min: sum.night },
     { cls: 'c-holiday', icon: I.calStar, label: 'Праздничные часы', min: sum.holiday },
+    ...(sum.work > sum.normMin && sum.work > 0 ? [{ cls: 'c-over', icon: I.overtime, label: 'Переработка', min: sum.work - sum.normMin }] : []),
     ...absCards,
   ];
   const statsHtml = cards.map((c, i) => statCard(c.cls, c.icon, c.label, c.min, cards.length % 2 === 1 && i === cards.length - 1, c.type)).join('');
@@ -207,7 +208,7 @@ function renderHome() {
       <section class="glass hero" aria-label="Итоги месяца">
         <div class="eyebrow">Отработано в ${MONTHS_PREP[V.m - 1]}</div>
         <div class="hero-left">
-          <div class="big num">${bigDur(sum.work)}</div>
+          <div class="big num ${Math.floor(Math.round(sum.work) / 60) >= 100 ? 'long' : ''}">${bigDur(sum.work)}</div>
           ${normHtml}
         </div>
         <div>${ring(sum.normMin === 0 ? null : pct)}</div>
