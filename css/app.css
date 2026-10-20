@@ -136,6 +136,9 @@ svg { flex: none; }
 :root[data-theme="light"] .round-btn, :root[data-theme="light"] .chip-btn { background: rgba(255,255,255,.7); border-color: rgba(20,32,64,.12); color: var(--text); }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .round-btn, :root:not([data-theme="dark"]) .chip-btn { background: rgba(255,255,255,.7); border-color: rgba(20,32,64,.12); color: var(--text); } }
 
+body .home-top.on-sky .brand, body .home-top.on-sky .month-title { color: #fff; text-shadow: 0 1px 10px rgba(0, 0, 0, .45); }
+body .home-top.on-sky .round-btn, body .home-top.on-sky .chip-btn { background: rgba(10, 16, 30, .32); border-color: rgba(255, 255, 255, .28); color: #fff; }
+
 /* ---------- Карточки ---------- */
 .glass {
   background: var(--card);
@@ -226,7 +229,16 @@ button.stat:active { transform: scale(.98); }
   padding: 12px 12px 12px 10px; border-radius: var(--r-md); background: var(--card-solid); border: 1px solid var(--line);
   text-align: left; width: 100%; transition: transform .12s ease, border-color .2s;
 }
-.trip:active { transform: scale(.99); border-color: var(--line-2); }
+.trip:active { border-color: var(--line-2); }
+.swipe { position: relative; border-radius: var(--r-md); }
+.swipe .trip { position: relative; z-index: 1; touch-action: pan-y; transition: transform .22s cubic-bezier(.2,.8,.2,1); user-select: none; -webkit-user-select: none; }
+.swipe-del {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 84px; z-index: 0; border-radius: var(--r-md);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: linear-gradient(180deg, #ff4b4b, #d7262f); color: #fff; font-size: 12px; font-weight: 700;
+  opacity: 0; transition: opacity .15s;
+}
+.swipe.revealing .swipe-del { opacity: 1; }
 .date-block { text-align: center; border-right: 1px solid var(--line-2); padding-right: 10px; line-height: 1.05; }
 .date-block .d { font-family: var(--font-display); font-weight: 700; font-size: 24px; font-variant-numeric: tabular-nums; }
 .date-block .mo { font-size: 12px; font-weight: 700; text-transform: uppercase; margin-top: 3px; }
@@ -379,6 +391,10 @@ textarea.input { min-height: 90px; resize: vertical; line-height: 1.4; }
 .input.err { border-color: var(--holiday); }
 input[type="date"].input, input[type="time"].input { min-width: 0; display: block; text-align: left; }
 input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+.input-unit { position: relative; }
+.input-unit .input { padding-right: 48px; }
+.input-unit span { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 600; pointer-events: none; }
+.route-meta .km { color: var(--text); font-weight: 700; }
 .dt { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px; }
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .hint { font-size: 13px; color: var(--muted); }

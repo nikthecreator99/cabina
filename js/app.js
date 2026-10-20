@@ -1,19 +1,21 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
-import { I, esc, openLayer, closeLayer, sheet, toast, confirmDialog, actionSheet, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dateRange, plural, fmtSize, layerCount } from './ui.js';
-import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote } from './store.js';
+import { I, esc, openLayer, closeLayer, sheet, toast, confirmDialog, actionSheet, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dateRange, dayMonth, plural, fmtSize, layerCount } from './ui.js';
+import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, turnaroundRest } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
 import { openTripForm, openAbsenceForm, openRouteForm, openNoteForm, ABS_TYPES, setNavigator, computeHomeRest, fmtDate } from './forms.js';
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
+import { skyPhase } from './sun.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.1.1';
+export const VERSION = '1.2.0';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
 const small = (svg, s = 14) => svg.replace('width="22" height="22"', `width="${s}" height="${s}"`);
 const p2 = (n) => String(n).padStart(2, '0');
+export const fmtKm = (v) => `${String(Math.round(v * 10) / 10).replace('.', ',')} км`;
 
 // ---------------------------------------------------------------- тема
 const mql = window.matchMedia('(prefers-color-scheme: dark)');
@@ -27,13 +29,23 @@ function applyTheme() {
 mql.addEventListener?.('change', applyTheme);
 
 // ---------------------------------------------------------------- небо
-function skySVG() {
+// Сцены неба по положению солнца: рассвет, день, закат; ночь — исходная сцена темы.
+const SCENES = {
+  sunrise: { vars: { '--sky-1': '#22305a', '--sky-2': '#7a5b8f', '--sky-3': '#f2956b', '--sky-4': '#ffd99a', '--silhouette': '#0e1424', '--star': 'rgba(255,255,255,.28)', '--rail': '#ffd08a' }, sun: [88, 175, 19], core: '#fff6d8', mid: '#ffc46e', glowR: 190, clouds: 0.35, dip: [52, 128] },
+  day: { vars: { '--sky-1': '#2a66cf', '--sky-2': '#4f8fe3', '--sky-3': '#8fc0f0', '--sky-4': '#d4eafc', '--silhouette': '#15304a', '--star': 'transparent', '--rail': '#ffffff' }, sun: [236, 100, 11], core: '#fffdf2', mid: '#fff1a8', glowR: 120, clouds: 0.8 },
+  sunset: { vars: { '--sky-1': '#1a1436', '--sky-2': '#5c1f48', '--sky-3': '#d9482c', '--sky-4': '#ffab45', '--silhouette': '#08060e', '--star': 'rgba(255,255,255,.35)', '--rail': '#ffb070' }, sun: [300, 177, 16], core: '#ffe1a0', mid: '#ff7a2e', glowR: 170, clouds: 0.25 },
+  night: { vars: null, sun: null, glowR: 150, clouds: 0 },
+};
+export const sceneVars = (phase) => (SCENES[phase]?.vars ? Object.entries(SCENES[phase].vars).map(([k, v]) => `${k}:${v}`).join(';') : '');
+function skySVG(phase = 'night') {
+  const S0 = SCENES[phase] || SCENES.night;
   // лес по горизонту (детерминированный)
   let seed = 7;
   const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
   let d = 'M0 250 L0 186';
   for (let x = 0; x <= 400; x += 6 + rnd() * 6) {
-    const h = 166 + rnd() * 16 - (x > 260 && x < 340 ? 6 : 0);
+    const inDip = S0.dip && x > S0.dip[0] && x < S0.dip[1];
+    const h = inDip ? 180 + rnd() * 4 : 166 + rnd() * 16 - (x > 260 && x < 340 ? 6 : 0);
     d += ` L${x.toFixed(1)} ${(186 - rnd() * 3).toFixed(1)} L${(x + 3).toFixed(1)} ${h.toFixed(1)} L${(x + 6).toFixed(1)} ${(186 - rnd() * 3).toFixed(1)}`;
   }
   d += ' L400 186 L400 250 Z';
@@ -48,12 +60,15 @@ function skySVG() {
   return `<svg viewBox="0 0 400 250" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
     <defs>
       <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--sky-1)"/><stop offset=".42" style="stop-color:var(--sky-2)"/><stop offset=".68" style="stop-color:var(--sky-3)"/><stop offset=".76" style="stop-color:var(--sky-4)"/></linearGradient>
-      <radialGradient id="sun" cx="${vp[0]}" cy="${vp[1] - 4}" r="150" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:var(--sky-4)" stop-opacity=".95"/><stop offset=".35" style="stop-color:var(--sky-3)" stop-opacity=".45"/><stop offset="1" style="stop-color:var(--sky-3)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="sun" cx="${S0.sun ? S0.sun[0] : vp[0]}" cy="${S0.sun ? S0.sun[1] : vp[1] - 4}" r="${S0.glowR}" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:var(--sky-4)" stop-opacity=".95"/><stop offset=".35" style="stop-color:var(--sky-3)" stop-opacity=".45"/><stop offset="1" style="stop-color:var(--sky-3)" stop-opacity="0"/></radialGradient>
       <radialGradient id="lamp" r=".5"><stop offset="0" stop-color="#fff6d8"/><stop offset=".3" stop-color="#ffd27a" stop-opacity=".8"/><stop offset="1" stop-color="#ff7a2e" stop-opacity="0"/></radialGradient>
       <linearGradient id="railg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" style="stop-color:var(--rail)" stop-opacity=".15"/><stop offset="1" style="stop-color:var(--rail)" stop-opacity=".9"/></linearGradient>
     </defs>
     <rect width="400" height="250" fill="url(#sk)"/>${stars}
     <rect width="400" height="250" fill="url(#sun)"/>
+    ${S0.sun ? `<radialGradient id="disc" r=".5"><stop offset="0" stop-color="${S0.core}"/><stop offset=".55" stop-color="${S0.core}"/><stop offset=".72" stop-color="${S0.mid}" stop-opacity=".55"/><stop offset="1" stop-color="${S0.mid}" stop-opacity="0"/></radialGradient>
+      <circle cx="${S0.sun[0]}" cy="${S0.sun[1]}" r="${S0.sun[2] * 2.2}" fill="url(#disc)"/>` : ''}
+    ${S0.clouds ? [[60, 112, 1], [170, 128, 0.8], [300, 104, 0.9], [120, 150, 0.6]].map(([cx, cy, k]) => `<g fill="#fff" opacity="${(S0.clouds * k * 0.75).toFixed(2)}"><ellipse cx="${cx}" cy="${cy}" rx="${26 * k}" ry="${5 * k}"/><ellipse cx="${cx - 8 * k}" cy="${cy - 4 * k}" rx="${11 * k}" ry="${6 * k}"/><ellipse cx="${cx + 7 * k}" cy="${cy - 5 * k}" rx="${13 * k}" ry="${7.5 * k}"/></g>`).join('') : ''}
     <path d="${d}" style="fill:var(--silhouette)"/>
     <g style="stroke:var(--silhouette)" stroke-linecap="round">${mastSvg}</g>
     <path d="${wire}" fill="none" style="stroke:var(--silhouette)" stroke-width=".8"/>
@@ -66,7 +81,9 @@ function skySVG() {
     </g>
   </svg>`;
 }
-const SKY = skySVG();
+const SKY_CACHE = {};
+const skyFor = (phase) => SKY_CACHE[phase] || (SKY_CACHE[phase] = skySVG(phase));
+
 
 // ---------------------------------------------------------------- главная
 function ring(pct) {
@@ -96,7 +113,6 @@ function statCard(cls, icon, label, min, wide, absType) {
 function tripRow(t, mk) {
   const st = statsOf(t);
   const s = new Date(st.start);
-  const days = Math.round((Math.floor(st.end / 86400000) - Math.floor(st.start / 86400000)));
   const loco = locoLabel(t.locoType, t.locoNumber);
   const route = routeOf(t);
   const part = st.byMonth[mk];
@@ -107,15 +123,17 @@ function tripRow(t, mk) {
     st.holiday ? `<span class="chip" style="--c:var(--holiday)">${small(I.calStar, 13)} ${fmtDur(st.holiday, { short: true })}</span>` : '',
     (t.passenger || []).length ? `<span class="chip" style="--c:var(--medical)">${small(I.passenger, 13)} пасс.</span>` : '',
   ].join('');
-  return `<button class="trip" data-act="trip" data-id="${t.id}">
+  return `<div class="swipe" data-swipe="${t.id}">
+  <button class="swipe-del" data-act="trip-del" data-id="${t.id}" aria-label="Удалить поездку" tabindex="-1">${I.trash}<span>Удалить</span></button>
+  <button class="trip" data-act="trip" data-id="${t.id}">
     <div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
-      <div class="trip-time">${hm(st.start)} — ${hm(st.end)}${days > 0 ? `<span class="plus"> +${days}</span>` : ''}</div>
+      <div class="trip-time">${hm(st.start)} — ${hm(st.end)}</div>
       <div class="trip-route">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ''}
     </div>
     <div class="trip-right"><div class="dur">${fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
-  </button>`;
+  </button></div>`;
 }
 
 function currentRest(now) {
@@ -171,9 +189,10 @@ function renderHome() {
   const trips = [...sum.monthTrips].sort((a, b) => statsOf(b).start - statsOf(a).start);
   const mk = sum.mk;
 
-  app.innerHTML = `<div class="sky">${SKY}</div>
+  const phase = skyPhase(Date.now(), S.settings.tz);
+  app.innerHTML = `<div class="sky" data-phase="${phase}" style="${sceneVars(phase)}">${skyFor(phase)}</div>
   <div class="screen">
-    <div class="home-top">
+    <div class="home-top ${phase !== 'night' ? 'on-sky' : ''}">
       <div class="brand-row">
         <div class="brand"><img src="icons/icon-192.png" alt="" width="26" height="26">CABINA</div>
         ${isCurrent ? '' : `<button class="chip-btn" data-act="today">${small(I.calendar, 15)} Текущий месяц</button>`}
@@ -221,7 +240,7 @@ function renderRoutes() {
         <button class="route-pts" data-act="route" data-id="${r.id}">
           <div><div class="lbl">Откуда</div><div class="pt">${esc(r.from)}</div></div>
           <div><div class="lbl">Куда</div><div class="pt">${esc(r.to)}</div></div>
-          <div class="route-meta">${n ? `${n} ${plural(n, 'поездка', 'поездки', 'поездок')}` : 'Поездок пока нет'}</div>
+          <div class="route-meta">${r.distanceKm ? `<span class="km">${fmtKm(r.distanceKm)}</span> · ` : ''}${n ? `${n} ${plural(n, 'поездка', 'поездки', 'поездок')}` : 'Поездок пока нет'}</div>
         </button>
         <div class="route-actions">
           <button class="icon-btn" data-act="route" data-id="${r.id}" aria-label="Изменить маршрут">${I.edit}</button>
@@ -397,7 +416,57 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
   window.scrollTo(0, 0);
 });
 
+// ---------------------------------------------------------------- свайп влево для удаления поездки
+const SWIPE_W = 92;
+let sw = null;          // текущий жест
+let swallowClick = false;
+const openSwipes = () => [...app.querySelectorAll('.swipe.open')];
+function setSwipe(el, x, animate) {
+  const row = el.querySelector('.trip');
+  row.style.transition = animate ? '' : 'none';
+  row.style.transform = x ? `translateX(${x}px)` : '';
+  el.classList.toggle('open', x <= -SWIPE_W + 1);
+  el.classList.toggle('revealing', x < 0);
+}
+function closeSwipes(except) { openSwipes().forEach((s) => { if (s !== except) setSwipe(s, 0, true); }); }
+app.addEventListener('pointerdown', (e) => {
+  const row = e.target.closest('.swipe .trip');
+  if (!row || (e.pointerType === 'mouse' && e.button !== 0)) { if (!e.target.closest('.swipe-del')) closeSwipes(); return; }
+  const el = row.parentElement;
+  closeSwipes(el);
+  sw = { el, row, id: e.pointerId, x0: e.clientX, y0: e.clientY, base: el.classList.contains('open') ? -SWIPE_W : 0, lock: null, x: 0 };
+});
+app.addEventListener('pointermove', (e) => {
+  if (!sw || e.pointerId !== sw.id) return;
+  const dx = e.clientX - sw.x0;
+  const dy = e.clientY - sw.y0;
+  if (!sw.lock) {
+    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) { sw.lock = 'h'; try { sw.row.setPointerCapture(e.pointerId); } catch {} }
+    else if (Math.abs(dy) > 8) { sw = null; return; }
+    else return;
+  }
+  e.preventDefault();
+  let x = Math.min(0, sw.base + dx);
+  if (x < -SWIPE_W) x = -SWIPE_W - (Math.min(60, -SWIPE_W - x) * 0.35); // упругость
+  sw.x = x;
+  setSwipe(sw.el, x, false);
+});
+function endSwipe(e) {
+  if (!sw || e.pointerId !== sw.id) return;
+  if (sw.lock === 'h') {
+    swallowClick = true;
+    setTimeout(() => { swallowClick = false; }, 350);
+    setSwipe(sw.el, sw.x < -SWIPE_W / 2 ? -SWIPE_W : 0, true);
+  }
+  sw = null;
+}
+app.addEventListener('pointerup', endSwipe);
+app.addEventListener('pointercancel', (e) => { if (sw && sw.lock === 'h') endSwipe(e); else sw = null; });
+
 app.addEventListener('click', async (e) => {
+  if (swallowClick) { swallowClick = false; e.preventDefault(); return; }
+  const openRow = e.target.closest('.swipe.open .trip');
+  if (openRow) { closeSwipes(); return; }
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const { act, id } = b.dataset;
@@ -407,6 +476,14 @@ app.addEventListener('click', async (e) => {
     case 'today': goToday(); render(); break;
     case 'add-trip': openTripForm(); break;
     case 'trip': openTripForm(id); break;
+    case 'trip-del': {
+      const t = S.trips.find((x) => x.id === id);
+      if (!t) break;
+      const st = statsOf(t);
+      const ok = await confirmDialog({ title: 'Вы действительно хотите удалить поездку?', text: `${dayMonth(st.start)}, ${hm(st.start)} — ${hm(st.end)}${routeOf(t) ? ` · ${routeOf(t)}` : ''}`, ok: 'Да', cancel: 'Нет' });
+      if (ok) { await deleteTrip(id); toast('Поездка удалена'); } else closeSwipes();
+      break;
+    }
     case 'add-absence': {
       const now = new Date(nowLocal());
       const cur = now.getUTCFullYear() === V.y && now.getUTCMonth() + 1 === V.m;
@@ -429,7 +506,7 @@ app.addEventListener('click', async (e) => {
     case 'route': openRouteForm(id); break;
     case 'route-reverse': {
       const r = S.routes.find((x) => x.id === id);
-      if (r) openRouteForm(null, { from: r.to, to: r.from });
+      if (r) openRouteForm(null, { from: r.to, to: r.from, distanceKm: r.distanceKm });
       break;
     }
     case 'extra-notes': V.extra = 'notes'; render(); window.scrollTo(0, 0); break;
@@ -509,7 +586,7 @@ async function start() {
   // обновление календаря отдельно от приложения
   fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); render(); } }).catch(() => {});
   // обновлять «сейчас» (статус отдыха) раз в минуту
-  setInterval(() => { if (V.tab === 'home' && !layerCount()) render(); }, 60000);
+  setInterval(() => { if (V.tab === 'home' && !layerCount() && !sw && !app.querySelector('.swipe.revealing')) render(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !layerCount()) render(); });
   registerSW();
 }

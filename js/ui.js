@@ -9,7 +9,7 @@ export const I = {
   moon: sv('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
   calStar: sv('<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="m12 12 1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z" fill="currentColor" stroke-width="1"/>'),
   sick: sv('<path d="M3 18v-8M3 15h18v3M21 15v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="12" r="1.8"/><path d="M15 3.5v4M13 5.5h4"/>'),
-  vacation: sv('<path d="M12 21c0-5 .5-8 1.5-11"/><path d="M13.5 10C12 7 9 6 6 7c2-3 6-3.5 7.5 3z"/><path d="M13.5 10c1-3 4-4.5 7-3.5-1.5-3-5.5-3.5-7 3.5z"/><path d="M13.5 10c-3 0-5.5 2-6 5 2.5-1.5 4.5-2.5 6-5z"/><path d="M4 21h16"/><circle cx="19" cy="4" r="1.6" fill="currentColor"/>'),
+  vacation: sv('<path d="M12.6 10.2c-.2 3.6-.9 7.3-2.4 10.6" stroke-width="2.2"/><path d="M12.6 10.2C11.4 7 8.2 5.4 4.6 6.4c3 .1 5.5 1.5 8 3.8z" fill="currentColor"/><path d="M12.6 10.2c-2.9-.6-6 .9-7.3 4.1 2.2-1.9 4.6-2.8 7.3-4.1z" fill="currentColor"/><path d="M12.6 10.2c1.5-3.2 4.7-4.6 8.2-3.4-3 0-5.5 1.3-8.2 3.4z" fill="currentColor"/><path d="M12.6 10.2c2.9-.4 5.8 1.4 6.9 4.6-2.1-2-4.4-3.1-6.9-4.6z" fill="currentColor"/><circle cx="12" cy="11.6" r="1" fill="currentColor" stroke="none"/><path d="M4 21h16" stroke-width="1.8"/>'),
   medical: sv('<path d="M6 3v5a4 4 0 0 0 8 0V3"/><path d="M10 12v2a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="10" r="2"/><path d="M5 3h2M13 3h2"/>'),
   clock: sv('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
   train: sv('<rect x="5" y="3" width="14" height="14" rx="4"/><path d="M5 10h14"/><circle cx="9" cy="13.5" r="1" fill="currentColor"/><circle cx="15" cy="13.5" r="1" fill="currentColor"/><path d="m8 21 2-4M16 21l-2-4"/>'),

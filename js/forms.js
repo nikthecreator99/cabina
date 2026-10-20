@@ -388,7 +388,7 @@ function pickRoute(current) {
     const el = openLayer(sheet({
       title: 'Маршрут', back: true,
       body: `
-        ${routes.length ? `<div class="list">${routes.map((r) => `<button class="radio-row" data-rid="${r.id}" aria-pressed="${r.id === current}"><span class="dot"></span><span class="grow">${esc(routeText(r))}</span><span></span></button>`).join('')}
+        ${routes.length ? `<div class="list">${routes.map((r) => `<button class="radio-row" data-rid="${r.id}" aria-pressed="${r.id === current}"><span class="dot"></span><span class="grow">${esc(routeText(r))}</span><span class="hint">${r.distanceKm ? `${String(r.distanceKm).replace('.', ',')} км` : ''}</span></button>`).join('')}
           <button class="radio-row" data-rid="" aria-pressed="${!current}"><span class="dot"></span><span class="grow" style="color:var(--text-2)">Без маршрута</span><span></span></button></div>`
         : '<div class="hint">Сохранённых маршрутов пока нет. Создайте первый ниже — он сохранится в разделе «Маршруты».</div>'}
         <div class="field"><div class="label">${I.plus} Новый маршрут</div>
@@ -557,12 +557,17 @@ export function openRouteForm(id, preset) {
     body: `
       <div class="field"><label for="rf-from">Точка А — откуда</label><input class="input" id="rf-from" placeholder="Например, Москва" maxlength="60" autocomplete="off"></div>
       <div class="field"><label for="rf-to">Точка Б — куда</label><input class="input" id="rf-to" placeholder="Например, Рязань" maxlength="60" autocomplete="off"></div>
+      <div class="field"><label for="rf-km">Расстояние <span class="opt">· км, необязательно</span></label>
+        <div class="input-unit"><input class="input" id="rf-km" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Например, 198"><span>км</span></div>
+        <div class="hint">Длина плеча между точками А и Б.</div></div>
       ${existing ? `<div class="hint">Используется в ${used} ${used % 10 === 1 && used % 100 !== 11 ? 'поездке' : 'поездках'}. Изменение названия обновит все эти поездки.</div>` : ''}
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="save-route">${I.check} Сохранить</button>`,
   }));
   $(el, '#rf-from').value = existing?.from || preset?.from || '';
   $(el, '#rf-to').value = existing?.to || preset?.to || '';
+  const km0 = existing?.distanceKm ?? preset?.distanceKm;
+  $(el, '#rf-km').value = km0 != null && km0 !== '' ? String(km0) : '';
   if (!existing) setTimeout(() => $(el, '#rf-from').focus(), 250);
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
@@ -575,7 +580,15 @@ export function openRouteForm(id, preset) {
       if (!to) { showError(el, 'Укажите точку Б — куда прибытие.'); return; }
       const dup = S.routes.find((r) => r.id !== id && r.from.toLowerCase() === from.toLowerCase() && r.to.toLowerCase() === to.toLowerCase());
       if (dup) { showError(el, 'Такой маршрут уже сохранён.'); return; }
-      await saveRoute({ ...(existing || { id: uid(), createdAt: Date.now() }), from, to, updatedAt: Date.now() });
+      const kmRaw = $(el, '#rf-km').value.trim().replace(',', '.');
+      let distanceKm = null;
+      if (kmRaw !== '') {
+        distanceKm = Number(kmRaw);
+        if (!Number.isFinite(distanceKm) || distanceKm < 0) { showError(el, 'Расстояние должно быть числом не меньше нуля.'); return; }
+        if (distanceKm > 20000) { showError(el, 'Проверьте расстояние — слишком большое значение.'); return; }
+        distanceKm = Math.round(distanceKm * 10) / 10;
+      }
+      await saveRoute({ ...(existing || { id: uid(), createdAt: Date.now() }), from, to, distanceKm, updatedAt: Date.now() });
       closeLayer(el); toast(existing ? 'Маршрут изменён' : 'Маршрут сохранён');
     } else if (b.dataset.act === 'del-route') {
       const ok = await confirmDialog({ title: 'Удалить маршрут?', text: used ? 'Поездки с этим маршрутом сохранят его название.' : 'Маршрут будет удалён из списка.' });
