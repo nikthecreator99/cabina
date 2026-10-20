@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.2.1';
+export const VERSION = '1.2.2';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
