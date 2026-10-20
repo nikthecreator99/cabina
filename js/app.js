@@ -11,7 +11,7 @@ import { loadTours, resetTours, tourActive } from './tour.js';
 import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.4.1';
+export const VERSION = '1.5.0';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
@@ -371,6 +371,7 @@ function renderSettings() {
     </div>
     <div class="group"><div class="group-title">О приложении</div>
       <div class="panel">
+        <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Показать подсказки заново</div><div class="t2">Объяснения по каждому разделу при первом открытии</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="about"><span class="ico">${I.info}</span><div class="grow"><div class="t1">CABINA ${VERSION}</div><div class="t2">Личный учёт поездок. Не является официальной системой ОАО «РЖД».</div></div>${small(I.right, 18)}</button>
       </div>
@@ -572,6 +573,7 @@ app.addEventListener('click', async (e) => {
       break;
     }
     case 'about': showOnboarding(true); break;
+    case 'whats-new': showWhatsNew(); break;
     case 'tours-reset': await resetTours(); V.tab = 'home'; goToday(); render(); window.scrollTo(0, 0); break;
     default: break;
   }
@@ -623,6 +625,53 @@ async function start() {
   registerSW();
 }
 
+// ---------------------------------------------------------------- обновление с описанием изменений
+const verNum = (v) => String(v).split('.').map((x) => parseInt(x, 10) || 0);
+const verGt = (a, b) => { const x = verNum(a); const y = verNum(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+async function loadChangelog() {
+  try { const r = await fetch(`data/changelog.json?t=${Date.now()}`, { cache: 'no-store' }); if (r.ok) return (await r.json()).versions || []; } catch {}
+  return null;
+}
+function changelogHtml(versions) {
+  return versions.map((v) => `<section class="news-ver"><div class="news-head"><span class="news-badge">${esc(v.version)}</span></div>
+    <ul class="news-list">${(v.items || []).map((it) => `<li>${esc(it)}</li>`).join('')}</ul></section>`).join('');
+}
+let updateWorker = null;
+let updateRequested = false;
+let updateShown = false;
+async function showUpdate(worker, { force = false } = {}) {
+  updateWorker = worker;
+  const prompt = () => toast('Доступна новая версия CABINA', { action: 'Что нового', onAction: () => showUpdate(updateWorker, { force: true }) });
+  // не перебивать открытую форму или подсказку — сначала тихое уведомление
+  if (!force && (layerCount() || tourActive() || updateShown)) { prompt(); return; }
+  updateShown = true;
+  const all = await loadChangelog();
+  const fresh = all ? all.filter((v) => verGt(v.version, VERSION)) : [];
+  const newest = fresh[0]?.version;
+  const el = openLayer(sheet({
+    title: 'Новая версия CABINA',
+    body: `<div class="news-intro">${newest ? `Вышла версия <b>${esc(newest)}</b>. Вот что изменилось:` : 'Вышло обновление с исправлениями и улучшениями.'}</div>
+      ${fresh.length ? changelogHtml(fresh) : ''}
+      <div class="hint">Ваши поездки, отвлечения и документы при обновлении сохранятся.</div>`,
+    foot: `<button class="btn btn-primary" data-act="do-update">${I.download} Обновить</button>`,
+  }), { onClose: () => { if (!updating) prompt(); } });
+  let updating = false;
+  el.querySelector('[data-act=do-update]').onclick = () => {
+    updating = true;
+    el.querySelector('[data-act=do-update]').innerHTML = 'Обновляем…';
+    updateRequested = true;
+    if (updateWorker) updateWorker.postMessage('skip');
+    setTimeout(() => location.reload(), 3000); // на случай, если смена версии не пришла
+  };
+}
+async function showWhatsNew() {
+  const all = await loadChangelog();
+  openLayer(sheet({
+    title: 'Что нового',
+    body: all && all.length ? `<div class="news-intro">У вас версия <b>${esc(VERSION)}</b>.</div>${changelogHtml(all.filter((v) => !verGt(v.version, VERSION)))}` : '<div class="hint">Список изменений будет доступен при подключении к интернету.</div>',
+  }));
+}
+
 function registerSW() {
   let inFrame = false;
   try { inFrame = window.top !== window; } catch { inFrame = true; }
@@ -631,19 +680,17 @@ function registerSW() {
   navigator.serviceWorker.register('sw.js').then((reg) => {
     // проверять обновление, когда приложение снова открыто
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
-    if (reg.waiting && navigator.serviceWorker.controller) toast('Доступна новая версия CABINA', { action: 'Обновить', onAction: () => reg.waiting?.postMessage('skip') });
+    if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
     reg.addEventListener('updatefound', () => {
       const w = reg.installing;
       w?.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) {
-          toast('Доступна новая версия CABINA', { action: 'Обновить', onAction: () => w.postMessage('skip') });
-        }
+        if (w.state === 'installed' && navigator.serviceWorker.controller) showUpdate(w);
       });
     });
   }).catch(() => {});
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if ((hadController || updateRequested) && !reloaded) { reloaded = true; location.reload(); } });
 }
 
 window.__cabina = { S, V, render, emit };

@@ -508,6 +508,16 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
   .trip { grid-template-columns: 46px minmax(0,1fr) auto; gap: 10px; }
   .date-block .d { font-size: 21px; }
 }
+/* ---------- Окно обновления ---------- */
+.news-intro { font-size: 16px; color: var(--text-2); }
+.news-intro b { color: var(--text); }
+.news-ver { border-radius: 16px; background: var(--card-solid); border: 1px solid var(--line-2); padding: 14px 16px; }
+.news-head { margin-bottom: 8px; }
+.news-badge { display: inline-block; font-family: var(--font-display); font-weight: 700; font-size: 13px; padding: 4px 10px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.news-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.news-list li { position: relative; padding-left: 26px; font-size: 16px; line-height: 1.45; }
+.news-list li::before { content: ""; position: absolute; left: 4px; top: .5em; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 18%, transparent); }
+
 /* ---------- Подсказки первого запуска ---------- */
 .tour { position: fixed; inset: 0; z-index: 80; animation: fade .25s ease; }
 .tour.closing { opacity: 0; transition: opacity .2s; }

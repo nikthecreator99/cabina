@@ -1,6 +1,6 @@
 // Service worker CABINA: приложение работает без интернета после первого открытия.
 // Пользовательские данные (IndexedDB) service worker не трогает.
-const VERSION = 'cabina-v1.4.1';
+const VERSION = 'cabina-v1.5.0';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/ui.js', 'js/store.js', 'js/db.js', 'js/calc.js', 'js/calendar.js', 'js/forms.js', 'js/docs.js', 'js/backup.js', 'js/sun.js', 'js/tour.js', 'js/tours.js',
@@ -30,6 +30,7 @@ self.addEventListener('fetch', (e) => {
 
   if (url.origin !== self.location.origin) return;
   if (url.pathname.endsWith('/sw.js')) return; // сам service worker не кэшируем
+  if (url.pathname.endsWith('/data/changelog.json')) return; // список изменений — всегда с сервера
 
   // Календарь: сначала сеть (чтобы получать обновления), потом кэш
   if (url.pathname.endsWith('/data/calendar.json')) {
