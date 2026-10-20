@@ -5,10 +5,11 @@ import {
   saveTrip, deleteTrip, saveAbsence, deleteAbsence, saveRoute, deleteRoute, saveNote, deleteNote,
 } from './store.js';
 import {
-  tripStats, validateTrip, parseLocal, fmtLocal, fmtDur, fmtHours, turnaroundRest, homeRest,
+  tripStats, validateTrip, parseLocal, fmtLocal, fmtDur, fmtHours, turnaroundRest, homeRestMulti,
   autoAbsenceHours, absenceMonths, validateAbsence, DAY,
 } from './calc.js';
 import { dayInfo } from './calendar.js';
+import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour } from './tours.js';
 
 const $ = (root, sel) => root.querySelector(sel);
 const setHTML = (node, html) => { if (node && node.__html !== html) { node.innerHTML = html; node.__html = html; } };
@@ -43,15 +44,12 @@ export function tripLabelShort(t) {
 
 export function computeHomeRest(trip, ids, pool) {
   if (!ids || ids.length < 2) return null;
-  const find = (id) => (id === trip.id ? trip : pool.find((x) => x.id === id));
-  const a = find(ids[0]);
-  const b = find(ids[1]);
-  if (!a || !b) return { missing: true };
-  const sa = a === trip ? tripStats(trip) : statsOf(a);
-  const sb = b === trip ? tripStats(trip) : statsOf(b);
-  const r = homeRest(sa, sb);
-  r.earlyTrip = r.early === sa ? a : b;
-  r.lateTrip = r.early === sa ? b : a;
+  const trips = ids.map((id) => (id === trip.id ? trip : pool.find((x) => x.id === id)));
+  if (trips.some((t) => !t)) return { missing: true };
+  const stats = trips.map((t) => (t === trip ? tripStats(trip) : statsOf(t)));
+  const r = homeRestMulti(stats);
+  r.earlyTrip = trips[stats.indexOf(r.early)];
+  r.lateTrip = trips[stats.indexOf(r.late)];
   return r;
 }
 
@@ -72,13 +70,14 @@ export function restBlock(trip, { now = nowLocal(), pool = S.trips } = {}) {
   if (!Number.isFinite(st.end)) return '';
   if (trip.restType === 'home') {
     const r = computeHomeRest(trip, trip.homeRest?.ids, pool);
-    if (!r) return `<div class="calc-head">Домашний отдых</div><div class="calc-row"><span>Выберите две поездки для расчёта</span></div>`;
+    if (!r) return `<div class="calc-head">Домашний отдых</div><div class="calc-row"><span>Выберите поездки для расчёта полного отдыха</span></div>`;
     if (r.missing) return `<div class="calc-head">Домашний отдых</div><div class="calc-row"><span>Одна из выбранных поездок удалена. Выберите поездки заново.</span></div>`;
     if (!r.valid) return `<div class="calc-head">Домашний отдых</div><div class="calc-row"><span>Эти поездки не подходят для расчёта. Выберите другие поездки.</span></div>`;
     const status = now < st.end ? '<span class="status off">Начнётся после поездки</span>' : r.fullUntil > now ? '<span class="status on">● Отдых ещё продолжается</span>' : '<span class="status off">Отдых завершён</span>';
     return `<div class="calc-head">Домашний отдых</div>
-      <div class="calc-row"><span>Поездки</span><b>${esc(tripLabelShort(r.earlyTrip).split(' · ')[0])} → ${esc(tripLabelShort(r.lateTrip).split(' · ')[0])}</b></div>
-      <div class="calc-row"><span>Промежуток между ними</span><b>${fmtDur(r.gap)}</b></div>
+      <div class="calc-row"><span>Поездки${r.count > 2 ? ` (${r.count})` : ''}</span><b>${esc(tripLabelShort(r.earlyTrip).split(' · ')[0])} → ${esc(tripLabelShort(r.lateTrip).split(' · ')[0])}</b></div>
+      <div class="calc-row"><span>Рабочее время всего</span><b>${fmtDur(r.work)}</b></div>
+      <div class="calc-row"><span>${r.count > 2 ? 'Промежутки между ними' : 'Промежуток между ними'}</span><b>${fmtDur(r.gap)}</b></div>
       <div class="calc-row main"><span>Полный отдых</span><b>${fmtDur(r.full)}</b></div>
       <div class="calc-row"><span>Окончание</span><b>${whenShort(r.fullUntil, now)}</b></div>
       <div class="calc-row main"><span>С выходным (+24 ч)</span><b>${fmtDur(r.withDayOff)}</b></div>
@@ -126,7 +125,7 @@ export function openTripForm(tripId) {
     passenger: F.passenger.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
     locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber),
     restType: F.restType,
-    homeRest: F.restType === 'home' && F.homeSel.length === 2 ? { ids: [...F.homeSel] } : null,
+    homeRest: F.restType === 'home' && F.homeSel.length >= 2 ? { ids: [...F.homeSel] } : null,
   });
 
   const types = knownTypes();
@@ -260,7 +259,7 @@ export function openTripForm(tripId) {
 
     // Домашний отдых: только по кнопке
     if (F.restType !== 'home') setHTML(home, '');
-    else if (!F.homeOpen) setHTML(home, `<button type="button" class="btn btn-ghost" data-act="home-calc">${I.home2} Рассчитать полный отдых</button>`);
+    else if (!F.homeOpen) { setHTML(home, `<button type="button" class="btn btn-ghost" data-act="home-calc">${I.home2} Рассчитать полный отдых</button>`); setTimeout(() => homeRestButtonTour(el), 300); }
     else {
       const cands = homeCandidates(d, true);
       F.homeSel = F.homeSel.filter((id) => cands.some((c) => c.id === id));
@@ -274,8 +273,10 @@ export function openTripForm(tripId) {
           <span class="w">${fmtDur(c.stats.work, { short: true })}</span></button>`;
       }).join('');
       if (cands.length < 2) h += '<div class="hint">Для расчёта нужна ещё хотя бы одна завершённая поездка.</div>';
-      if (F.homeSel.length === 2) h += `<div class="calc">${restBlock(d)}</div>`;
+      if (F.homeSel.length >= 2) h += `<div class="calc">${restBlock(d)}</div>`;
+      else if (F.homeSel.length === 1) h += '<div class="hint">Отметьте ещё хотя бы одну поездку.</div>';
       setHTML(home, h);
+      if (cands.length >= 2) setTimeout(() => homeRestPickTour(el), 300);
     }
     if (existing) {
       $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Рабочее время</div><div class="v">${fmtDur(st.work)}</div></div>
@@ -285,6 +286,7 @@ export function openTripForm(tripId) {
   function refreshAll() { renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
 
   renderRoute(); renderPass(); refreshAll();
+  setTimeout(() => tripFormTour(el), 450);
 
   // автодата окончания
   function autoEnd() {
@@ -321,7 +323,7 @@ export function openTripForm(tripId) {
     if (b.dataset.cand) {
       const id = b.dataset.cand;
       if (F.homeSel.includes(id)) F.homeSel = F.homeSel.filter((x) => x !== id);
-      else { F.homeSel.push(id); if (F.homeSel.length > 2) F.homeSel.shift(); }
+      else F.homeSel.push(id);
       refreshAll(); return;
     }
     const act = b.dataset.act;
@@ -465,6 +467,7 @@ export function openAbsenceForm(id, { defaultDate } = {}) {
   }));
   $(el, '#af-start').value = A.start;
   $(el, '#af-end').value = A.end;
+  setTimeout(() => absenceTour(el), 450);
 
   function render() {
     el.querySelectorAll('[data-type]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.type === A.type)));

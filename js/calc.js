@@ -191,20 +191,26 @@ export function turnaroundRest(workMin, endMs, minRestMin) {
   return { rest, until: endMs + rest * MIN };
 }
 
-// a, b — статистика двух поездок (tripStats). Возвращает null, если поездки совпадают.
-export function homeRest(sa, sb) {
-  const [early, late] = sa.end <= sb.end ? [sa, sb] : [sb, sa];
-  const gap = (late.start - early.end) / MIN;
-  const full = Math.round((early.work + late.work) * 2.6 - gap);
+// Полный (домашний) отдых по двум и более поездкам (статистика tripStats).
+// (сумма рабочего времени всех поездок) × 2,6 − (сумма промежутков между соседними поездками).
+// Для двух поездок это ровно формула ТЗ. Окончание считается от конца самой поздней поездки.
+export function homeRestMulti(list) {
+  const arr = [...list].filter((x) => Number.isFinite(x.end)).sort((a, b) => a.end - b.end);
+  const work = arr.reduce((s, x) => s + x.work, 0);
+  let gap = 0;
+  for (let i = 1; i < arr.length; i++) gap += Math.max(0, (arr[i].start - arr[i - 1].end) / MIN);
+  const full = Math.round(work * 2.6 - gap);
+  const late = arr[arr.length - 1];
   return {
-    early, late, gap,
-    valid: full > 0,
+    list: arr, early: arr[0], late, gap, work, count: arr.length,
+    valid: arr.length >= 2 && full > 0,
     full,
     fullUntil: late.end + full * MIN,
     withDayOff: full + 24 * 60,
     withDayOffUntil: late.end + (full + 24 * 60) * MIN,
   };
 }
+export const homeRest = (sa, sb) => homeRestMulti([sa, sb]);
 
 // ---- Форматирование ----
 export function fmtDur(min, { short = false } = {}) {

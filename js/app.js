@@ -7,9 +7,11 @@ import { openTripForm, openAbsenceForm, openRouteForm, openNoteForm, ABS_TYPES, 
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
+import { loadTours, resetTours, tourActive } from './tour.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.2.2';
+export const VERSION = '1.3.0';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
@@ -366,6 +368,7 @@ function renderSettings() {
     </div>
     <div class="group"><div class="group-title">О приложении</div>
       <div class="panel">
+        <button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Показать подсказки заново</div><div class="t2">Объяснения по каждому разделу при первом открытии</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="about"><span class="ico">${I.info}</span><div class="grow"><div class="t1">CABINA ${VERSION}</div><div class="t2">Личный учёт поездок. Не является официальной системой ОАО «РЖД».</div></div>${small(I.right, 18)}</button>
       </div>
     </div>
@@ -382,7 +385,22 @@ function render() {
   else if (V.tab === 'extra') renderExtra();
   else renderSettings();
   renderTabbar();
+  scheduleTours();
 }
+
+// Подсказки первого запуска для экранов (не поверх открытых окон)
+let tourTimer = null;
+function scheduleTours() {
+  clearTimeout(tourTimer);
+  tourTimer = setTimeout(() => {
+    if (layerCount() || tourActive() || !S.onboarded) return;
+    if (V.tab === 'home') { homeTour(); if (app.querySelector('.swipe')) swipeTour(); }
+    else if (V.tab === 'routes') routesTour();
+    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra ? null : extraTour());
+    else if (V.tab === 'settings') settingsTour();
+  }, 500);
+}
+export { scheduleTours };
 onChange(render);
 
 setNavigator((startStr) => {
@@ -543,6 +561,7 @@ app.addEventListener('click', async (e) => {
       break;
     }
     case 'about': showOnboarding(true); break;
+    case 'tours-reset': await resetTours(); V.tab = 'home'; goToday(); render(); window.scrollTo(0, 0); break;
     default: break;
   }
 });
@@ -571,15 +590,17 @@ function showOnboarding(again = false) {
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.act === 'onb-ok' || b.hasAttribute('data-close')) { closeLayer(el); }
+    if (b.dataset.act === 'onb-ok' || b.hasAttribute('data-close')) { closeLayer(el); setTimeout(scheduleTours, 250); }
   });
-  if (!again) setOnboarded().catch(() => {});
+  el.querySelector('.scrim').addEventListener('click', () => setTimeout(scheduleTours, 250));
+  if (!again) { S.onboarded = true; setOnboarded().catch(() => {}); }
 }
 
 // ---------------------------------------------------------------- старт
 async function start() {
   goToday();
   try { await loadAll(); } catch (e) { console.error(e); }
+  await loadTours();
   applyTheme();
   render();
   if (!S.onboarded) showOnboarding();
