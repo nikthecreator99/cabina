@@ -1,0 +1,245 @@
+// Общие элементы интерфейса: иконки, форматирование, слои (листы/диалоги), тосты.
+const sv = (d, extra = '') => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+
+export const I = {
+  home: sv('<path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/>'),
+  route: sv('<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H16a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6h7.5"/>'),
+  grid: sv('<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>'),
+  gear: sv('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  moon: sv('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
+  calStar: sv('<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="m12 12 1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z" fill="currentColor" stroke-width="1"/>'),
+  sick: sv('<path d="M3 18v-8M3 15h18v3M21 15v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="12" r="1.8"/><path d="M15 3.5v4M13 5.5h4"/>'),
+  vacation: sv('<path d="M12 21c0-5 .5-8 1.5-11"/><path d="M13.5 10C12 7 9 6 6 7c2-3 6-3.5 7.5 3z"/><path d="M13.5 10c1-3 4-4.5 7-3.5-1.5-3-5.5-3.5-7 3.5z"/><path d="M13.5 10c-3 0-5.5 2-6 5 2.5-1.5 4.5-2.5 6-5z"/><path d="M4 21h16"/><circle cx="19" cy="4" r="1.6" fill="currentColor"/>'),
+  medical: sv('<path d="M6 3v5a4 4 0 0 0 8 0V3"/><path d="M10 12v2a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="10" r="2"/><path d="M5 3h2M13 3h2"/>'),
+  clock: sv('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  train: sv('<rect x="5" y="3" width="14" height="14" rx="4"/><path d="M5 10h14"/><circle cx="9" cy="13.5" r="1" fill="currentColor"/><circle cx="15" cy="13.5" r="1" fill="currentColor"/><path d="m8 21 2-4M16 21l-2-4"/>'),
+  plus: sv('<path d="M12 5v14M5 12h14"/>'),
+  left: sv('<path d="m15 5-7 7 7 7"/>'),
+  right: sv('<path d="m9 5 7 7-7 7"/>'),
+  x: sv('<path d="M6 6l12 12M18 6 6 18"/>'),
+  trash: sv('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6"/>'),
+  edit: sv('<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'),
+  swap: sv('<path d="M7 4 4 7l3 3M4 7h13M17 20l3-3-3-3M20 17H7"/>'),
+  folder: sv('<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>'),
+  folderPlus: sv('<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/>'),
+  file: sv('<path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z"/><path d="M14 3.5v5h5"/>'),
+  pdf: sv('<path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z"/><path d="M14 3.5v5h5"/><path d="M8.5 16.5v-4h1.2a1.2 1.2 0 0 1 0 2.4H8.5M12.5 12.5v4h.8a2 2 0 0 0 0-4zM16.5 16.5v-4h1.6M16.5 14.5h1.2" stroke-width="1.4"/>'),
+  image: sv('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m20.5 16-5-5-9 8.5"/>'),
+  upload: sv('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-3"/>'),
+  download: sv('<path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 16v3a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-3"/>'),
+  share: sv('<path d="M12 15V3.5M8 7.5l4-4 4 4"/><path d="M6 11H5a1.5 1.5 0 0 0-1.5 1.5v6.5A1.5 1.5 0 0 0 5 20.5h14a1.5 1.5 0 0 0 1.5-1.5v-6.5A1.5 1.5 0 0 0 19 11h-1"/>'),
+  more: sv('<circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/>'),
+  check: sv('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
+  note: sv('<path d="M5 4.5h14v10l-5 5H5z"/><path d="M14 19.5v-5h5M8.5 9h7M8.5 12.5h4"/>'),
+  info: sv('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/>'),
+  shield: sv('<path d="M12 3.5 5 6v5.5c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>'),
+  alert: sv('<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17v.2"/>'),
+  sun: sv('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>'),
+  monitor: sv('<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>'),
+  phone: sv('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>'),
+  bed: sv('<path d="M3 18v-8M3 15h18v3M21 15v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="12" r="1.8"/>'),
+  home2: sv('<path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M10 20v-5h4v5"/>'),
+  passenger: sv('<circle cx="12" cy="5" r="2"/><path d="M9 21v-6l-2-1 1.5-5.5h7L17 14l-2 1v6"/>'),
+  calendar: sv('<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>'),
+  database: sv('<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/>'),
+  globe: sv('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z"/>'),
+  bed2: sv('<path d="M2.5 19v-9M2.5 15h19v4M21.5 15v-1.5a3 3 0 0 0-3-3H10v4.5"/><circle cx="6.5" cy="12" r="1.8"/>'),
+};
+
+export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ---- Даты ----
+export const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+export const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+export const MONTHS_PREP = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'];
+export const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+export const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+const D = (ms) => new Date(ms);
+export const hm = (ms) => `${String(D(ms).getUTCHours()).padStart(2, '0')}:${String(D(ms).getUTCMinutes()).padStart(2, '0')}`;
+export const dayMonth = (ms) => `${D(ms).getUTCDate()} ${MONTHS_GEN[D(ms).getUTCMonth()]}`;
+export function whenShort(ms, nowMs) {
+  const d = Math.floor(ms / 86400000);
+  const n = Math.floor(nowMs / 86400000);
+  let day;
+  if (d === n) day = 'сегодня';
+  else if (d === n + 1) day = 'завтра';
+  else if (d === n - 1) day = 'вчера';
+  else day = `${D(ms).getUTCDate()} ${MONTHS_SHORT[D(ms).getUTCMonth()]}`;
+  return `${day}, ${hm(ms)}`;
+}
+export function dateRange(a, b) {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  if (a === b) return `${ad} ${MONTHS_GEN[am - 1]}`;
+  if (ay === by && am === bm) return `${ad}–${bd} ${MONTHS_GEN[am - 1]}`;
+  if (ay === by) return `${ad} ${MONTHS_SHORT[am - 1]} – ${bd} ${MONTHS_SHORT[bm - 1]}`;
+  return `${ad}.${String(am).padStart(2, '0')}.${ay} – ${bd}.${String(bm).padStart(2, '0')}.${by}`;
+}
+export function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b > 1 && b < 5) return few;
+  if (b === 1) return one;
+  return many;
+}
+
+export function uid() {
+  if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
+export function fmtSize(b) {
+  if (b < 1024) return `${b} Б`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} КБ`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2).replace('.', ',')} ГБ`;
+}
+
+// ---- Слои ----
+const layersEl = () => document.getElementById('layers');
+const stack = [];
+const useHistory = (() => { try { return window.top === window; } catch { return false; } })();
+let suppressPop = 0;
+
+if (useHistory) {
+  window.addEventListener('popstate', () => {
+    if (suppressPop > 0) { suppressPop--; if (stack.length && !suppressPop) history.pushState({ cabina: 1 }, ''); return; }
+    if (stack.length) {
+      removeTop();
+      if (stack.length) history.pushState({ cabina: 1 }, '');
+    }
+  });
+}
+
+function removeTop() {
+  const top = stack.pop();
+  if (!top) return;
+  top.el.classList.add('closing');
+  setTimeout(() => top.el.remove(), 180);
+  if (!stack.length) document.body.style.overflow = '';
+  top.onClose?.();
+}
+
+export function openLayer(html, { kind = 'sheet', onClose } = {}) {
+  const el = document.createElement('div');
+  el.className = `layer ${kind === 'dialog' ? 'dialog-layer' : ''}`;
+  el.innerHTML = `<div class="scrim" data-close></div>${html}`;
+  layersEl().appendChild(el);
+  if (!stack.length && useHistory && !suppressPop) history.pushState({ cabina: 1 }, '');
+  stack.push({ el, onClose });
+  document.body.style.overflow = 'hidden';
+  el.querySelector('.scrim').addEventListener('click', () => closeLayer(el));
+  el.addEventListener('click', (e) => { if (e.target.closest('button[data-close]')) closeLayer(el); });
+  return el;
+}
+
+export function closeLayer(el) {
+  const top = stack[stack.length - 1];
+  if (!top) return;
+  if (el && top.el !== el) {
+    if (!stack.some((s) => s.el === el)) return;
+    while (stack.length && stack[stack.length - 1].el !== el) closeLayer();
+  }
+  if (stack.length === 1 && useHistory) { suppressPop++; history.back(); }
+  removeTop();
+}
+
+export const topLayer = () => stack[stack.length - 1]?.el;
+export const layerCount = () => stack.length;
+
+export function sheet({ title, body, foot = '', tall = false, headRight = '', back = false }) {
+  return `<section class="sheet ${tall ? 'tall' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <header class="sheet-head">
+      <button class="icon-btn" data-close aria-label="${back ? 'Назад' : 'Закрыть'}">${back ? I.left : I.x}</button>
+      <h2>${esc(title)}</h2>${headRight}
+    </header>
+    <div class="sheet-body">${body}</div>
+    ${foot ? `<footer class="sheet-foot">${foot}</footer>` : ''}
+  </section>`;
+}
+
+export function confirmDialog({ title, text, ok = 'Удалить', cancel = 'Отмена', danger = true }) {
+  return new Promise((resolve) => {
+    let result = false;
+    const el = openLayer(`<div class="dialog" role="alertdialog" aria-modal="true">
+      <h3>${esc(title)}</h3>${text ? `<p>${esc(text)}</p>` : ''}
+      <div class="btns"><button class="btn btn-plain btn-sm" data-act="no">${esc(cancel)}</button>
+      <button class="btn ${danger ? 'btn-danger' : 'btn-primary'} btn-sm" data-act="yes">${esc(ok)}</button></div></div>`,
+    { kind: 'dialog', onClose: () => resolve(result) });
+    el.querySelector('[data-act="no"]').onclick = () => closeLayer(el);
+    el.querySelector('[data-act="yes"]').onclick = () => { result = true; closeLayer(el); };
+    el.querySelector('[data-act="yes"]').focus();
+  });
+}
+
+export function promptDialog({ title, value = '', placeholder = '', ok = 'Сохранить' }) {
+  return new Promise((resolve) => {
+    let result = null;
+    const el = openLayer(`<form class="dialog" role="dialog" aria-modal="true">
+      <h3>${esc(title)}</h3>
+      <input class="input" id="prompt-input" maxlength="120" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off">
+      <div class="btns"><button type="button" class="btn btn-plain btn-sm" data-act="no">Отмена</button>
+      <button type="submit" class="btn btn-primary btn-sm">${esc(ok)}</button></div></form>`,
+    { kind: 'dialog', onClose: () => resolve(result) });
+    const input = el.querySelector('input');
+    el.querySelector('[data-act="no"]').onclick = () => closeLayer(el);
+    el.querySelector('form').onsubmit = (e) => {
+      e.preventDefault();
+      const v = input.value.trim();
+      if (!v) { input.classList.add('err'); input.focus(); return; }
+      result = v; closeLayer(el);
+    };
+    setTimeout(() => { input.focus(); input.select(); }, 60);
+  });
+}
+
+export function actionSheet(title, actions) {
+  return new Promise((resolve) => {
+    let result = null;
+    const el = openLayer(sheet({
+      title,
+      body: `<div class="panel">${actions.map((a, i) => `<button class="row" data-i="${i}" style="${a.danger ? 'color:var(--holiday)' : ''}">
+        <span class="ico" style="${a.danger ? '--c:var(--holiday)' : ''}">${a.icon || ''}</span><span class="grow t1">${esc(a.label)}</span></button>`).join('')}</div>`,
+    }), { onClose: () => resolve(result) });
+    el.querySelectorAll('[data-i]').forEach((b) => { b.onclick = () => { result = actions[+b.dataset.i].id; closeLayer(el); }; });
+  });
+}
+
+// ---- Тосты ----
+export function toast(text, { error = false, action, onAction, ms = 2800 } = {}) {
+  let wrap = document.querySelector('.toast-wrap');
+  if (!wrap) { wrap = document.createElement('div'); wrap.className = 'toast-wrap'; wrap.setAttribute('aria-live', 'polite'); document.body.appendChild(wrap); }
+  wrap.querySelectorAll('.toast').forEach((x) => x.remove());
+  const t = document.createElement('div');
+  t.className = `toast ${error ? 'err' : ''}`;
+  t.innerHTML = `<span>${esc(text)}</span>${action ? `<button>${esc(action)}</button>` : ''}`;
+  if (action) t.querySelector('button').onclick = () => { onAction?.(); t.remove(); };
+  wrap.appendChild(t);
+  setTimeout(() => t.remove(), action ? 9000 : ms);
+}
+
+// ---- Сохранение файла на устройство ----
+const inFrame = (() => { try { return window.top !== window; } catch { return true; } })();
+let dlNs;
+async function downloadsNs() {
+  if (dlNs !== undefined) return dlNs;
+  try { dlNs = window.claude?.use ? await window.claude.use('downloads') : null; } catch { dlNs = null; }
+  return dlNs;
+}
+// Возвращает 'saved' | 'declined' | 'failed'
+export async function saveToDevice(blob, filename) {
+  if (inFrame) {
+    const ns = await downloadsNs();
+    if (ns) {
+      try { await ns.save({ filename, data: blob }); return 'saved'; }
+      catch (e) { return e?.code === 'declined' ? 'declined' : 'failed'; }
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return 'saved';
+}
