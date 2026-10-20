@@ -197,6 +197,9 @@ svg { flex: none; }
   text-align: left; width: 100%;
 }
 .stat.wide { grid-column: 1 / -1; }
+button.stat { cursor: pointer; position: relative; transition: transform .12s ease; padding-right: 24px; }
+button.stat:active { transform: scale(.98); }
+.stat-chev { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 .stat .tile {
   width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none;
   background: color-mix(in srgb, var(--c) 18%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); color: var(--c);

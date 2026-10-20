@@ -1,5 +1,5 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
-import { I, esc, openLayer, closeLayer, sheet, toast, confirmDialog, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dateRange, plural, fmtSize, layerCount } from './ui.js';
+import { I, esc, openLayer, closeLayer, sheet, toast, confirmDialog, actionSheet, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dateRange, plural, fmtSize, layerCount } from './ui.js';
 import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, turnaroundRest } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
@@ -8,7 +8,7 @@ import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docSta
 import { exportBackup, importBackup } from './backup.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
@@ -87,8 +87,10 @@ function bigDur(min) {
   return `<span>${Math.floor(v / 60)}</span><small>ч</small><span>${p2(v % 60)}</span><small>мин</small>`;
 }
 
-function statCard(cls, icon, label, min, wide) {
-  return `<div class="stat ${cls} ${wide ? 'wide' : ''}"><span class="tile">${icon}</span><div><div class="lbl">${label}</div><div class="val">${fmtDur(min)}</div></div></div>`;
+function statCard(cls, icon, label, min, wide, absType) {
+  const tag = absType ? 'button' : 'div';
+  const attrs = absType ? ` data-act="abs-type" data-type="${absType}" aria-label="${label}: открыть"` : '';
+  return `<${tag} class="stat ${cls} ${wide ? 'wide' : ''}"${attrs}><span class="tile">${icon}</span><div><div class="lbl">${label}</div><div class="val">${fmtDur(min)}</div></div>${absType ? `<span class="chev stat-chev">${small(I.right, 16)}</span>` : ''}</${tag}>`;
 }
 
 function tripRow(t, mk) {
@@ -157,18 +159,17 @@ function renderHome() {
   else remainHtml = `<div class="remain">Осталось<b>${fmtDur(remain)}</b></div>`;
 
   const absCards = Object.entries(ABS_TYPES).filter(([k]) => sum.absByType[k] > 0)
-    .map(([k, v]) => ({ cls: v.cls, icon: v.icon, label: v.label, min: Math.round(sum.absByType[k] * 60) }));
+    .map(([k, v]) => ({ cls: v.cls, icon: v.icon, label: v.label, min: Math.round(sum.absByType[k] * 60), type: k }));
   const cards = [
     { cls: 'c-night', icon: I.moon, label: 'Ночные часы', min: sum.night },
     { cls: 'c-holiday', icon: I.calStar, label: 'Праздничные часы', min: sum.holiday },
     ...absCards,
   ];
-  const statsHtml = cards.map((c, i) => statCard(c.cls, c.icon, c.label, c.min, cards.length % 2 === 1 && i === cards.length - 1)).join('');
+  const statsHtml = cards.map((c, i) => statCard(c.cls, c.icon, c.label, c.min, cards.length % 2 === 1 && i === cards.length - 1, c.type)).join('');
 
   const rest = isCurrent ? currentRest(now) : null;
   const trips = [...sum.monthTrips].sort((a, b) => statsOf(b).start - statsOf(a).start);
   const mk = sum.mk;
-  const absList = [...sum.monthAbs].sort((a, b) => (a.a.start < b.a.start ? 1 : -1));
 
   app.innerHTML = `<div class="sky">${SKY}</div>
   <div class="screen">
@@ -197,13 +198,6 @@ function renderHome() {
     <div class="stats">${statsHtml}</div>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${rest ? `<button class="rest-banner" data-act="trip" data-id="${rest.trip.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${rest.kind} · до ${whenShort(rest.until, now)}</div><div class="t2">Осталось ${fmtDur(rest.left)}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
-    ${absList.length ? `<div class="sec-head"><h2>Отвлечения в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">−${fmtHours(sum.absTotal)} от нормы</span></div>
-      <div class="list">${absList.map(({ a, hours }) => {
-        const T = ABS_TYPES[a.type];
-        return `<button class="abs-row" data-act="absence" data-id="${a.id}" style="--c:${T.color}"><span class="tile">${T.icon}</span>
-          <div style="min-width:0"><div class="t1">${T.label}${a.auto === false ? '<span class="tag">вручную</span>' : ''}</div><div class="t2">${dateRange(a.start, a.end)}</div></div>
-          <span class="h">−${fmtHours(hours)}</span></button>`;
-      }).join('')}</div>` : ''}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk)).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.train}</div><b>В ${MONTHS_PREP[V.m - 1]} поездок нет</b><p>Нажмите «Добавить поездку» — время, ночные и праздничные часы посчитаются автоматически.</p></div>`}
@@ -420,6 +414,17 @@ app.addEventListener('click', async (e) => {
       break;
     }
     case 'absence': openAbsenceForm(id); break;
+    case 'abs-type': {
+      const sum = monthSummary(V.y, V.m, S.trips, S.absences);
+      const list = sum.monthAbs.filter(({ a, hours }) => a.type === b.dataset.type && hours > 0).sort((x, y) => (x.a.start < y.a.start ? 1 : -1));
+      if (list.length === 1) openAbsenceForm(list[0].a.id);
+      else if (list.length > 1) {
+        const T = ABS_TYPES[b.dataset.type];
+        const pick = await actionSheet(`${T.label} в ${MONTHS_PREP[V.m - 1]}`, list.map(({ a, hours }) => ({ id: a.id, label: `${dateRange(a.start, a.end)} · −${fmtHours(hours)}`, icon: T.icon })));
+        if (pick) openAbsenceForm(pick);
+      }
+      break;
+    }
     case 'add-route': openRouteForm(); break;
     case 'route': openRouteForm(id); break;
     case 'route-reverse': {

@@ -115,6 +115,7 @@ export function openTripForm(tripId) {
     note: linkedNote?.text || '',
     restType: base.restType || 'turnaround',
     homeSel: base.homeRest?.ids ? [...base.homeRest.ids] : [],
+    homeOpen: !!base.homeRest?.ids,
   };
 
   const draft = () => ({
@@ -159,14 +160,14 @@ export function openTripForm(tripId) {
       <div id="tf-loco-notes"></div>
     </div>
     <div class="field">
-      <div class="label"><span class="step-n">6</span>Следование пассажиром <span class="opt">· необязательно</span></div>
-      <div class="list" id="tf-pass"></div>
-      <button type="button" class="add-btn" data-act="add-pass">${I.plus} Добавить следование пассажиром</button>
-    </div>
-    <div class="field">
-      <label for="tf-note"><span class="step-n">7</span>Заметка о локомотиве <span class="opt">· необязательно</span></label>
+      <label for="tf-note"><span class="step-n">6</span>Заметка о локомотиве <span class="opt">· необязательно</span></label>
       <textarea id="tf-note" class="input" placeholder="Например: часто ломается" maxlength="1000"></textarea>
       <div class="hint">Заметка привяжется к локомотиву и будет видна в следующих поездках на нём.</div>
+    </div>
+    <div class="field">
+      <div class="label"><span class="step-n">7</span>Следование пассажиром <span class="opt">· необязательно</span></div>
+      <div class="list" id="tf-pass"></div>
+      <button type="button" class="add-btn" data-act="add-pass">${I.plus} Добавить следование пассажиром</button>
     </div>
     <div class="field">
       <div class="label"><span class="step-n">8</span>Вид отдыха после поездки</div>
@@ -174,11 +175,8 @@ export function openTripForm(tripId) {
         <button type="button" data-rest="turnaround">${I.bed2}<span>Отдых в пункте оборота</span></button>
         <button type="button" data-rest="home">${I.home2}<span>Домашний отдых</span></button>
       </div>
-      <div class="list" id="tf-home"></div>
-    </div>
-    <div class="field">
-      <div class="label"><span class="step-n">9</span>Предварительный расчёт</div>
       <div id="tf-calc"></div>
+      <div class="list" id="tf-home"></div>
     </div>
     <div data-error></div>`;
 
@@ -233,38 +231,17 @@ export function openTripForm(tripId) {
   }
   function renderRest() {
     el.querySelectorAll('[data-rest]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rest === F.restType)));
-    const box = $(el, '#tf-home');
-    if (F.restType !== 'home') { setHTML(box, ''); return; }
-    const d = draft();
-    const valid = !validateTrip(d);
-    const cands = homeCandidates(d, valid);
-    // убрать из выбора то, чего больше нет среди кандидатов
-    F.homeSel = F.homeSel.filter((id) => cands.some((c) => c.id === id));
-    if (cands.length < 2) {
-      setHTML(box, `<div class="hint">Для расчёта нужны минимум две завершённые поездки${valid ? '' : '. Заполните время этой поездки'}.</div>`);
-      return;
-    }
-    if (F.homeSel.length === 0 && valid && cands.length >= 2) F.homeSel = [cands[0].id, cands[1].id];
-    const selStats = F.homeSel.map((id) => cands.find((c) => c.id === id).stats);
-    const earlyId = F.homeSel.length === 2 ? (selStats[0].end <= selStats[1].end ? F.homeSel[0] : F.homeSel[1]) : null;
-    setHTML(box, `<div class="hint">Четыре последние завершённые поездки. Отметьте две: более раннюю и более позднюю.</div>` +
-      cands.map((c) => {
-        const on = F.homeSel.includes(c.id);
-        const tag = on && F.homeSel.length === 2 ? (c.id === earlyId ? 'Ранняя' : 'Поздняя') : '';
-        return `<button type="button" class="cand" data-cand="${c.id}" aria-pressed="${on}">
-          <span class="box">${on ? '✓' : ''}</span>
-          <span style="min-width:0"><div class="t1">${esc(tripLabelShort(c.trip.start ? { ...c.trip, _stats: c.stats } : c.trip))}</div>
-          <div class="t2">${tag ? `<span class="tag on">${tag}</span>` : ''}${c.self ? '<span class="tag">эта поездка</span>' : ''}${esc(routeOf(c.trip) || 'Маршрут не указан')}</div></span>
-          <span class="w">${fmtDur(c.stats.work, { short: true })}</span></button>`;
-      }).join(''));
   }
+  const ico = (svg, n) => svg.replace('width="22" height="22"', `width="${n}" height="${n}"`);
   function renderCalc() {
     const d = draft();
     const err = validateTrip(d);
     const box = $(el, '#tf-calc');
+    const home = $(el, '#tf-home');
     if (err) {
       const incomplete = !d.start || !d.end;
-      box.innerHTML = `<div class="calc"><div class="calc-row"><span>${incomplete ? 'Заполните начало и окончание — расчёт появится здесь.' : esc(err)}</span></div></div>`;
+      setHTML(box, `<div class="calc"><div class="calc-row"><span>${incomplete ? 'Заполните начало и окончание поездки — здесь появится рабочее время.' : esc(err)}</span></div></div>`);
+      setHTML(home, '');
       if (existing) $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Рабочее время</div><div class="v">—</div></div>`;
       return;
     }
@@ -272,20 +249,37 @@ export function openTripForm(tripId) {
     const months = Object.keys(st.byMonth).sort();
     let html = `<div class="calc">
       <div class="calc-row main"><span>Рабочее время</span><b>${fmtDur(st.work)}</b></div>
-      <div class="calc-row"><span>${I.moon.replace('width="22" height="22"', 'width="17" height="17"')} Ночные (22:00–06:00)</span><b>${fmtDur(st.night)}</b></div>
-      <div class="calc-row"><span>${I.calStar.replace('width="22" height="22"', 'width="17" height="17"')} Праздничные</span><b>${fmtDur(st.holiday)}</b></div>`;
-    if (d.passenger.length) {
-      const mainMin = (parseLocal(d.end) - parseLocal(d.start)) / 60000;
-      html += `<div class="calc-row"><span>Основная поездка</span><b>${fmtDur(mainMin)}</b></div>`;
-    }
+      <div class="calc-row"><span>${ico(I.moon, 17)} Ночные (22:00–06:00)</span><b>${fmtDur(st.night)}</b></div>
+      <div class="calc-row"><span>${ico(I.calStar, 17)} Праздничные</span><b>${fmtDur(st.holiday)}</b></div>`;
     if (months.length > 1) {
       html += `<div class="calc-head">По месяцам</div>` + months.map((mk) => `<div class="calc-row"><span>${monthName(mk)}</span><b>${fmtDur(st.byMonth[mk].work)}</b></div>`).join('');
     }
-    html += restBlock(d) + '</div>';
-    box.innerHTML = html;
+    if (F.restType === 'turnaround') html += restBlock(d);
+    html += '</div>';
+    setHTML(box, html);
+
+    // Домашний отдых: только по кнопке
+    if (F.restType !== 'home') setHTML(home, '');
+    else if (!F.homeOpen) setHTML(home, `<button type="button" class="btn btn-ghost" data-act="home-calc">${I.home2} Рассчитать полный отдых</button>`);
+    else {
+      const cands = homeCandidates(d, true);
+      F.homeSel = F.homeSel.filter((id) => cands.some((c) => c.id === id));
+      let h = `<div class="hint" style="font-weight:700;color:var(--text)">Выберите поездки для расчёта полного отдыха</div>`;
+      h += cands.map((c) => {
+        const on = F.homeSel.includes(c.id);
+        return `<button type="button" class="cand" data-cand="${c.id}" aria-pressed="${on}">
+          <span class="box">${on ? '✓' : ''}</span>
+          <span style="min-width:0"><div class="t1">${esc(tripLabelShort({ ...c.trip, _stats: c.stats }))}</div>
+          <div class="t2">${c.self ? '<span class="tag">эта поездка</span>' : ''}${esc(routeOf(c.trip) || 'Маршрут не указан')}</div></span>
+          <span class="w">${fmtDur(c.stats.work, { short: true })}</span></button>`;
+      }).join('');
+      if (cands.length < 2) h += '<div class="hint">Для расчёта нужна ещё хотя бы одна завершённая поездка.</div>';
+      if (F.homeSel.length === 2) h += `<div class="calc">${restBlock(d)}</div>`;
+      setHTML(home, h);
+    }
     if (existing) {
       $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Рабочее время</div><div class="v">${fmtDur(st.work)}</div></div>
-        <div class="chips" style="justify-content:flex-end">${st.night ? `<span class="chip" style="--c:var(--night)">${I.moon.replace('width="22" height="22"', 'width="14" height="14"')} ${fmtDur(st.night, { short: true })}</span>` : ''}${st.holiday ? `<span class="chip" style="--c:var(--holiday)">${I.calStar.replace('width="22" height="22"', 'width="14" height="14"')} ${fmtDur(st.holiday, { short: true })}</span>` : ''}</div>`;
+        <div class="chips" style="justify-content:flex-end">${st.night ? `<span class="chip" style="--c:var(--night)">${ico(I.moon, 14)} ${fmtDur(st.night, { short: true })}</span>` : ''}${st.holiday ? `<span class="chip" style="--c:var(--holiday)">${ico(I.calStar, 14)} ${fmtDur(st.holiday, { short: true })}</span>` : ''}</div>`;
     }
   }
   function refreshAll() { renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
@@ -334,6 +328,8 @@ export function openTripForm(tripId) {
     if (act === 'pick-route') {
       const res = await pickRoute(F.routeId);
       if (res !== undefined) { F.routeId = res; if (!res) F.routeLabel = ''; renderRoute(); refreshAll(); }
+    } else if (act === 'home-calc') {
+      F.homeOpen = true; refreshAll();
     } else if (act === 'add-pass') {
       F.passenger.push({ id: uid(), sd: F.sd || today, st: '', ed: F.sd || today, et: '' });
       renderPass(); refreshAll();
