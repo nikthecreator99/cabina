@@ -191,7 +191,7 @@ export function turnaroundRest(workMin, endMs, minRestMin) {
   return { rest, until: endMs + rest * MIN };
 }
 
-// Полный (домашний) отдых по двум и более поездкам (статистика tripStats).
+// Полный (домашний) отдых по одной или нескольким поездкам (статистика tripStats).
 // (сумма рабочего времени всех поездок) × 2,6 − (сумма промежутков между соседними поездками).
 // Для двух поездок это ровно формула ТЗ. Окончание считается от конца самой поздней поездки.
 export function homeRestMulti(list) {
@@ -203,7 +203,7 @@ export function homeRestMulti(list) {
   const late = arr[arr.length - 1];
   return {
     list: arr, early: arr[0], late, gap, work, count: arr.length,
-    valid: arr.length >= 2 && full > 0,
+    valid: arr.length >= 1 && full > 0,
     full,
     fullUntil: late.end + full * MIN,
     withDayOff: full + 24 * 60,

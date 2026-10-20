@@ -43,7 +43,7 @@ export function tripLabelShort(t) {
 }
 
 export function computeHomeRest(trip, ids, pool) {
-  if (!ids || ids.length < 2) return null;
+  if (!ids || ids.length < 1) return null;
   const trips = ids.map((id) => (id === trip.id ? trip : pool.find((x) => x.id === id)));
   if (trips.some((t) => !t)) return { missing: true };
   const stats = trips.map((t) => (t === trip ? tripStats(trip) : statsOf(t)));
@@ -51,6 +51,40 @@ export function computeHomeRest(trip, ids, pool) {
   r.earlyTrip = trips[stats.indexOf(r.early)];
   r.lateTrip = trips[stats.indexOf(r.late)];
   return r;
+}
+
+// Концы маршрута поездки: из сохранённого маршрута или из подписи «А → Б»
+function routeEnds(trip) {
+  const r = trip.routeId && S.routes.find((x) => x.id === trip.routeId);
+  if (r) return { from: r.from, to: r.to };
+  const m = String(trip.routeLabel || '').split(/\s*(?:→|—|->)\s*/);
+  return m.length === 2 && m[0] && m[1] ? { from: m[0], to: m[1] } : null;
+}
+const sameSt = (a, b) => String(a).trim().toLowerCase().replace(/ё/g, 'е') === String(b).trim().toLowerCase().replace(/ё/g, 'е');
+
+// Вся поездка «туда и обратно»: эта поездка и предыдущие подряд, после которых был отдых в пункте оборота.
+// Цепочка рвётся на домашнем отдыхе, на разрыве больше 48 ч или если маршруты не стыкуются.
+export function suggestChain(draft) {
+  const ds = tripStats(draft);
+  const chain = [{ id: draft.id, trip: draft, stats: ds }];
+  const before = S.trips.filter((t) => t.id !== draft.id).map((t) => ({ id: t.id, trip: t, stats: statsOf(t) }))
+    .filter((x) => Number.isFinite(x.stats.end) && x.stats.end <= ds.start).sort((a, b) => b.stats.end - a.stats.end);
+  let cur = chain[0];
+  for (const o of before) {
+    if (o.trip.restType !== 'turnaround') break;
+    if (cur.stats.start - o.stats.end > 48 * 3600000) break;
+    const a = routeEnds(o.trip);
+    const b = routeEnds(cur.trip);
+    if (a && b && !sameSt(a.to, b.from)) break;
+    chain.push(o);
+    cur = o;
+    if (chain.length >= 8) break;
+  }
+  chain.reverse();
+  const ends = chain.map((c) => routeEnds(c.trip));
+  const path = ends.every(Boolean) ? [ends[0].from, ...ends.map((e) => e.to)].join(' → ') : '';
+  const roundTrip = ends.every(Boolean) && chain.length > 1 && sameSt(ends[0].from, ends[ends.length - 1].to);
+  return { chain, path, roundTrip };
 }
 
 function homeCandidates(draft, draftValid) {
@@ -75,9 +109,9 @@ export function restBlock(trip, { now = nowLocal(), pool = S.trips } = {}) {
     if (!r.valid) return `<div class="calc-head">Домашний отдых</div><div class="calc-row"><span>Эти поездки не подходят для расчёта. Выберите другие поездки.</span></div>`;
     const status = now < st.end ? '<span class="status off">Начнётся после поездки</span>' : r.fullUntil > now ? '<span class="status on">● Отдых ещё продолжается</span>' : '<span class="status off">Отдых завершён</span>';
     return `<div class="calc-head">Домашний отдых</div>
-      <div class="calc-row"><span>Поездки${r.count > 2 ? ` (${r.count})` : ''}</span><b>${esc(tripLabelShort(r.earlyTrip).split(' · ')[0])} → ${esc(tripLabelShort(r.lateTrip).split(' · ')[0])}</b></div>
-      <div class="calc-row"><span>Рабочее время всего</span><b>${fmtDur(r.work)}</b></div>
-      <div class="calc-row"><span>${r.count > 2 ? 'Промежутки между ними' : 'Промежуток между ними'}</span><b>${fmtDur(r.gap)}</b></div>
+      <div class="calc-row"><span>${r.count > 1 ? `Поездки${r.count > 2 ? ` (${r.count})` : ''}` : 'Поездка'}</span><b>${r.count > 1 ? `${esc(tripLabelShort(r.earlyTrip).split(' · ')[0])} → ${esc(tripLabelShort(r.lateTrip).split(' · ')[0])}` : esc(tripLabelShort(r.lateTrip))}</b></div>
+      <div class="calc-row"><span>${r.count > 1 ? 'Рабочее время всего' : 'Рабочее время'}</span><b>${fmtDur(r.work)}</b></div>
+      ${r.count > 1 ? `<div class="calc-row"><span>${r.count > 2 ? 'Промежутки между ними' : 'Промежуток между ними'}</span><b>${fmtDur(r.gap)}</b></div>` : ''}
       <div class="calc-row main"><span>Полный отдых</span><b>${fmtDur(r.full)}</b></div>
       <div class="calc-row"><span>Окончание</span><b>${whenShort(r.fullUntil, now)}</b></div>
       <div class="calc-row main"><span>С выходным (+24 ч)</span><b>${fmtDur(r.withDayOff)}</b></div>
@@ -125,7 +159,7 @@ export function openTripForm(tripId) {
     passenger: F.passenger.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
     locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber),
     restType: F.restType,
-    homeRest: F.restType === 'home' && F.homeSel.length >= 2 ? { ids: [...F.homeSel] } : null,
+    homeRest: F.restType === 'home' && F.homeSel.length >= 1 ? { ids: [...F.homeSel] } : null,
   });
 
   const types = knownTypes();
@@ -261,9 +295,22 @@ export function openTripForm(tripId) {
     if (F.restType !== 'home') setHTML(home, '');
     else if (!F.homeOpen) { setHTML(home, `<button type="button" class="btn btn-ghost" data-act="home-calc">${I.home2} Рассчитать полный отдых</button>`); setTimeout(() => homeRestButtonTour(el), 300); }
     else {
+      const sug = suggestChain(d);
       const cands = homeCandidates(d, true);
+      sug.chain.forEach((c) => { if (!cands.some((x) => x.id === c.id)) cands.push(c); });
+      cands.sort((a, b) => b.stats.end - a.stats.end);
       F.homeSel = F.homeSel.filter((id) => cands.some((c) => c.id === id));
-      let h = `<div class="hint" style="font-weight:700;color:var(--text)">Выберите поездки для расчёта полного отдыха</div>`;
+      const chainIds = sug.chain.map((c) => c.id);
+      const isChainSel = chainIds.length > 1 && chainIds.length === F.homeSel.length && chainIds.every((id) => F.homeSel.includes(id));
+      let h = '';
+      if (chainIds.length > 1) {
+        h += `<div class="suggest ${isChainSel ? 'on' : ''}">
+          <div class="suggest-ico">${I.route}</div>
+          <div style="min-width:0"><div class="suggest-t">${sug.roundTrip ? 'Поездка туда и обратно' : `Вся поездка: ${chainIds.length} ${chainIds.length < 5 ? 'части' : 'частей'}`}</div>
+          <div class="suggest-s">${sug.path ? esc(sug.path) : 'Поездки подряд с отдыхом в пункте оборота'}</div>
+          ${isChainSel ? '<div class="suggest-ok">Отмечены все части — отдых посчитан по всей поездке</div>' : `<button type="button" class="link-btn" data-act="home-chain">Считать по всей поездке</button>`}</div></div>`;
+      }
+      h += `<div class="hint" style="font-weight:700;color:var(--text)">Выберите поездки для расчёта полного отдыха</div>`;
       h += cands.map((c) => {
         const on = F.homeSel.includes(c.id);
         return `<button type="button" class="cand" data-cand="${c.id}" aria-pressed="${on}">
@@ -272,11 +319,10 @@ export function openTripForm(tripId) {
           <div class="t2">${c.self ? '<span class="tag">эта поездка</span>' : ''}${esc(routeOf(c.trip) || 'Маршрут не указан')}</div></span>
           <span class="w">${fmtDur(c.stats.work, { short: true })}</span></button>`;
       }).join('');
-      if (cands.length < 2) h += '<div class="hint">Для расчёта нужна ещё хотя бы одна завершённая поездка.</div>';
-      if (F.homeSel.length >= 2) h += `<div class="calc">${restBlock(d)}</div>`;
-      else if (F.homeSel.length === 1) h += '<div class="hint">Отметьте ещё хотя бы одну поездку.</div>';
+      if (F.homeSel.length >= 1) h += `<div class="calc">${restBlock(d)}</div>`;
+      else h += '<div class="hint">Отметьте хотя бы одну поездку.</div>';
       setHTML(home, h);
-      if (cands.length >= 2) setTimeout(() => homeRestPickTour(el), 300);
+      setTimeout(() => homeRestPickTour(el), 300);
     }
     if (existing) {
       $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Рабочее время</div><div class="v">${fmtDur(st.work)}</div></div>
@@ -331,7 +377,11 @@ export function openTripForm(tripId) {
       const res = await pickRoute(F.routeId);
       if (res !== undefined) { F.routeId = res; if (!res) F.routeLabel = ''; renderRoute(); refreshAll(); }
     } else if (act === 'home-calc') {
-      F.homeOpen = true; refreshAll();
+      F.homeOpen = true;
+      if (!F.homeSel.length) F.homeSel = suggestChain(draft()).chain.map((c) => c.id); // сразу вся поездка (или одна эта)
+      refreshAll();
+    } else if (act === 'home-chain') {
+      F.homeSel = suggestChain(draft()).chain.map((c) => c.id); refreshAll();
     } else if (act === 'add-pass') {
       F.passenger.push({ id: uid(), sd: F.sd || today, st: '', ed: F.sd || today, et: '' });
       renderPass(); refreshAll();

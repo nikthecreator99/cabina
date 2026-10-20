@@ -1,6 +1,6 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, openLayer, closeLayer, sheet, toast, confirmDialog, actionSheet, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dateRange, dayMonth, plural, fmtSize, layerCount } from './ui.js';
-import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip } from './store.js';
+import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, deleteRoute } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, turnaroundRest } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
 import { openTripForm, openAbsenceForm, openRouteForm, openNoteForm, ABS_TYPES, setNavigator, computeHomeRest, fmtDate } from './forms.js';
@@ -11,7 +11,7 @@ import { loadTours, resetTours, tourActive } from './tour.js';
 import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
@@ -127,7 +127,7 @@ function tripRow(t, mk) {
   ].join('');
   return `<div class="swipe" data-swipe="${t.id}">
   <button class="swipe-del" data-act="trip-del" data-id="${t.id}" aria-label="Удалить поездку" tabindex="-1">${I.trash}<span>Удалить</span></button>
-  <button class="trip" data-act="trip" data-id="${t.id}">
+  <button class="trip swipe-row" data-act="trip" data-id="${t.id}">
     <div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
       <div class="trip-time">${hm(st.start)} — ${hm(st.end)}</div>
@@ -237,7 +237,9 @@ function renderRoutes() {
     ${list.length ? `<div class="list">${list.map((r) => {
       const n = use.get(r.id) || 0;
       const hasReverse = S.routes.some((x) => x.from.toLowerCase() === r.to.toLowerCase() && x.to.toLowerCase() === r.from.toLowerCase());
-      return `<div class="route-card">
+      return `<div class="swipe" data-swipe="${r.id}">
+      <button class="swipe-del" data-act="route-del" data-id="${r.id}" aria-label="Удалить маршрут" tabindex="-1">${I.trash}<span>Удалить</span></button>
+      <div class="route-card swipe-row">
         <div class="route-line"><i></i><s></s><i class="b"></i></div>
         <button class="route-pts" data-act="route" data-id="${r.id}">
           <div><div class="lbl">Откуда</div><div class="pt">${esc(r.from)}</div></div>
@@ -248,7 +250,7 @@ function renderRoutes() {
           <button class="icon-btn" data-act="route" data-id="${r.id}" aria-label="Изменить маршрут">${I.edit}</button>
           ${hasReverse ? '' : `<button class="icon-btn" data-act="route-reverse" data-id="${r.id}" aria-label="Создать обратный маршрут" title="Обратный маршрут">${I.swap}</button>`}
         </div>
-      </div>`;
+      </div></div>`;
     }).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.route}</div><b>Маршрутов пока нет</b><p>Например: Москва → Рязань. Маршрут можно выбрать первым полем при добавлении поездки.</p></div>`}
   </div>`;
@@ -440,7 +442,7 @@ let sw = null;          // текущий жест
 let swallowClick = false;
 const openSwipes = () => [...app.querySelectorAll('.swipe.open')];
 function setSwipe(el, x, animate) {
-  const row = el.querySelector('.trip');
+  const row = el.querySelector('.swipe-row');
   row.style.transition = animate ? '' : 'none';
   row.style.transform = x ? `translateX(${x}px)` : '';
   el.classList.toggle('open', x <= -SWIPE_W + 1);
@@ -448,7 +450,7 @@ function setSwipe(el, x, animate) {
 }
 function closeSwipes(except) { openSwipes().forEach((s) => { if (s !== except) setSwipe(s, 0, true); }); }
 app.addEventListener('pointerdown', (e) => {
-  const row = e.target.closest('.swipe .trip');
+  const row = e.target.closest('.swipe > .swipe-row');
   if (!row || (e.pointerType === 'mouse' && e.button !== 0)) { if (!e.target.closest('.swipe-del')) closeSwipes(); return; }
   const el = row.parentElement;
   closeSwipes(el);
@@ -483,8 +485,8 @@ app.addEventListener('pointercancel', (e) => { if (sw && sw.lock === 'h') endSwi
 
 app.addEventListener('click', async (e) => {
   if (swallowClick) { swallowClick = false; e.preventDefault(); return; }
-  const openRow = e.target.closest('.swipe.open .trip');
-  if (openRow) { closeSwipes(); return; }
+  const openRow = e.target.closest('.swipe.open > .swipe-row');
+  if (openRow) { closeSwipes(); e.preventDefault(); return; }
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const { act, id } = b.dataset;
@@ -522,6 +524,14 @@ app.addEventListener('click', async (e) => {
     }
     case 'add-route': openRouteForm(); break;
     case 'route': openRouteForm(id); break;
+    case 'route-del': {
+      const r = S.routes.find((x) => x.id === id);
+      if (!r) break;
+      const used = S.trips.filter((t) => t.routeId === id).length;
+      const ok = await confirmDialog({ title: 'Вы действительно хотите удалить маршрут?', text: `${r.from} → ${r.to}${used ? `. Поездки с этим маршрутом сохранят его название.` : ''}`, ok: 'Да', cancel: 'Нет' });
+      if (ok) { await deleteRoute(id); toast('Маршрут удалён'); } else closeSwipes();
+      break;
+    }
     case 'route-reverse': {
       const r = S.routes.find((x) => x.id === id);
       if (r) openRouteForm(null, { from: r.to, to: r.from, distanceKm: r.distanceKm });

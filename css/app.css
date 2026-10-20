@@ -231,7 +231,7 @@ button.stat:active { transform: scale(.98); }
 }
 .trip:active { border-color: var(--line-2); }
 .swipe { position: relative; border-radius: var(--r-md); }
-.swipe .trip { position: relative; z-index: 1; touch-action: pan-y; transition: transform .22s cubic-bezier(.2,.8,.2,1); user-select: none; -webkit-user-select: none; }
+.swipe > .swipe-row { position: relative; z-index: 1; touch-action: pan-y; transition: transform .22s cubic-bezier(.2,.8,.2,1); user-select: none; -webkit-user-select: none; }
 .swipe-del {
   position: absolute; top: 0; right: 0; bottom: 0; width: 84px; z-index: 0; border-radius: var(--r-md);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
@@ -435,6 +435,14 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; font-size: 13px; font-weight: 700; }
 .status.on { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
 .status.off { color: var(--muted); background: var(--card-2); }
+.suggest { display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 12px; padding: 14px; border-radius: 16px; background: color-mix(in srgb, var(--night) 12%, var(--card-solid)); border: 1px solid color-mix(in srgb, var(--night) 40%, transparent); }
+.suggest.on { background: color-mix(in srgb, var(--ok) 10%, var(--card-solid)); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.suggest-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--night); background: color-mix(in srgb, var(--night) 16%, transparent); }
+.suggest.on .suggest-ico { color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.suggest-t { font-weight: 800; font-size: 16px; }
+.suggest-s { font-size: 14px; color: var(--text-2); margin-top: 2px; overflow-wrap: anywhere; }
+.suggest-ok { font-size: 13px; color: var(--ok); font-weight: 700; margin-top: 6px; }
+.suggest .link-btn { margin-top: 8px; min-height: 40px; }
 .cand { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); text-align: left; width: 100%; }
 .cand[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .cand .box { width: 24px; height: 24px; border-radius: 8px; border: 2px solid var(--line-2); display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 800; }
@@ -529,7 +537,7 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .tour-skip { min-height: 44px; padding: 0 10px; color: var(--muted); font-weight: 600; font-size: 15px; }
 .tour-next { min-height: 48px; padding: 0 22px; border-radius: 14px; background: linear-gradient(180deg, #ff5a4f, var(--accent)); color: #fff; font-weight: 800; font-size: 16px; box-shadow: var(--glow); }
 @keyframes nudge { 0%, 100% { transform: translateX(0); } 35%, 60% { transform: translateX(-70px); } }
-.swipe.nudge .trip { animation: nudge 1.8s ease-in-out 2; }
+.swipe.nudge > .swipe-row { animation: nudge 1.8s ease-in-out 2; }
 .swipe.nudge .swipe-del { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {

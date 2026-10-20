@@ -37,7 +37,12 @@ export function runTour(id, steps) {
 }
 
 function start(id, allSteps) {
-  const steps = allSteps.filter((s) => visible(resolve(s.target)));
+  // всегда сверху вниз и слева направо — в порядке расположения на экране
+  const steps = allSteps.filter((s) => visible(resolve(s.target))).sort((a, b) => {
+    const ea = resolve(a.target); const eb = resolve(b.target);
+    if (ea === eb || ea.contains(eb) || eb.contains(ea)) return 0;
+    return ea.compareDocumentPosition(eb) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
   if (!steps.length) return;
   active = { id };
   const ov = document.createElement('div');
