@@ -211,13 +211,13 @@ export function actionSheet(title, actions) {
 export function toast(text, { error = false, action, onAction, ms = 2800 } = {}) {
   let wrap = document.querySelector('.toast-wrap');
   if (!wrap) { wrap = document.createElement('div'); wrap.className = 'toast-wrap'; wrap.setAttribute('aria-live', 'polite'); document.body.appendChild(wrap); }
-  wrap.querySelectorAll('.toast').forEach((x) => x.remove());
+  wrap.querySelectorAll('.toast:not(.sticky)').forEach((x) => x.remove());
   const t = document.createElement('div');
-  t.className = `toast ${error ? 'err' : ''}`;
+  t.className = `toast ${error ? 'err' : ''} ${action ? 'sticky' : ''}`;
   t.innerHTML = `<span>${esc(text)}</span>${action ? `<button>${esc(action)}</button>` : ''}`;
   if (action) t.querySelector('button').onclick = () => { onAction?.(); t.remove(); };
   wrap.appendChild(t);
-  setTimeout(() => t.remove(), action ? 9000 : ms);
+  if (!action) setTimeout(() => t.remove(), ms);
 }
 
 // ---- Сохранение файла на устройство ----

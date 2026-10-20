@@ -8,7 +8,7 @@ import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docSta
 import { exportBackup, importBackup } from './backup.js';
 import { isMemoryMode } from './db.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.1.1';
 const app = document.getElementById('app');
 const V = { tab: 'home', y: 2026, m: 10, extra: null };
 
@@ -520,6 +520,9 @@ function registerSW() {
   if (!('serviceWorker' in navigator) || inFrame) return;
   if (!(location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) return;
   navigator.serviceWorker.register('sw.js').then((reg) => {
+    // проверять обновление, когда приложение снова открыто
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    if (reg.waiting && navigator.serviceWorker.controller) toast('Доступна новая версия CABINA', { action: 'Обновить', onAction: () => reg.waiting?.postMessage('skip') });
     reg.addEventListener('updatefound', () => {
       const w = reg.installing;
       w?.addEventListener('statechange', () => {
