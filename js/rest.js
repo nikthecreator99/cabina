@@ -62,8 +62,15 @@ export function computeHomeRest(trip, ids, pool) {
 // «На очередь»: вызвать на явку могут не раньше, чем через минимальный междусменный отдых
 export const queueUntil = (endMs) => endMs + (S.settings.minShiftRest ?? 960) * MIN;
 
+// Выходной: длительность у каждого депо своя, задаётся в «Настройках работы» (по умолчанию 60 ч)
+export const DAY_OFF_DEFAULT = 60 * 60;
+export const dayOffMin = () => S.settings.dayOffMin ?? DAY_OFF_DEFAULT;
+// trip — поездка, после которой выбран выходной: у неё своя длительность (как была на момент выбора)
+export const dayOffUntil = (endMs, trip) => endMs + (trip?.dayOffMin || dayOffMin()) * MIN;
+
 export const HOME_CHOICES = {
   queue: 'На очереди',
+  dayOff: 'На выходном',
   full: 'Полный отдых',
   fullOff: 'Полный отдых с выходным',
 };
@@ -74,6 +81,7 @@ export function chosenRest(trip, pool = S.trips) {
   if (!Number.isFinite(st.end) || isLive(trip)) return null;
   if (trip.restType === 'home') {
     if (trip.homeChoice === 'queue') return { kind: 'queue', label: HOME_CHOICES.queue, until: queueUntil(st.end) };
+    if (trip.homeChoice === 'dayOff') return { kind: 'dayOff', label: HOME_CHOICES.dayOff, until: dayOffUntil(st.end, trip) };
     if (trip.homeChoice === 'full' || trip.homeChoice === 'fullOff') {
       const r = computeHomeRest(trip, trip.homeRest?.ids, pool);
       if (!r || r.missing || !r.valid) return null;
@@ -98,4 +106,15 @@ export function currentRest(now) {
   const r = chosenRest(last);
   if (!r || r.until <= now) return null;
   return { trip: last, ...r, left: (r.until - now) / MIN };
+}
+
+// Выходные (выбор «Пойти на выходной» после поездки): [{ trip, s, e }] в мс — для календаря и статуса
+export function dayOffIntervals(pool = S.trips) {
+  const out = [];
+  for (const t of pool) {
+    if (t.restType !== 'home' || t.homeChoice !== 'dayOff' || isLive(t)) continue;
+    const st = statsOf(t);
+    if (Number.isFinite(st.end)) out.push({ trip: t, s: st.end, e: dayOffUntil(st.end, t) });
+  }
+  return out;
 }

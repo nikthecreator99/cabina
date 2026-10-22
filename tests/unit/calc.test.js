@@ -32,8 +32,8 @@ test('ночные часы считаются с 22:00 до 6:00', () => {
 test('поездка через границу месяцев делится по месяцам', () => {
   const st = tripStats(trip('2026-10-31T21:00', '2026-11-01T03:00'));
   assert.deepEqual(st.byMonth, {
-    '2026-10': { work: 180, night: 120, holiday: 0, restDay: 180 },
-    '2026-11': { work: 180, night: 180, holiday: 0, restDay: 180 },
+    '2026-10': { work: 180, night: 120, holiday: 0, restDay: 180, wait: 0 },
+    '2026-11': { work: 180, night: 180, holiday: 0, restDay: 180, wait: 0 },
   });
 });
 
@@ -118,4 +118,18 @@ test('форматирование длительности', () => {
   assert.equal(fmtHours(8), '8 ч');
   assert.equal(fmtHours(7.5), '7 ч 30 мин');
   assert.equal(HOUR, 3600000);
+});
+
+test('ожидание следования пассажиром входит в рабочее время и считается отдельно', () => {
+  const t = trip('2026-10-14T08:00', '2026-10-14T12:00', {
+    passenger: [{ start: '2026-10-14T14:00', end: '2026-10-14T16:00' }],
+    waiting: [{ start: '2026-10-14T11:00', end: '2026-10-14T14:00' }],
+  });
+  const st = tripStats(t);
+  // 08:00–16:00 одним куском: ожидание с 11:00 перекрывает поездку на час
+  assert.equal(st.work, 480);
+  assert.equal(st.wait, 120);
+  assert.equal(st.byMonth['2026-10'].wait, 120);
+  assert.equal(tripStats(trip('2026-10-14T08:00', '2026-10-14T12:00')).wait, 0);
+  assert.match(validateTrip(trip('2026-10-14T08:00', '2026-10-14T12:00', { waiting: [{ start: '2026-10-14T15:00', end: '2026-10-14T14:00' }] })), /Ожидание следования пассажиром №1/);
 });

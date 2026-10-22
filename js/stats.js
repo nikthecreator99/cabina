@@ -5,7 +5,7 @@ import { S, statsOf, nowLocal, routeOf, locoLabel, locoKey, myPay, refreshLive }
 import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN } from './calc.js';
 import { dayInfo } from './calendar.js';
 import { payMonth, payTotal, overRestIntervals, hasRate, fmtRub, fmtH } from './pay.js';
-import { houseOf } from './rest.js';
+import { houseOf, dayOffIntervals } from './rest.js';
 import { ABS_TYPES } from './forms.js';
 
 const MONTHS_DAT = ['январю', 'февралю', 'марту', 'апрелю', 'маю', 'июню', 'июлю', 'августу', 'сентябрю', 'октябрю', 'ноябрю', 'декабрю'];
@@ -76,9 +76,9 @@ function collect(p) {
   const months = periodMonths(p);
   const keys = new Set(months.map(([y, m]) => mkOf(y, m)));
   const sums = months.map(([y, m]) => monthSummary(y, m, S.trips, S.absences));
-  const R = { months, sums, keys, work: 0, norm: 0, overtime: 0, night: 0, holiday: 0, abs: { sick: 0, vacation: 0, medical: 0 } };
+  const R = { months, sums, keys, work: 0, norm: 0, overtime: 0, night: 0, holiday: 0, wait: 0, abs: { sick: 0, vacation: 0, medical: 0 } };
   for (const s of sums) {
-    R.work += s.work; R.norm += s.normMin; R.overtime += s.overtime; R.night += s.night; R.holiday += s.holiday;
+    R.work += s.work; R.norm += s.normMin; R.overtime += s.overtime; R.night += s.night; R.holiday += s.holiday; R.wait += s.wait || 0;
     for (const k of Object.keys(R.abs)) R.abs[k] += s.absByType[k] || 0;
   }
   const trips = tripsIn(keys).sort((a, b) => statsOf(a).start - statsOf(b).start);
@@ -159,16 +159,21 @@ function monthCalendar(y, m) {
     if (!(a.start <= `${mkOf(y, m)}-31` && a.end >= `${mkOf(y, m)}-01`)) continue;
     for (let d = parseLocal(`${a.start}T00:00`); d <= parseLocal(`${a.end}T00:00`); d += DAY) abs.set(dateKeyOf(d), a.type);
   }
+  // выходные: от окончания поездки, после которой выбрано «Пойти на выходной»
+  const off = new Set();
+  for (const x of dayOffIntervals()) {
+    for (let d = Math.floor(x.s / DAY) * DAY; d < x.e; d += DAY) off.add(dateKeyOf(d));
+  }
   const used = new Set();
   let cells = '<span></span>'.repeat(firstDow);
   for (let d = 1; d <= n; d++) {
     const k = `${mkOf(y, m)}-${p2(d)}`;
     const kind = dayInfo(k).kind;
-    const cls = abs.has(k) ? `abs-${abs.get(k)}` : work.has(k) ? 'work' : 'free';
+    const cls = abs.has(k) ? `abs-${abs.get(k)}` : work.has(k) ? 'work' : off.has(k) ? 'dayoff' : 'free';
     used.add(cls);
     cells += `<span class="cal-d ${cls} ${kind === 'holiday' ? 'hol' : ''} ${kind === 'weekend' || kind === 'off' || kind === 'holiday' ? 'we' : ''}" title="${d} ${MONTHS_SHORT[m - 1]}">${d}</span>`;
   }
-  const lg = [['work', 'работа'], ['free', 'отдых'], ['abs-sick', 'больничный'], ['abs-vacation', 'отпуск'], ['abs-medical', 'медкомиссия']]
+  const lg = [['work', 'работа'], ['dayoff', 'выходной'], ['free', 'отдых'], ['abs-sick', 'больничный'], ['abs-vacation', 'отпуск'], ['abs-medical', 'медкомиссия']]
     .filter(([c]) => used.has(c)).map(([c, l]) => `<span><i class="cal-d ${c}"></i>${l}</span>`).join('');
   return `<div class="cal"><div class="cal-wd">${['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((w) => `<span>${w}</span>`).join('')}</div><div class="cal-grid">${cells}</div><div class="cal-lg">${lg}</div></div>`;
 }
@@ -209,6 +214,7 @@ function tripsView(R) {
       ${longest ? kv('Самая длинная', fmtDur(longest.work, { short: true }), `${new Date(longest.start).getUTCDate()} ${MONTHS_SHORT[new Date(longest.start).getUTCMonth()]}`) : ''}
       ${R.km > 0 ? kv('Пройдено', `${Math.round(R.km).toLocaleString('ru-RU')} км`) : ''}
       ${R.passenger > 0 ? kv('Пассажиром', fmtDur(R.passenger, { short: true })) : ''}
+      ${R.wait > 0 ? kv('Ожидание следования', fmtDur(R.wait, { short: true })) : ''}
     </div>`);
   }
   if (R.night > 0 || R.holiday > 0) {

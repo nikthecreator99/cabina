@@ -134,3 +134,19 @@ test('суммы в рублях по-русски, неразрывными п�
   assert.equal(f(38132.4), '38_132_₽');
   assert.equal(f(-5), '−5_₽');
 });
+
+test('ожидание следования пассажиром — по тарифу отдельной строкой, часы входят в отработанное', () => {
+  const t = T('w', '2026-10-14T08:00', '2026-10-14T12:00', {
+    passenger: [{ id: 'p', start: '2026-10-14T14:30', end: '2026-10-14T16:00' }],
+    waiting: [{ id: 'w', start: '2026-10-14T12:00', end: '2026-10-14T14:30' }],
+  });
+  const r = payMonth(2026, 10, [t], [], cfgOf({ bonus: 0, harm: 0, night: 0 }), st);
+  assert.equal(r.sum.work, 480);
+  assert.equal(line(r, 'base').hours, 5.5);
+  assert.equal(line(r, 'base').amount, 1650);
+  assert.equal(line(r, 'wait').hours, 2.5);
+  assert.equal(line(r, 'wait').amount, 750);
+  assert.equal(r.gross, 2400);
+  // строка идёт сразу после оплаты по тарифу
+  assert.deepEqual(r.lines.map((l) => l.key).slice(0, 2), ['base', 'wait']);
+});

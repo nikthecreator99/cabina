@@ -166,6 +166,8 @@ test('отвлечения списком: изменить нажатием, у
 test('профиль: имя, должность, класс, фото — сохраняются', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
+  assert.equal(await page.locator('#pr-name').count(), 0, 'без «Редактировать профиль» поля не показываются');
+  await page.locator('[data-page=profile-edit]').click();
   await page.locator('#pr-name').fill('Иван');
   await page.locator('#pr-name').blur();
   await page.locator('#pr-depot').fill('Тестовое');
@@ -180,7 +182,7 @@ test('профиль: имя, должность, класс, фото — со�
   await page.waitForSelector('.screen');
   await tab(page, 'profile');
   assert.match(await text(page, '.profile-card'), /Иван[\s\S]*Машинист, 2 класс · депо Тестовое/);
-  const src = await page.locator('.avatar img').getAttribute('src');
+  const src = await page.locator('.avatar.view img').getAttribute('src');
   assert.match(src, /^data:image\/jpeg;base64,/);
   assert.match(await text(page, '.notice.ok'), /только в этом телефоне/);
   // тарифы машиниста — свой набор, с надбавкой за класс

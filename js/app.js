@@ -8,15 +8,15 @@ import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docSta
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { loadTours, resetTours, tourActive } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange, resetPayRole } from './work.js';
-import { renderProfile, profileClick, profileChange } from './profile.js';
+import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
@@ -361,7 +361,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings };
+const PAGES = { work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
 }
@@ -418,6 +418,7 @@ function scheduleTours() {
     else if (p === 'houses') housesTour();
     else if (p === 'stats') statsTour();
     else if (p === 'settings') settingsTour();
+    else if (p === 'profile-edit') profileEditTour();
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); if (app.querySelector('.swipe')) swipeTour(); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra ? null : extraTour());
@@ -609,7 +610,8 @@ async function start() {
   // обновление календаря отдельно от приложения
   fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); render(); } }).catch(() => {});
   // обновлять «сейчас» (поездка «в пути», статус отдыха) раз в минуту
-  setInterval(() => { if (V.tab === 'home' && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); }, 60000);
+  // раз в минуту: время «в пути», остаток отдыха и статус в профиле
+  setInterval(() => { if ((V.tab === 'home' || V.tab === 'profile') && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !layerCount()) rerender(); });
   registerSW();
 }

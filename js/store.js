@@ -6,7 +6,7 @@ import { payCfg, overRestIntervals } from './pay.js';
 // minRest — общий минимальный отдых в пункте оборота, minShiftRest — минимальный междусменный отдых (мин).
 // houses — свой минимум для домов отдыха: { [ключ станции]: { name, minRest } }.
 // pay — наборы тарифных ставок: { assistant: {...}, driver: {...} } (см. pay.js).
-export const DEFAULT_SETTINGS = { id: 'settings', theme: 'dark', minRest: 240, minShiftRest: 16 * 60, tz: 'Europe/Moscow', houses: {}, pay: {} };
+export const DEFAULT_SETTINGS = { id: 'settings', theme: 'dark', minRest: 240, minShiftRest: 16 * 60, dayOffMin: 60 * 60, tz: 'Europe/Moscow', houses: {}, pay: {} };
 export const DEFAULT_PROFILE = { id: 'profile', name: '', role: 'assistant', depot: '', klass: '', photo: '' };
 
 export const S = {

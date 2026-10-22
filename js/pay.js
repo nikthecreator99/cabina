@@ -1,6 +1,7 @@
 // Ориентировочный расчёт заработной платы локомотивной бригады.
 // Схема сверена с расчётными листками (см. ТЗ 2.0, п. 5.4):
-//  • все отработанные часы × тарифная ставка;
+//  • все отработанные часы × тарифная ставка; ожидание следования пассажиром — тоже по тарифу
+//    и тоже входит в отработанные часы (в квитке — «ОплЗаОжидСлед», отдельной строкой);
 //  • ночные (22:00–06:00) +40% ставки, «вредность» +4% на все часы, надбавка за класс — на все часы;
 //  • праздничные часы +100%;
 //  • переработка в том же месяце: часы сверх нормы (с учётом отвлечений) — ещё +50%,
@@ -90,11 +91,13 @@ function minutesInMonth(ivs, mk) {
 }
 
 // Начисление за часы поездки (или её часть в месяце) без переработки:
-// ставка, ночные, вредность, класс, праздничные. part — { work, night, holiday } в минутах.
+// ставка, ожидание, ночные, вредность, класс, праздничные. part — { work, night, holiday, wait } в минутах.
 function hoursPay(part, rate, cfg) {
   const h = part.work / 60;
+  const w = (part.wait || 0) / 60;
   return {
-    base: h * rate,
+    base: (h - w) * rate,
+    wait: w * rate,
     night: (part.night / 60) * rate * cfg.night / 100,
     harm: h * rate * cfg.harm / 100,
     klass: h * rate * cfg.klass / 100,
@@ -122,7 +125,7 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const sum = monthSummary(y, m, trips, absences);
   const res = { mk, sum, lines: [], deductions: [], gross: 0, ndfl: 0, net: 0, hasRate: hasRate(cfg), empty: true };
   if (!res.hasRate) return res;
-  const acc = { base: 0, night: 0, harm: 0, klass: 0, holiday: 0 };
+  const acc = { base: 0, wait: 0, night: 0, harm: 0, klass: 0, holiday: 0 };
   let comp = 0;
   for (const t of sum.monthTrips) {
     const st = statsOf(t);
@@ -147,7 +150,8 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const h = (min) => Math.round(min) / 60;
   // label — название строки, pct — процент (показывается рядом), hours — часы, к которым он применён
   const L = (key, label, amount, { pct, hours } = {}) => { if (amount > 0.004) res.lines.push({ key, label, pct, hours, amount: round2(amount) }); };
-  L('base', 'Оплата по тарифу', acc.base, { hours: h(sum.work) });
+  L('base', 'Оплата по тарифу', acc.base, { hours: h(sum.work - (sum.wait || 0)) });
+  L('wait', 'Ожидание следования пассажиром', acc.wait, { hours: h(sum.wait || 0) });
   L('night', 'Ночные', acc.night, { pct: cfg.night, hours: h(sum.night) });
   L('harm', 'Вредность', acc.harm, { pct: cfg.harm, hours: h(sum.work) });
   L('klass', 'Надбавка за класс', acc.klass, { pct: cfg.klass, hours: h(sum.work) });
@@ -155,7 +159,7 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   L('overOther', 'Переработка', overOther, { pct: 50, hours: O - Ow });
   L('overWeekend', 'Переработка в выходные', overWeekend, { pct: 100, hours: Ow - hOw });
   L('overRest', 'Отдых сверх нормы в пункте оборота', orPay, { hours: h(orMin) });
-  const workPay = acc.base + acc.night + acc.harm + acc.klass + acc.holiday + overOther + overWeekend + orPay;
+  const workPay = acc.base + acc.wait + acc.night + acc.harm + acc.klass + acc.holiday + overOther + overWeekend + orPay;
   const bonus = workPay * cfg.bonus / 100;
   L('bonus', 'Премия', bonus, { pct: cfg.bonus });
   const withBonus = workPay + bonus;
@@ -195,7 +199,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['base', 'night', 'harm', 'klass', 'holiday', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'ndfl', 'union', 'pension'];
+  const order = ['base', 'wait', 'night', 'harm', 'klass', 'holiday', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'ndfl', 'union', 'pension'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));

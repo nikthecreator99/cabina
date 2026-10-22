@@ -3,7 +3,7 @@ import { I, esc, small, pageHead, stepperHtml, openLayer, closeLayer, sheet, toa
 import { S, nowLocal, saveSettings, deleteRoute } from './store.js';
 import { fmtDur, fmtLocal } from './calc.js';
 import { openRouteForm } from './forms.js';
-import { restHouses } from './rest.js';
+import { restHouses, dayOffMin } from './rest.js';
 import { PAY_FIELDS, ROLES, payCfg, currentRate, hasRate, fmtRub } from './pay.js';
 
 export const fmtKm = (v) => `${String(Math.round(v * 10) / 10).replace('.', ',')} км`;
@@ -27,6 +27,10 @@ export function renderWork() {
     <div class="panel" id="shift-panel">
       <div class="row"><span class="ico" style="--c:var(--warn)">${I.clock}</span><div class="grow"><div class="t1">Минимальный междусменный отдых</div><div class="t2">После домашнего отдыха «На очередь» вызвать на явку могут не раньше, чем через это время</div></div></div>
       <div class="row" style="justify-content:center">${stepperHtml('min-shift', S.settings.minShiftRest ?? 960, { minus: 'shift-minus', plus: 'shift-plus', fmt: fmtDur })}</div>
+    </div>
+    <div class="panel" id="dayoff-panel">
+      <div class="row"><span class="ico" style="--c:var(--ok)">${I.calendar}</span><div class="grow"><div class="t1"><label for="day-off">Выходной</label></div><div class="t2">Сколько часов длится выходной в вашем депо. После поездки нажмите «Пойти на выходной» — на главном экране будет видно, когда он закончится.</div></div></div>
+      <div class="row"><div class="input-unit grow"><input class="input" id="day-off" inputmode="decimal" autocomplete="off" value="${esc(numText(Math.round(dayOffMin() / 60 * 100) / 100))}" placeholder="Например, 60"><span>ч</span></div></div>
     </div>`;
 }
 
@@ -253,6 +257,17 @@ export async function workClick(act, b, ctx) {
 
 export async function workChange(e) {
   const t = e.target;
+  if (t.id === 'day-off') {
+    const v = parseNum(t.value);
+    if (v === '' || Number.isNaN(v) || v < 1 || v > 336) {
+      toast('Укажите выходной в часах — от 1 до 336, например 60', { error: true });
+      t.value = numText(Math.round(dayOffMin() / 60 * 100) / 100);
+      return true;
+    }
+    await saveSettings({ dayOffMin: Math.round(v * 60) });
+    toast(`Выходной: ${fmtDur(Math.round(v * 60), { short: true })}`);
+    return true;
+  }
   if (t.id === 'pf-rate') { await changeRate(t); return true; }
   if (t.dataset.pf) {
     const v = parseNum(t.value);

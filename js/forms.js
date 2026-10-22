@@ -9,9 +9,9 @@ import {
   autoAbsenceHours, absenceMonths, validateAbsence, monthSummary, DAY,
 } from './calc.js';
 import { dayInfo } from './calendar.js';
-import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil } from './rest.js';
+import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
-import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour } from './tours.js';
+import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour } from './tours.js';
 
 export { computeHomeRest };
 
@@ -83,8 +83,8 @@ function homeCandidates(draft, draftValid) {
   return others.filter((x) => x.stats.end <= now).sort((a, b) => b.stats.end - a.stats.end).slice(0, 4);
 }
 
-const statusOf = (now, start, until) => (now < start ? '<span class="status off">Начнётся после поездки</span>'
-  : until > now ? '<span class="status on">● Отдых ещё продолжается</span>' : '<span class="status off">Отдых завершён</span>');
+const statusOf = (now, start, until, { on = 'Отдых ещё продолжается', off = 'Отдых завершён' } = {}) => (now < start ? '<span class="status off">Начнётся после поездки</span>'
+  : until > now ? `<span class="status on">● ${on}</span>` : `<span class="status off">${off}</span>`);
 
 export function restBlock(trip, { now = nowLocal(), pool = S.trips } = {}) {
   const st = tripStats(trip);
@@ -129,7 +129,7 @@ export function openTripForm(tripId) {
   const now = nowLocal();
   const today = fmtLocal(now).slice(0, 10);
   const base = existing ? JSON.parse(JSON.stringify({ ...existing, _stats: undefined, _statsAt: undefined })) : {
-    id: uid(), routeId: null, routeLabel: '', start: '', end: '', passenger: [], locoType: '', locoNumber: '',
+    id: uid(), routeId: null, routeLabel: '', start: '', end: '', passenger: [], waiting: [], locoType: '', locoNumber: '',
     restType: 'turnaround', homeRest: null, homeChoice: null, createdAt: Date.now(),
   };
   const wasLive = existing ? isLive(existing) : false;
@@ -144,6 +144,7 @@ export function openTripForm(tripId) {
     endTouched: !!existing && !wasLive,
     locoType: base.locoType || '', locoNumber: base.locoNumber || '',
     passenger: (base.passenger || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
+    waiting: (base.waiting || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     note: linkedNote?.text || '',
     restType: base.restType || 'turnaround',
     homeSel: base.homeRest?.ids ? [...base.homeRest.ids] : [],
@@ -155,12 +156,16 @@ export function openTripForm(tripId) {
     const homeRest = F.restType === 'home' && F.homeSel.length >= 1 ? { ids: [...F.homeSel] } : null;
     let homeChoice = F.restType === 'home' ? F.homeChoice : null;
     if ((homeChoice === 'full' || homeChoice === 'fullOff') && !homeRest) homeChoice = null;
+    // длительность выходного запоминается в поездке: если потом поменять её в настройках, прошлые выходные не сдвинутся
+    const dayOff = homeChoice === 'dayOff' ? (base.homeChoice === 'dayOff' && base.dayOffMin ? base.dayOffMin : dayOffMin()) : undefined;
     return {
       ...base,
+      dayOffMin: dayOff,
       routeId: F.routeId, routeLabel: F.routeId ? routeText(S.routes.find((r) => r.id === F.routeId)) : F.routeLabel,
       start: F.sd && F.st ? `${F.sd}T${F.st}` : '',
       end: F.ed && F.et ? `${F.ed}T${F.et}` : '',
       passenger: F.passenger.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
+      waiting: F.waiting.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
       locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber),
       restType: F.restType, homeRest, homeChoice,
     };
@@ -216,6 +221,8 @@ export function openTripForm(tripId) {
       <div class="label"><span class="step-n">7</span>Следование пассажиром <span class="opt">· необязательно</span></div>
       <div class="list" id="tf-pass"></div>
       <button type="button" class="add-btn" data-act="add-pass">${I.plus} Добавить следование пассажиром</button>
+      <div class="list" id="tf-wait"></div>
+      <button type="button" class="add-btn" data-act="add-wait" id="tf-add-wait" hidden>${I.plus} Добавить ожидание следования пассажиром</button>
     </div>
     <div class="field">
       <div class="label"><span class="step-n">8</span>Вид отдыха после поездки</div>
@@ -267,16 +274,22 @@ export function openTripForm(tripId) {
     else if (tripsOn) setHTML(box, `<div class="hint">Вы уже ездили на этом локомотиве (${tripsOn}). Заметок о нём пока нет.</div>`);
     else setHTML(box, '');
   }
-  function renderPass() {
-    $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => `
-      <div class="interval" data-pid="${p.id}">
-        <div class="interval-head"><span>${I.passenger} Пассажиром №${i + 1}</span>
+  // интервал «пассажиром» (kind = 'pass') или «ожидание следования пассажиром» (kind = 'wait')
+  const intervalHtml = (p, i, kind) => `
+      <div class="interval${kind === 'wait' ? ' wait' : ''}" data-pid="${p.id}" data-kind="${kind}">
+        <div class="interval-head"><span>${kind === 'wait' ? `${I.clock} Ожидание №${i + 1}` : `${I.passenger} Пассажиром №${i + 1}`}</span>
           <button type="button" class="icon-btn danger" data-act="del-pass" data-pid="${p.id}" aria-label="Удалить интервал">${I.trash}</button></div>
         <div class="mini-label">Начало</div>
         <div class="dt"><input type="date" class="input" data-pf="sd" value="${p.sd}" aria-label="Дата начала"><input type="time" class="input" data-pf="st" value="${p.st}" aria-label="Время начала"></div>
         <div class="mini-label">Окончание</div>
         <div class="dt"><input type="date" class="input" data-pf="ed" value="${p.ed}" aria-label="Дата окончания"><input type="time" class="input" data-pf="et" value="${p.et}" aria-label="Время окончания"></div>
-      </div>`).join('');
+      </div>`;
+  function renderPass() {
+    $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => intervalHtml(p, i, 'pass')).join('');
+    $(el, '#tf-wait').innerHTML = F.waiting.map((p, i) => intervalHtml(p, i, 'wait')).join('');
+    // ожидание следования появляется, когда добавлено следование пассажиром
+    $(el, '#tf-add-wait').hidden = !F.passenger.length && !F.waiting.length;
+    if (F.passenger.length && !F.waiting.length) setTimeout(() => waitTour(el), 400);
   }
   function renderRest() {
     el.querySelectorAll('[data-rest]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rest === F.restType)));
@@ -306,6 +319,7 @@ export function openTripForm(tripId) {
       <div class="calc-row main"><span>${live ? '<span class="live-dot"></span> В пути' : 'Рабочее время'}</span><b>${fmtDur(st.work)}</b></div>
       <div class="calc-row"><span>${ico(I.moon, 17)} Ночные (22:00–06:00)</span><b>${fmtDur(st.night)}</b></div>
       <div class="calc-row"><span>${ico(I.calStar, 17)} Праздничные</span><b>${fmtDur(st.holiday)}</b></div>
+      ${st.wait > 0 ? `<div class="calc-row"><span>${ico(I.clock, 17)} В том числе ожидание следования</span><b>${fmtDur(st.wait)}</b></div>` : ''}
       ${pay ? `<div class="calc-row"><span>${ico(I.wallet, 17)} ${live ? 'Заработано на руки' : 'Заработок на руки'}</span><b>≈ ${fmtRub(pay.net)}</b></div>` : ''}`;
     if (months.length > 1) {
       html += `<div class="calc-head">По месяцам</div>` + months.map((mk) => `<div class="calc-row"><span>${monthName(mk)}</span><b>${fmtDur(st.byMonth[mk].work)}</b></div>`).join('');
@@ -318,15 +332,23 @@ export function openTripForm(tripId) {
         <div class="calc-row main"><span>Вызов не раньше</span><b>${whenShort(until, nowMs)}</b></div>
         <div class="calc-row"><span>Междусменный отдых</span><b>${shiftH()}</b></div>
         <div class="calc-row"><span>Статус</span>${statusOf(nowMs, st.end, until)}</div>`;
+    } else if (F.homeChoice === 'dayOff') {
+      const until = dayOffUntil(st.end, d);
+      html += `<div class="calc-head">Выходной</div>
+        <div class="calc-row main"><span>Выходной до</span><b>${whenShort(until, nowMs)}</b></div>
+        <div class="calc-row"><span>Длительность</span><b>${fmtDur(d.dayOffMin, { short: true })}</b></div>
+        <div class="calc-row"><span>Статус</span>${statusOf(nowMs, st.end, until, { on: 'Выходной ещё идёт', off: 'Выходной закончился' })}</div>`;
     }
     html += '</div>';
     setHTML(box, html);
 
     // Домашний отдых: «На очередь» или расчёт полного отдыха по кнопке
     if (F.restType !== 'home' || live) { setHTML(home, ''); renderSummary(st, live, pay); return; }
-    let h = `<div class="choice-row">
+    // «Пойти на выходной» — под «На очередь»; «Рассчитать полный отдых» — справа во всю высоту
+    let h = `<div class="choice-row ${F.homeOpen ? 'stack' : 'with-calc'}">
       ${choiceBtn('queue', 'На очередь', `вызов не раньше чем через ${shiftH()}`, I.clock)}
-      ${F.homeOpen ? '' : `<button type="button" class="choice" data-act="home-calc">${ico(I.home2, 20)}<span>Рассчитать полный отдых</span></button>`}
+      ${F.homeOpen ? '' : `<button type="button" class="choice calc-btn" data-act="home-calc">${ico(I.home2, 20)}<span>Рассчитать полный отдых</span></button>`}
+      ${choiceBtn('dayOff', 'Пойти на выходной', `на ${fmtDur(F.homeChoice === 'dayOff' ? d.dayOffMin : dayOffMin(), { short: true })}`, I.calendar)}
     </div>`;
     if (F.homeOpen) {
       const sug = suggestChain(d);
@@ -390,7 +412,7 @@ export function openTripForm(tripId) {
     const map = { 'tf-sd': 'sd', 'tf-st': 'st', 'tf-ed': 'ed', 'tf-et': 'et', 'tf-lt': 'locoType', 'tf-ln': 'locoNumber', 'tf-note': 'note' };
     let obj = F;
     let key = map[t.id];
-    if (!key && t.dataset.pf) { obj = F.passenger.find((x) => x.id === t.closest('[data-pid]')?.dataset.pid); key = t.dataset.pf; }
+    if (!key && t.dataset.pf) { const pid = t.closest('[data-pid]')?.dataset.pid; obj = [...F.passenger, ...F.waiting].find((x) => x.id === pid); key = t.dataset.pf; }
     if (!key || !obj || obj[key] === t.value) return; // значение не изменилось — ничего не перерисовываем
     obj[key] = t.value;
     if (key === 'note') return;
@@ -437,9 +459,16 @@ export function openTripForm(tripId) {
     } else if (act === 'add-pass') {
       F.passenger.push({ id: uid(), sd: F.sd || today, st: '', ed: F.sd || today, et: '' });
       renderPass(); refreshAll();
-      const last = el.querySelectorAll('.interval'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const last = el.querySelectorAll('#tf-pass .interval'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (act === 'add-wait') {
+      const ref = F.passenger[F.passenger.length - 1];
+      const day = ref?.sd || F.ed || F.sd || today;
+      F.waiting.push({ id: uid(), sd: day, st: '', ed: day, et: '' });
+      renderPass(); refreshAll();
+      const last = el.querySelectorAll('.interval.wait'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else if (act === 'del-pass') {
       F.passenger = F.passenger.filter((p) => p.id !== b.dataset.pid);
+      F.waiting = F.waiting.filter((p) => p.id !== b.dataset.pid);
       renderPass(); refreshAll();
     } else if (act === 'loco-notes') {
       openLocoNotesSheet(F.locoType, F.locoNumber, base.id);

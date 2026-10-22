@@ -92,7 +92,7 @@ test('цепочка рвётся, если маршруты не стыкуют
 });
 
 // ---- 2.0: дома отдыха, «На очередь», выбранный отдых ----
-import { houseOf, houseMinRest, restHouses, chosenRest, currentRest, queueUntil } from '../../js/rest.js';
+import { houseOf, houseMinRest, restHouses, chosenRest, currentRest, queueUntil, dayOffMin, dayOffUntil, dayOffIntervals } from '../../js/rest.js';
 
 test('дом отдыха — станция прибытия поездки с отдыхом в пункте оборота, у него может быть свой минимум', () => {
   S.routes = [{ id: 'r1', from: 'Малошуйка', to: 'Сумский Посад' }, { id: 'r2', from: 'Сумский Посад', to: 'Малошуйка' }];
@@ -141,4 +141,28 @@ test('полный отдых показывается только после �
   // пока идёт поездка «в пути», отдых не показывается
   S.trips.push(T('l', '2026-10-20T11:00', ''));
   assert.equal(currentRest(now), null);
+});
+
+test('«Пойти на выходной»: от конца поездки на длительность выходного из настроек', () => {
+  S.settings = { ...S.settings, dayOffMin: undefined };
+  assert.equal(dayOffMin(), 3600, 'по умолчанию 60 ч');
+  S.settings = { ...S.settings, dayOffMin: 72 * 60 };
+  const t = T('d', '2026-10-19T22:00', '2026-10-20T06:00', { restType: 'home', homeChoice: 'dayOff' });
+  S.trips = [t];
+  const now = parseLocal('2026-10-20T12:00');
+  const cur = currentRest(now);
+  assert.equal(cur.kind, 'dayOff');
+  assert.equal(cur.label, 'На выходном');
+  assert.equal(fmtLocal(cur.until), '2026-10-23T06:00');
+  // длительность, сохранённая у поездки при выборе, не меняется вместе с настройкой
+  t.dayOffMin = 60 * 60;
+  assert.equal(fmtLocal(dayOffUntil(parseLocal(t.end), t)), '2026-10-22T18:00');
+  const iv = dayOffIntervals();
+  assert.equal(iv.length, 1);
+  assert.equal(fmtLocal(iv[0].s), '2026-10-20T06:00');
+  assert.equal(fmtLocal(iv[0].e), '2026-10-22T18:00');
+  // выходной кончился — на главном ничего
+  assert.equal(currentRest(parseLocal('2026-10-22T18:00')), null);
+  // поездка «в пути» или без выбора выходного — не выходной
+  assert.equal(dayOffIntervals([T('l', '2026-10-20T11:00', '', { restType: 'home', homeChoice: 'dayOff' }), T('q', '2026-10-19T08:00', '2026-10-19T12:00', { restType: 'home', homeChoice: 'queue' })]).length, 0);
 });
