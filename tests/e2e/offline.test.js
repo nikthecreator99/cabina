@@ -18,7 +18,7 @@ test('приложение открывается без сети после п�
   await page.reload();
   await page.waitForSelector('.trip');
   assert.match(await text(page, '.trip'), /2ЭС5К №355/);
-  assert.equal(await text(page, '.month-title'), 'Октябрь 2026');
+  assert.equal(await text(page, '.month-title'), 'Октябрь');
   assert.deepEqual(errors.filter((e) => !/net::ERR_INTERNET_DISCONNECTED|Failed to fetch/.test(e)), []);
   await context.close();
 });

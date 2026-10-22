@@ -32,8 +32,8 @@ test('ночные часы считаются с 22:00 до 6:00', () => {
 test('поездка через границу месяцев делится по месяцам', () => {
   const st = tripStats(trip('2026-10-31T21:00', '2026-11-01T03:00'));
   assert.deepEqual(st.byMonth, {
-    '2026-10': { work: 180, night: 120, holiday: 0 },
-    '2026-11': { work: 180, night: 180, holiday: 0 },
+    '2026-10': { work: 180, night: 120, holiday: 0, restDay: 180 },
+    '2026-11': { work: 180, night: 180, holiday: 0, restDay: 180 },
   });
 });
 

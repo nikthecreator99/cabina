@@ -90,3 +90,55 @@ test('цепочка рвётся, если маршруты не стыкуют
   S.trips = [old];
   assert.deepEqual(suggestChain(T('n', '2026-10-14T20:00', '2026-10-15T02:00')).chain.map((c) => c.id), ['n']);
 });
+
+// ---- 2.0: дома отдыха, «На очередь», выбранный отдых ----
+import { houseOf, houseMinRest, restHouses, chosenRest, currentRest, queueUntil } from '../../js/rest.js';
+
+test('дом отдыха — станция прибытия поездки с отдыхом в пункте оборота, у него может быть свой минимум', () => {
+  S.routes = [{ id: 'r1', from: 'Малошуйка', to: 'Сумский Посад' }, { id: 'r2', from: 'Сумский Посад', to: 'Малошуйка' }];
+  S.trips = [
+    T('a', '2026-10-19T08:00', '2026-10-19T14:00', { routeId: 'r1', restType: 'turnaround' }),
+    T('b', '2026-10-19T22:00', '2026-10-20T04:00', { routeId: 'r2', restType: 'home' }),
+  ];
+  assert.equal(houseOf(S.trips[0]), 'Сумский Посад');
+  assert.equal(houseOf(S.trips[1]), null);
+  // домой (Малошуйка) ездили только с домашним отдыхом — это не дом отдыха
+  assert.deepEqual(restHouses().map((h) => h.name), ['Сумский Посад']);
+  assert.equal(houseMinRest('Сумский Посад'), 240);
+  S.settings = { ...S.settings, houses: { 'сумский посад': { name: 'Сумский Посад', minRest: 300 } } };
+  assert.equal(houseMinRest('сумский  посад'), 300);
+  // отдых 6 ч / 2 = 3 ч, но свой минимум 5 ч
+  const r = chosenRest(S.trips[0]);
+  assert.equal(r.kind, 'turnaround');
+  assert.equal(r.rest, 300);
+  assert.equal(fmtLocal(r.until), '2026-10-19T19:00');
+  S.settings = { ...S.settings, houses: {} };
+});
+
+test('«На очередь»: вызов не раньше, чем через междусменный отдых', () => {
+  S.settings = { ...S.settings, minShiftRest: 960 };
+  const t = T('q', '2026-10-19T22:00', '2026-10-20T06:00', { restType: 'home', homeChoice: 'queue' });
+  S.trips = [t];
+  assert.equal(fmtLocal(queueUntil(parseLocal(t.end))), '2026-10-20T22:00');
+  const now = parseLocal('2026-10-20T12:00');
+  const cur = currentRest(now);
+  assert.equal(cur.kind, 'queue');
+  assert.equal(cur.left, 600);
+  // ничего не выбрано — ничего не показывается
+  t.homeChoice = null;
+  assert.equal(currentRest(now), null);
+});
+
+test('полный отдых показывается только после выбора, с выходным — на сутки дольше', () => {
+  const a = T('a', '2026-10-19T08:00', '2026-10-19T14:00', { restType: 'turnaround' });
+  const b = T('b', '2026-10-19T20:00', '2026-10-20T02:00', { restType: 'home', homeRest: { ids: ['a', 'b'] }, homeChoice: 'full' });
+  S.trips = [a, b];
+  const now = parseLocal('2026-10-20T12:00');
+  // (6 + 6) × 2,6 − 6 = 25 ч 12 мин
+  assert.equal(fmtLocal(currentRest(now).until), '2026-10-21T03:12');
+  b.homeChoice = 'fullOff';
+  assert.equal(fmtLocal(currentRest(now).until), '2026-10-22T03:12');
+  // пока идёт поездка «в пути», отдых не показывается
+  S.trips.push(T('l', '2026-10-20T11:00', ''));
+  assert.equal(currentRest(now), null);
+});

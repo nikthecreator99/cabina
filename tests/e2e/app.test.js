@@ -12,14 +12,27 @@ after(async () => { await env?.stop(); });
 
 const sheet = (page) => page.locator('#layers .layer:not(.closing)').last();
 const tab = (page, name) => page.locator(`.tab[data-tab=${name}]`).click();
+// ☰ → «Настройки работы» → нужный экран; «Профиль» → шестерёнка → «Настройки»
+async function workPage(page, name) {
+  await tab(page, 'home');
+  await page.locator('.home-head [data-page=work]').click();
+  if (name) await page.locator(`.screen [data-act=go][data-page=${name}]`).click();
+}
+async function settingsPage(page) {
+  await tab(page, 'profile');
+  await page.locator('.screen [data-page=settings]').click();
+  await page.waitForSelector('#theme-seg');
+}
 
 test('первый запуск: приветствие, затем пустой октябрь с нормой 176 ч', async () => {
   const { context, page, errors } = await openApp(env, { onboard: false });
   assert.match(await sheet(page).innerText(), /Добро пожаловать/);
   await page.getByRole('button', { name: 'Начать' }).click();
   await waitNoLayers(page);
-  assert.equal(await text(page, '.month-title'), 'Октябрь 2026');
+  assert.equal(await text(page, '.month-title'), 'Октябрь');
   assert.match(await text(page, '.hero'), /Норма: 176 ч/);
+  // ставка не указана — вместо заработка ссылка на тарифные ставки
+  assert.match(await text(page, '.hero'), /Указать ставку/);
   assert.match(await text(page, '.empty'), /В октябре поездок нет/);
   // после перезапуска приветствие больше не показывается
   await page.reload();
@@ -50,7 +63,7 @@ test('добавление поездки через форму: часы, но�
   assert.match(await text(page, '.toast-wrap'), /Поездка добавлена/);
 
   assert.match(await text(page, '.hero .big'), /11\s*ч\s*30\s*мин/);
-  assert.match(await text(page, '.stats'), /Ночные часы\s+8 ч 00 мин/);
+  assert.match(await text(page, '.hero-lines'), /Ночные:\s*8 ч 00 мин/);
   const row = await text(page, '.trip');
   assert.match(row, /20:00 — 07:30/);
   assert.match(row, /2ЭС5К №355/);
@@ -83,7 +96,8 @@ test('ошибки в форме поездки показываются и не
 
 test('отвлечение уменьшает норму и открывается из карточки', async () => {
   const { context, page } = await openApp(env);
-  await page.locator('[data-act=add-absence]').click();
+  // отвлечений нет — кнопка сразу открывает форму
+  await page.locator('[data-act=absences]').click();
   const f = sheet(page);
   await f.locator('.type-pick button').filter({ hasText: 'Отпуск' }).click();
   await f.locator('#af-start').fill('2026-10-19');
@@ -94,17 +108,20 @@ test('отвлечение уменьшает норму и открываетс
   const hero = await text(page, '.hero');
   assert.match(hero, /Норма: 160 ч/);
   assert.match(hero, /176 ч по календарю − 16 ч отвлечений/);
-  assert.match(await text(page, '.stats'), /Отпуск\s+16 ч 00 мин/);
-  // пересечение с существующим отвлечением не сохраняется
-  await page.locator('[data-act=add-absence]').click();
+  assert.match(await text(page, '.hero-lines'), /Отпуск:\s*−16 ч/);
+  assert.equal(await text(page, '[data-act=absences] .count'), '1');
+  // теперь кнопка открывает список; пересечение с существующим отвлечением не сохраняется
+  await page.locator('[data-act=absences]').click();
+  assert.match(await sheet(page).innerText(), /Отпуск[\s\S]*19/);
+  await sheet(page).locator('[data-act=al-new]').click();
   const g = sheet(page);
   await g.locator('#af-start').fill('2026-10-20');
   await g.locator('#af-end').fill('2026-10-21');
   await g.locator('[data-act=save-abs]').click();
   assert.match(await g.locator('[data-error]').innerText(), /пересекается/);
   await g.locator('button[data-close]').first().click();
-  await waitNoLayers(page);
-  await page.locator('[data-act=abs-type][data-type=vacation]').click();
+  // из списка отвлечение открывается нажатием
+  await sheet(page).locator('[data-act=al-open]').first().click();
   assert.equal(await sheet(page).locator('#af-start').inputValue(), '2026-10-19');
   await context.close();
 });
@@ -116,7 +133,7 @@ test('переработка и отпуск: итоги месяца по за�
   await seed(page, { trips });
   assert.match(await text(page, '.hero'), /184\s*ч\s*00\s*мин/);
   assert.match(await text(page, '.hero'), /Сверх нормы\s*\+8 ч 00 мин/);
-  assert.match(await text(page, '.stats'), /Переработка\s+8 ч 00 мин/);
+  assert.match(await text(page, '.hero-lines'), /Переработка:\s*8 ч 00 мин/);
   assert.match(await text(page, '.sec-head'), /23 поездки/);
   await context.close();
 });
@@ -141,7 +158,7 @@ test('удаление поездки свайпом влево и подтве�
 
 test('маршруты: добавить, создать обратный, выбрать в поездке', async () => {
   const { context, page } = await openApp(env);
-  await tab(page, 'routes');
+  await workPage(page, 'routes');
   await page.locator('[data-act=add-route]').click();
   let f = sheet(page);
   await f.locator('#rf-from').fill('Малошуйка');
@@ -185,16 +202,33 @@ test('полный отдых по поездке туда и обратно', a
   await f.locator('#tf-et').fill('02:00');
   await f.locator('[data-rest=home]').click();
   await f.locator('[data-act=home-calc]').click();
-  const home = await f.locator('#tf-home').innerText();
+  let home = await f.locator('#tf-home').innerText();
   assert.match(home, /Поездка туда и обратно/);
   assert.match(home, /А → Б → А/);
   // (6 ч + 6 ч) × 2,6 − 6 ч = 25 ч 12 мин
   assert.match(home, /Полный отдых\s+25 ч 12 мин/);
   assert.match(home, /С выходным \(\+24 ч\)\s+49 ч 12 мин/);
+  // ничего не выбрано — на главном экране отдых не показывается
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
+  assert.equal(await page.locator('.rest-banner').count(), 0);
+  // выбираем «Пойти на полный отдых»: кнопка подсвечена, отдых виден на главном
+  await page.locator('.trip').first().click();
+  const g = sheet(page);
+  await g.locator('[data-choice=full]').click();
+  assert.equal(await g.locator('[data-choice=full]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await g.locator('[data-choice=fullOff]').getAttribute('aria-pressed'), 'false');
+  await g.locator('[data-act=save-trip]').click();
+  await waitNoLayers(page);
   // «сейчас» 20 октября 12:00 — отдых до 21 октября 03:12 ещё идёт
-  assert.match(await text(page, '.rest-banner'), /Домашний отдых · до завтра, 03:12/);
+  assert.match(await text(page, '.rest-banner'), /Полный отдых · до завтра, 03:12/);
+  assert.match(await text(page, '.rest-banner'), /Осталось 15 ч 12 мин/);
+  // передумали — с выходным
+  await page.locator('.trip').first().click();
+  await sheet(page).locator('[data-choice=fullOff]').click();
+  await sheet(page).locator('[data-act=save-trip]').click();
+  await waitNoLayers(page);
+  assert.match(await text(page, '.rest-banner'), /Полный отдых с выходным · до 22 окт, 03:12/);
   await context.close();
 });
 
@@ -209,31 +243,36 @@ test('статус отдыха в пункте оборота на главно
 
 test('переключение месяцев и возврат к текущему', async () => {
   const { context, page } = await openApp(env);
+  assert.equal(await page.locator('[data-act=today]').count(), 0);
   await page.locator('[data-act=next]').click();
-  assert.equal(await text(page, '.month-title'), 'Ноябрь 2026');
+  assert.equal(await text(page, '.month-title'), 'Ноябрь');
   assert.match(await text(page, '.hero'), /Норма: 159 ч/);
   await page.locator('[data-act=next]').click();
   await page.locator('[data-act=next]').click();
   assert.equal(await text(page, '.month-title'), 'Январь 2027');
   await page.locator('[data-act=today]').click();
-  assert.equal(await text(page, '.month-title'), 'Октябрь 2026');
+  assert.equal(await text(page, '.month-title'), 'Октябрь');
   await context.close();
 });
 
 test('настройки: тема и минимальный отдых сохраняются', async () => {
   const { context, page } = await openApp(env);
-  await tab(page, 'settings');
+  // по умолчанию тёмная тема, вариантов два
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  await settingsPage(page);
+  assert.equal(await page.locator('#theme-seg button').count(), 2);
   await page.locator('[data-act=theme][data-v=light]').click();
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  assert.match(await text(page, '.screen'), /2026 год: 1972 ч/);
+  await workPage(page, 'houses');
   assert.equal(await text(page, '#min-rest'), '4 ч 00 мин');
   await page.locator('[data-act=rest-plus]').click();
   await page.waitForFunction(() => document.querySelector('#min-rest')?.textContent === '4 ч 30 мин');
   await page.reload();
   await page.waitForSelector('.screen');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
-  await tab(page, 'settings');
+  await workPage(page, 'houses');
   assert.equal(await text(page, '#min-rest'), '4 ч 30 мин');
-  assert.match(await text(page, '.screen'), /2026 год: 1972 ч/);
   await context.close();
 });
 
@@ -244,20 +283,23 @@ test('резервная копия: сохранить и восстанови�
     trips: [{ id: 'a', routeId: 'r1', start: '2026-10-14T08:00', end: '2026-10-14T12:00', locoType: '2ЭС5К', locoNumber: '355' }],
     absences: [{ id: 'v', type: 'vacation', start: '2026-10-19', end: '2026-10-20' }],
   });
-  await tab(one.page, 'settings');
-  const [download] = await Promise.all([one.page.waitForEvent('download'), one.page.locator('[data-act=export]').click()]);
+  await settingsPage(one.page);
+  await one.page.locator('[data-act=export]').click();
+  // перед сохранением — предупреждение о личных данных
+  assert.match(await sheet(one.page).innerText(), /личные данные[\s\S]*Не пересылайте его другим/);
+  const [download] = await Promise.all([one.page.waitForEvent('download'), sheet(one.page).getByRole('button', { name: 'Сохранить копию' }).click()]);
   assert.match(download.suggestedFilename(), /^cabina-backup-\d{4}-\d{2}-\d{2}\.json$/);
   const file = join(await mkdtemp(join(tmpdir(), 'cabina-')), download.suggestedFilename());
   await download.saveAs(file);
   const payload = JSON.parse(await readFile(file, 'utf8'));
   assert.equal(payload.app, 'CABINA');
-  assert.equal(payload.format, 1);
+  assert.equal(payload.format, 2);
   assert.equal(payload.data.trips.length, 1);
   assert.equal(payload.data.trips[0]._stats, undefined);
   await one.context.close();
 
   const two = await openApp(env);
-  await tab(two.page, 'settings');
+  await settingsPage(two.page);
   await two.page.locator('#bk-import').setInputFiles(file);
   const dlg = sheet(two.page);
   assert.match(await dlg.innerText(), /1 поездка/);
@@ -272,7 +314,7 @@ test('резервная копия: сохранить и восстанови�
 test('чужой файл вместо копии не трогает данные', async () => {
   const { context, page } = await openApp(env);
   await seed(page, { trips: [{ id: 'a', start: '2026-10-14T08:00', end: '2026-10-14T12:00' }] });
-  await tab(page, 'settings');
+  await settingsPage(page);
   await page.locator('#bk-import').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') });
   await page.waitForFunction(() => document.querySelector('.toast-wrap')?.innerText.includes('Это не файл резервной копии'));
   await tab(page, 'home');
@@ -305,11 +347,14 @@ test('заметки о локомотивах и раздел «Дополни�
 test('экран телефона: ничего не вылезает за ширину на всех вкладках', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { trips: [{ id: 'a', start: '2026-10-14T20:00', end: '2026-10-15T07:30', locoType: '2ЭС5К', locoNumber: '355', routeLabel: 'Очень длинное название станции → Ещё более длинное название станции' }] });
-  for (const name of ['home', 'routes', 'extra', 'settings']) {
-    await tab(page, name);
+  const check = async (name) => {
     const w = await page.evaluate(() => document.documentElement.scrollWidth);
-    assert.ok(w <= 390, `вкладка ${name}: ширина ${w}`);
-  }
+    assert.ok(w <= 390, `экран ${name}: ширина ${w}`);
+  };
+  for (const name of ['home', 'extra', 'profile']) { await tab(page, name); await check(name); }
+  for (const name of ['routes', 'tariffs', 'houses']) { await workPage(page, name); await check(name); }
+  await settingsPage(page); await check('settings');
+  await tab(page, 'home'); await page.locator('.hero').click(); await page.waitForSelector('#st-kind'); await check('stats');
   assert.deepEqual(errors, []);
   await context.close();
 });
