@@ -1,34 +1,35 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
-import { I, esc, openLayer, closeLayer, sheet, toast, confirmDialog, actionSheet, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dateRange, dayMonth, plural, fmtSize, layerCount } from './ui.js';
-import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, deleteRoute } from './store.js';
-import { monthSummary, fmtDur, fmtHours, parseLocal, turnaroundRest } from './calc.js';
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
+import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
+import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
-import { openTripForm, openAbsenceForm, openRouteForm, openNoteForm, ABS_TYPES, setNavigator, computeHomeRest, fmtDate } from './forms.js';
+import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, fmtDate } from './forms.js';
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { loadTours, resetTours, tourActive } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour } from './tours.js';
 import { isMemoryMode } from './db.js';
+import { currentRest } from './rest.js';
+import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
+import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange, resetPayRole } from './work.js';
+import { renderProfile, profileClick, profileChange } from './profile.js';
+import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 
-export const VERSION = '1.5.0';
+export const VERSION = '2.0.0';
 const app = document.getElementById('app');
-const V = { tab: 'home', y: 2026, m: 10, extra: null };
+// tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
+const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
+const page = () => V.pages[V.pages.length - 1] || null;
 
-const small = (svg, s = 14) => svg.replace('width="22" height="22"', `width="${s}" height="${s}"`);
 const p2 = (n) => String(n).padStart(2, '0');
-export const fmtKm = (v) => `${String(Math.round(v * 10) / 10).replace('.', ',')} км`;
 
 // ---------------------------------------------------------------- тема
-const mql = window.matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
-  const t = S.settings.theme;
-  const root = document.documentElement;
-  if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t); else root.removeAttribute('data-theme');
-  const dark = t === 'dark' || (t !== 'light' && mql.matches);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#07090f' : '#eef1f7');
+  const t = S.settings.theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'dark' ? '#07090f' : '#eef1f7');
 }
-mql.addEventListener?.('change', applyTheme);
 
 // ---------------------------------------------------------------- небо
 // Сцены неба по положению солнца: рассвет, день, закат; ночь — исходная сцена темы.
@@ -86,7 +87,6 @@ function skySVG(phase = 'night') {
 const SKY_CACHE = {};
 const skyFor = (phase) => SKY_CACHE[phase] || (SKY_CACHE[phase] = skySVG(phase));
 
-
 // ---------------------------------------------------------------- главная
 function ring(pct) {
   const r = 42;
@@ -106,20 +106,17 @@ function bigDur(min) {
   return `<span>${Math.floor(v / 60)}</span><small>ч</small><span>${p2(v % 60)}</span><small>мин</small>`;
 }
 
-function statCard(cls, icon, label, min, wide, absType) {
-  const tag = absType ? 'button' : 'div';
-  const attrs = absType ? ` data-act="abs-type" data-type="${absType}" aria-label="${label}: открыть"` : '';
-  return `<${tag} class="stat ${cls} ${wide ? 'wide' : ''}"${attrs}><span class="tile">${icon}</span><div><div class="lbl">${label}</div><div class="val">${fmtDur(min)}</div></div>${absType ? `<span class="chev stat-chev">${small(I.right, 16)}</span>` : ''}</${tag}>`;
-}
-
-function tripRow(t, mk) {
+function tripRow(t, mk, payCtx) {
   const st = statsOf(t);
+  const live = isLive(t);
   const s = new Date(st.start);
   const loco = locoLabel(t.locoType, t.locoNumber);
   const route = routeOf(t);
   const part = st.byMonth[mk];
-  const partial = part && Math.round(part.work) !== Math.round(st.work);
+  const partial = !live && part && Math.round(part.work) !== Math.round(st.work);
+  const pay = payCtx ? tripPay(t, st, payCtx.cfg, { overRestMin: payCtx.or.get(t.id) || 0 }) : null;
   const chips = [
+    live ? '<span class="chip live"><span class="live-dot"></span> В пути</span>' : '',
     loco ? `<span class="chip loco">${small(I.train, 13)} ${esc(loco)}</span>` : '',
     st.night ? `<span class="chip" style="--c:var(--night)">${small(I.moon, 13)} ${fmtDur(st.night, { short: true })}</span>` : '',
     st.holiday ? `<span class="chip" style="--c:var(--holiday)">${small(I.calStar, 13)} ${fmtDur(st.holiday, { short: true })}</span>` : '',
@@ -127,34 +124,31 @@ function tripRow(t, mk) {
   ].join('');
   return `<div class="swipe" data-swipe="${t.id}">
   <button class="swipe-del" data-act="trip-del" data-id="${t.id}" aria-label="Удалить поездку" tabindex="-1">${I.trash}<span>Удалить</span></button>
-  <button class="trip swipe-row" data-act="trip" data-id="${t.id}">
+  <button class="trip swipe-row ${live ? 'is-live' : ''}" data-act="trip" data-id="${t.id}">
     <div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
-      <div class="trip-time">${hm(st.start)} — ${hm(st.end)}</div>
+      <div class="trip-time">${hm(st.start)} — ${live ? 'сейчас' : hm(st.end)}</div>
       <div class="trip-route">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ''}
     </div>
-    <div class="trip-right"><div class="dur">${fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
+    <div class="trip-right"><div class="dur">${fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}${pay ? `<small class="earn">≈ ${fmtRub(pay.net)}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
   </button></div>`;
 }
 
-function currentRest(now) {
-  // последняя поездка и её отдых, если он ещё продолжается
-  let last = null;
-  for (const t of S.trips) { const st = statsOf(t); if (st.end <= now && (!last || st.end > statsOf(last).end)) last = t; }
-  if (!last) return null;
-  const st = statsOf(last);
-  if (last.restType === 'home') {
-    const r = computeHomeRest(last, last.homeRest?.ids, S.trips);
-    if (!r || r.missing || !r.valid || r.fullUntil <= now) return null;
-    return { trip: last, kind: 'Домашний отдых', until: r.fullUntil, left: (r.fullUntil - now) / 60000 };
-  }
-  const r = turnaroundRest(st.work, st.end, S.settings.minRest);
-  if (r.until <= now) return null;
-  return { trip: last, kind: 'Отдых в пункте оборота', until: r.until, left: (r.until - now) / 60000 };
+// Плашка о резервной копии: раз в 2 недели, если есть что терять
+function backupNag(now) {
+  if (!S.trips.length) return '';
+  const b = S.backup;
+  const ref = b.lastAt || b.since;
+  if (!ref || Date.now() < (b.snoozeUntil || 0) || Date.now() - ref < 14 * DAY) return '';
+  const days = Math.floor((Date.now() - (b.lastAt || 0)) / DAY);
+  const text = b.lastAt ? `Последняя копия была ${days} ${plural(days, 'день', 'дня', 'дней')} назад — сохранить?` : 'Вы ещё не сохраняли резервную копию — сохранить?';
+  return `<div class="nag" role="status"><span class="ico" style="--c:var(--warn)">${I.download}</span><div class="grow"><div class="t1">${text}</div><div class="t2">Записи хранятся только в этом телефоне.</div></div>
+    <div class="nag-btns"><button class="btn btn-primary btn-sm" data-act="nag-save">Сохранить</button><button class="icon-btn" data-act="nag-later" aria-label="Напомнить позже">${I.x}</button></div></div>`;
 }
 
 function renderHome() {
+  refreshLive();
   const now = nowLocal();
   const nd = new Date(now);
   const isCurrent = nd.getUTCFullYear() === V.y && nd.getUTCMonth() + 1 === V.m;
@@ -163,7 +157,9 @@ function renderHome() {
   const pct = sum.pct;
   const remain = sum.normMin - sum.work;
   const over = sum.normMin > 0 && remain < 0;
-  const barW = sum.normMin === 0 ? 100 : Math.min(100, (sum.work / sum.normMin) * 100);
+  const cfg = myPay();
+  const payCtx = hasRate(cfg) ? { cfg, or: overRestByTrip() } : null;
+  const pay = payCtx ? payMonth(V.y, V.m, S.trips, S.absences, cfg, statsOf, { overRest: overRestIntervals(S.trips, statsOf) }) : null;
 
   let normHtml;
   if (sum.normMin === 0 && sum.base > 0) normHtml = `<div class="norm-full">Норма на этот месяц полностью покрыта отвлечениями.</div>`;
@@ -178,107 +174,99 @@ function renderHome() {
   else if (remain === 0) remainHtml = `<div class="remain over">Норма<b>выполнена</b></div>`;
   else remainHtml = `<div class="remain">Осталось<b>${fmtDur(remain)}</b></div>`;
 
-  const absCards = Object.entries(ABS_TYPES).filter(([k]) => sum.absByType[k] > 0)
-    .map(([k, v]) => ({ cls: v.cls, icon: v.icon, label: v.label, min: Math.round(sum.absByType[k] * 60), type: k }));
-  const cards = [
-    { cls: 'c-night', icon: I.moon, label: 'Ночные часы', min: sum.night },
-    { cls: 'c-holiday', icon: I.calStar, label: 'Праздничные часы', min: sum.holiday },
-    ...(sum.work > sum.normMin && sum.work > 0 ? [{ cls: 'c-over', icon: I.overtime, label: 'Переработка', min: sum.work - sum.normMin }] : []),
-    ...absCards,
-  ];
-  const statsHtml = cards.map((c, i) => statCard(c.cls, c.icon, c.label, c.min, cards.length % 2 === 1 && i === cards.length - 1, c.type)).join('');
+  // компактная стопка: только ненулевые строки
+  const lines = [
+    sum.night > 0 ? ['night', 'Ночные', fmtDur(sum.night)] : null,
+    sum.holiday > 0 ? ['holiday', 'Праздничные', fmtDur(sum.holiday)] : null,
+    sum.overtime > 0 ? ['over', 'Переработка', fmtDur(sum.overtime)] : null,
+    ...Object.entries(ABS_TYPES).filter(([k]) => sum.absByType[k] > 0).map(([k, v]) => [k, v.label, `−${fmtHours(sum.absByType[k])}`]),
+  ].filter(Boolean);
+  const linesHtml = lines.length ? `<div class="hero-lines">${lines.map(([k, l, v]) => `<div class="hl hl-${k}"><span>${l}:</span> <b>${v}</b></div>`).join('')}</div>` : '';
+  let payHtml = '';
+  if (pay && pay.net > 0) payHtml = `<div class="hero-pay">${small(I.wallet, 16)} Заработано: <b>${fmtRub(pay.net)}</b></div>`;
+  else if (!payCtx && (sum.monthTrips.length || isCurrent)) payHtml = `<button class="hero-pay set" data-act="set-rate">${small(I.wallet, 16)} Указать ставку ›</button>`;
 
+  const absCount = sum.monthAbs.length;
   const rest = isCurrent ? currentRest(now) : null;
-  const trips = [...sum.monthTrips].sort((a, b) => statsOf(b).start - statsOf(a).start);
+  const trips = [...sum.monthTrips].sort((a, b) => (isLive(b) - isLive(a)) || statsOf(b).start - statsOf(a).start);
   const mk = sum.mk;
 
   const phase = skyPhase(Date.now(), S.settings.tz);
+  const restText = rest ? (rest.kind === 'queue' ? `${rest.label} · вызов не раньше ${whenShort(rest.until, now)}` : `${rest.label} · до ${whenShort(rest.until, now)}`) : '';
   app.innerHTML = `<div class="sky" data-phase="${phase}" style="${sceneVars(phase)}">${skyFor(phase)}</div>
   <div class="screen">
     <div class="home-top ${phase !== 'night' ? 'on-sky' : ''}">
-      <div class="brand-row">
-        <div class="brand"><img src="icons/icon-192.png" alt="" width="26" height="26">CABINA</div>
-        ${isCurrent ? '' : `<button class="chip-btn" data-act="today">${small(I.calendar, 15)} Текущий месяц</button>`}
+      <div class="home-head">
+        <button class="round-btn" data-act="go" data-page="work" aria-label="Меню: настройки работы">${I.menu}</button>
+        <div class="grow">${isCurrent ? '' : `<button class="chip-btn" data-act="today">${small(I.calendar, 15)} Сегодня</button>`}</div>
+        <div class="month-switch">
+          <button data-act="prev" aria-label="Предыдущий месяц">${small(I.left, 18)}</button>
+          <div class="month-title" aria-live="polite">${MONTHS[V.m - 1]}${V.y !== nd.getUTCFullYear() ? ` ${V.y}` : ''}</div>
+          <button data-act="next" aria-label="Следующий месяц">${small(I.right, 18)}</button>
+        </div>
       </div>
-      <div class="month-switch">
-        <button class="round-btn" data-act="prev" aria-label="Предыдущий месяц">${I.left}</button>
-        <div class="month-title" aria-live="polite">${MONTHS[V.m - 1]} ${V.y}</div>
-        <button class="round-btn" data-act="next" aria-label="Следующий месяц">${I.right}</button>
-      </div>
-      <section class="glass hero" aria-label="Итоги месяца">
-        <div class="eyebrow">Отработано в ${MONTHS_PREP[V.m - 1]}</div>
+      <section class="glass hero" data-act="stats" role="button" tabindex="0" aria-label="Итоги месяца — открыть статистику">
+        <div class="hero-top"><div class="eyebrow">Отработано в ${MONTHS_PREP[V.m - 1]}</div><span class="hero-link">Статистика ›</span></div>
         <div class="hero-left">
           <div class="big num ${Math.floor(Math.round(sum.work) / 60) >= 100 ? 'long' : ''}">${bigDur(sum.work)}</div>
           ${normHtml}
         </div>
-        <div>${ring(sum.normMin === 0 ? null : pct)}</div>
-        <div class="bar ${over || (pct != null && pct >= 1) || sum.normMin === 0 ? 'full' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(barW)}"><i style="width:${barW}%"></i></div>
-        ${remainHtml}
+        <div class="hero-right">${ring(sum.normMin === 0 ? null : pct)}${remainHtml}</div>
+        ${payHtml || linesHtml ? `<div class="hero-foot">${payHtml}${linesHtml}</div>` : ''}
       </section>
     </div>
-    <button class="btn btn-ghost" data-act="add-absence"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Добавить отвлечение</button>
-    <div class="stats">${statsHtml}</div>
+    <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
-    ${rest ? `<button class="rest-banner" data-act="trip" data-id="${rest.trip.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${rest.kind} · до ${whenShort(rest.until, now)}</div><div class="t2">Осталось ${fmtDur(rest.left)}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${rest ? `<button class="rest-banner" data-act="trip" data-id="${rest.trip.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${backupNag(now)}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
-    ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk)).join('')}</div>`
+    ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.train}</div><b>В ${MONTHS_PREP[V.m - 1]} поездок нет</b><p>Нажмите «Добавить поездку» — время, ночные и праздничные часы посчитаются автоматически.</p></div>`}
   </div>`;
 }
 
-// ---------------------------------------------------------------- маршруты
-function renderRoutes() {
-  const use = new Map();
-  S.trips.forEach((t) => t.routeId && use.set(t.routeId, (use.get(t.routeId) || 0) + 1));
-  const list = [...S.routes].sort((a, b) => (use.get(b.id) || 0) - (use.get(a.id) || 0) || a.from.localeCompare(b.from, 'ru'));
-  app.innerHTML = `<div class="screen">
-    <div class="page-head"><h1>Маршруты</h1></div>
-    <div class="page-sub">${list.length ? `${list.length} ${plural(list.length, 'сохранённый маршрут', 'сохранённых маршрута', 'сохранённых маршрутов')}` : 'Сохраните маршруты, чтобы выбирать их одним касанием'}</div>
-    <button class="btn btn-primary" data-act="add-route">${I.plus} Добавить маршрут</button>
-    ${list.length ? `<div class="list">${list.map((r) => {
-      const n = use.get(r.id) || 0;
-      const hasReverse = S.routes.some((x) => x.from.toLowerCase() === r.to.toLowerCase() && x.to.toLowerCase() === r.from.toLowerCase());
-      return `<div class="swipe" data-swipe="${r.id}">
-      <button class="swipe-del" data-act="route-del" data-id="${r.id}" aria-label="Удалить маршрут" tabindex="-1">${I.trash}<span>Удалить</span></button>
-      <div class="route-card swipe-row">
-        <div class="route-line"><i></i><s></s><i class="b"></i></div>
-        <button class="route-pts" data-act="route" data-id="${r.id}">
-          <div><div class="lbl">Откуда</div><div class="pt">${esc(r.from)}</div></div>
-          <div><div class="lbl">Куда</div><div class="pt">${esc(r.to)}</div></div>
-          <div class="route-meta">${r.distanceKm ? `<span class="km">${fmtKm(r.distanceKm)}</span> · ` : ''}${n ? `${n} ${plural(n, 'поездка', 'поездки', 'поездок')}` : 'Поездок пока нет'}</div>
-        </button>
-        <div class="route-actions">
-          <button class="icon-btn" data-act="route" data-id="${r.id}" aria-label="Изменить маршрут">${I.edit}</button>
-          ${hasReverse ? '' : `<button class="icon-btn" data-act="route-reverse" data-id="${r.id}" aria-label="Создать обратный маршрут" title="Обратный маршрут">${I.swap}</button>`}
-        </div>
-      </div></div>`;
-    }).join('')}</div>`
-      : `<div class="empty"><div class="em-ico">${I.route}</div><b>Маршрутов пока нет</b><p>Например: Москва → Рязань. Маршрут можно выбрать первым полем при добавлении поездки.</p></div>`}
-  </div>`;
-}
-
 // ---------------------------------------------------------------- дополнительно
-function renderNotes() {
+function notesGroups() {
   const groups = new Map();
   for (const n of S.notes) {
     const k = locoKey(n.type, n.number);
     if (!groups.has(k)) groups.set(k, { type: n.type, number: n.number, notes: [] });
     groups.get(k).notes.push(n);
   }
-  const arr = [...groups.values()].map((g) => ({ ...g, notes: g.notes.sort((a, b) => b.createdAt - a.createdAt) }))
+  return [...groups.values()].map((g) => ({ ...g, notes: g.notes.sort((a, b) => b.createdAt - a.createdAt) }))
     .sort((a, b) => b.notes[0].createdAt - a.notes[0].createdAt);
+}
+
+// Список заметок с учётом поиска: слова ищутся в серии, номере и тексте, без учёта регистра и «ё»
+function notesListHtml() {
+  const words = searchWords(V.notesQ);
+  let arr = notesGroups();
+  if (words.length) {
+    arr = arr.map((g) => {
+      const label = `${locoLabel(g.type, g.number)} ${g.type} ${g.number}`;
+      const notes = g.notes.filter((n) => { const hay = normSearch(`${label} ${n.text}`); return words.every((w) => hay.includes(w)); });
+      return { ...g, notes };
+    }).filter((g) => g.notes.length);
+  }
+  if (!S.notes.length) return `<div class="empty"><div class="em-ico">${I.note}</div><b>Заметок пока нет</b><p>Добавляйте заметки о локомотивах прямо в поездке или здесь.</p></div>`;
+  if (!arr.length) return `<div class="empty"><div class="em-ico">${I.search}</div><b>Ничего не найдено</b><p>Попробуйте другое слово или номер локомотива.</p></div>`;
+  return arr.map((g) => {
+    const trips = S.trips.filter((t) => locoKey(t.locoType, t.locoNumber) === locoKey(g.type, g.number)).length;
+    return `<section class="loco-group">
+      <div class="loco-head"><span class="ico" style="color:var(--accent)">${I.train}</span>
+        <div class="name">${highlight(locoLabel(g.type, g.number), words)}<small>Тип ${highlight(g.type, words)} · номер ${highlight(g.number, words)}${trips ? ` · поездок: ${trips}` : ''}</small></div>
+        <button class="icon-btn" data-act="note-add" data-type="${esc(g.type)}" data-number="${esc(g.number)}" aria-label="Добавить заметку">${I.plus}</button></div>
+      ${g.notes.map((n) => `<div class="note"><div><div class="txt">${highlight(n.text, words)}</div><div class="when">${fmtDate(n.createdAt)}${n.updatedAt && n.updatedAt - n.createdAt > 60000 ? ' · изменена' : ''}</div></div>
+        <div class="acts"><button class="icon-btn" data-act="note-edit" data-id="${n.id}" aria-label="Изменить заметку">${I.edit}</button><button class="icon-btn danger" data-act="note-del" data-id="${n.id}" aria-label="Удалить заметку">${I.trash}</button></div></div>`).join('')}
+    </section>`;
+  }).join('');
+}
+
+function renderNotes() {
   return `<div class="page-head"><button class="icon-btn" data-act="extra-back" aria-label="Назад">${I.left}</button><h1>Заметки о локомотивах</h1></div>
+    ${S.notes.length ? `<div class="search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="notes-q" placeholder="Поиск: серия, номер или слово" autocomplete="off" enterkeyhint="search" value="${esc(V.notesQ)}" aria-label="Поиск по заметкам">${V.notesQ ? `<button class="search-x" data-act="notes-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>` : ''}
     <button class="btn btn-primary" data-act="note-add">${I.plus} Новая заметка</button>
-    ${arr.length ? arr.map((g) => {
-      const trips = S.trips.filter((t) => locoKey(t.locoType, t.locoNumber) === locoKey(g.type, g.number)).length;
-      return `<section class="loco-group">
-        <div class="loco-head"><span class="ico" style="color:var(--accent)">${I.train}</span>
-          <div class="name">${esc(locoLabel(g.type, g.number))}<small>Тип ${esc(g.type)} · номер ${esc(g.number)}${trips ? ` · поездок: ${trips}` : ''}</small></div>
-          <button class="icon-btn" data-act="note-add" data-type="${esc(g.type)}" data-number="${esc(g.number)}" aria-label="Добавить заметку">${I.plus}</button></div>
-        ${g.notes.map((n) => `<div class="note"><div><div class="txt">${esc(n.text)}</div><div class="when">${fmtDate(n.createdAt)}${n.updatedAt && n.updatedAt - n.createdAt > 60000 ? ' · изменена' : ''}</div></div>
-          <div class="acts"><button class="icon-btn" data-act="note-edit" data-id="${n.id}" aria-label="Изменить заметку">${I.edit}</button><button class="icon-btn danger" data-act="note-del" data-id="${n.id}" aria-label="Удалить заметку">${I.trash}</button></div></div>`).join('')}
-      </section>`;
-    }).join('') : `<div class="empty"><div class="em-ico">${I.note}</div><b>Заметок пока нет</b><p>Добавляйте заметки о локомотивах прямо в поездке или здесь.</p></div>`}`;
+    <div id="notes-list" class="screen-list">${notesListHtml()}</div>`;
 }
 
 function renderExtra() {
@@ -294,11 +282,10 @@ function renderExtra() {
       <button class="tile-link" data-act="extra-docs"><span class="big-ico" style="--c:var(--warn)">${I.folder}</span>
         <div><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div><span class="chev">${I.right}</span></button>`;
   }
-  app.innerHTML = `<div class="screen">${html}</div>`;
-  if (V.extra === 'docs') hydrateThumbs(app);
+  return html;
 }
 
-// ---------------------------------------------------------------- настройки
+// ---------------------------------------------------------------- настройки (из профиля, шестерёнка)
 const TZ = [
   ['Europe/Kaliningrad', 'Калининград (МСК−1)'], ['Europe/Moscow', 'Москва (МСК)'], ['Europe/Samara', 'Самара (МСК+1)'],
   ['Asia/Yekaterinburg', 'Екатеринбург (МСК+2)'], ['Asia/Omsk', 'Омск (МСК+3)'], ['Asia/Krasnoyarsk', 'Красноярск (МСК+4)'],
@@ -307,7 +294,7 @@ const TZ = [
   ['Asia/Kamchatka', 'Камчатка (МСК+9)'], ['auto', 'Как на устройстве'],
 ];
 let deferredInstall = null;
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; if (V.tab === 'settings') render(); });
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; if (page() === 'settings') render(); });
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let storageInfo = null;
@@ -326,28 +313,23 @@ function renderSettings() {
   const nextYi = yearInfo(y + 1);
   const off = officialYears();
   const themeBtn = (v, label, ic) => `<button data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${small(ic, 16)} ${label}</button>`;
-  app.innerHTML = `<div class="screen">
-    <div class="page-head"><h1>Настройки</h1></div>
+  const lastBk = S.backup.lastAt ? `Последняя копия: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Копия ещё не сохранялась';
+  return `${pageHead('Настройки', { back: true })}
     <div class="group"><div class="group-title">Оформление</div>
-      <div class="seg">${themeBtn('light', 'Светлая', I.sun)}${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('system', 'Как в системе', I.phone)}</div>
+      <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
     </div>
-    <div class="group"><div class="group-title">Работа</div>
+    <div class="group"><div class="group-title">Время</div>
       <div class="panel">
-        <div class="row"><span class="ico" style="--c:var(--ok)">${I.bed2}</span><div class="grow"><div class="t1">Минимальный отдых в пункте оборота</div><div class="t2">Отдых = больше из 50% рабочего времени и этого значения</div></div></div>
-        <div class="row" style="justify-content:center"><div class="stepper">
-          <button class="icon-btn" data-act="rest-minus" aria-label="Уменьшить на 30 минут"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-          <output id="min-rest" class="num">${fmtDur(s.minRest)}</output>
-          <button class="icon-btn" data-act="rest-plus" aria-label="Увеличить на 30 минут">${small(I.plus, 18)}</button></div></div>
-        <div class="row"><span class="ico" style="--c:var(--night)">${I.globe}</span><div class="grow"><label class="t1" for="tz">Часовой пояс</label><div class="t2">Для отметки «сейчас» и статуса отдыха</div></div></div>
+        <div class="row"><span class="ico" style="--c:var(--night)">${I.globe}</span><div class="grow"><label class="t1" for="tz">Часовой пояс</label><div class="t2">Для отметки «сейчас», поездки «в пути» и статуса отдыха</div></div></div>
         <div class="row"><select class="input" id="tz">${TZ.map(([v, l]) => `<option value="${v}" ${s.tz === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       </div>
     </div>
     <div class="group"><div class="group-title">Данные</div>
-      <div class="notice">${I.alert}<div><b>Данные хранятся только на этом устройстве.</b> Если удалить приложение или очистить данные браузера без резервной копии, поездки, отвлечения и документы будут потеряны.</div></div>
+      <div class="notice">${I.alert}<div><b>Данные хранятся только на этом устройстве.</b> Если удалить приложение или очистить данные браузера без резервной копии, поездки, отвлечения, профиль и документы будут потеряны.</div></div>
       <div class="panel">
         <div class="row"><span class="ico" style="--c:var(--warn)">${I.folder}</span><div class="grow"><div class="t1">Включить рабочие документы</div><div class="t2">Копия будет больше, но сохранит все файлы</div></div>
           <button class="switch" role="switch" id="bk-docs" aria-checked="${V.bkDocs !== false}" aria-label="Включить документы в копию" data-act="bk-docs"></button></div>
-        <button class="row" data-act="export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Создать резервную копию</div><div class="t2">Файл .json — сохраните его в «Файлы», облако или отправьте себе</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Создать резервную копию</div><div class="t2">${lastBk}. Файл .json — сохраните его в «Файлы», облако или отправьте себе</div></div>${small(I.right, 18)}</button>
         <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные будут заменены</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
         <div class="row"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Локальное хранение</div>
           <div class="t2">${isMemoryMode() ? 'Хранилище браузера недоступно — данные пропадут после закрытия. Откройте CABINA в обычном (не приватном) окне.'
@@ -375,22 +357,53 @@ function renderSettings() {
         <button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Показать подсказки заново</div><div class="t2">Объяснения по каждому разделу при первом открытии</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="about"><span class="ico">${I.info}</span><div class="grow"><div class="t1">CABINA ${VERSION}</div><div class="t2">Личный учёт поездок. Не является официальной системой ОАО «РЖД».</div></div>${small(I.right, 18)}</button>
       </div>
-    </div>
-  </div>`;
+    </div>`;
 }
 
 // ---------------------------------------------------------------- рендер и навигация
+const PAGES = { work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
 }
 function render() {
-  if (V.tab === 'home') renderHome();
-  else if (V.tab === 'routes') renderRoutes();
-  else if (V.tab === 'extra') renderExtra();
-  else renderSettings();
+  const p = page();
+  if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
+  else if (V.tab === 'home') renderHome();
+  else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
+  else app.innerHTML = `<div class="screen">${renderProfile()}</div>`;
   renderTabbar();
   scheduleTours();
 }
+// перерисовать без «прыжка» экрана (после изменения на том же экране)
+// Перерисовка после сохранения: поле, в котором человек сейчас печатает, остаётся в фокусе и с его текстом
+function rerender() {
+  const y = window.scrollY;
+  const a = document.activeElement;
+  const keep = a && a.id && app.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !/^(file|checkbox|radio)$/.test(a.type)));
+  const val = keep ? a.value : null;
+  let sel = null;
+  if (keep) try { sel = [a.selectionStart, a.selectionEnd]; } catch {}
+  render();
+  if (keep) {
+    const n = document.getElementById(a.id);
+    if (n && n !== a) {
+      if (n.value !== val) n.value = val;
+      n.focus({ preventScroll: true });
+      if (sel && sel[0] != null) try { n.setSelectionRange(sel[0], sel[1]); } catch {}
+    }
+  }
+  window.scrollTo(0, y);
+}
+
+function go(name) {
+  if (name === 'tariffs') resetPayRole();
+  if (name === 'stats') statsAt(V.y, V.m);
+  if (name === 'settings') refreshStorage().then(() => page() === 'settings' && rerender());
+  V.pages.push(name);
+  render();
+  window.scrollTo(0, 0);
+}
+function back() { V.pages.pop(); render(); window.scrollTo(0, 0); }
 
 // Подсказки первого запуска для экранов (не поверх открытых окон)
 let tourTimer = null;
@@ -398,21 +411,29 @@ function scheduleTours() {
   clearTimeout(tourTimer);
   tourTimer = setTimeout(() => {
     if (layerCount() || tourActive() || !S.onboarded) return;
-    if (V.tab === 'home') { homeTour(); if (app.querySelector('.swipe')) swipeTour(); }
-    else if (V.tab === 'routes') routesTour();
-    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra ? null : extraTour());
-    else if (V.tab === 'settings') settingsTour();
+    const p = page();
+    if (p === 'work') workTour();
+    else if (p === 'routes') routesTour();
+    else if (p === 'tariffs') tariffsTour();
+    else if (p === 'houses') housesTour();
+    else if (p === 'stats') statsTour();
+    else if (p === 'settings') settingsTour();
+    else if (p) return;
+    else if (V.tab === 'home') { homeTour(); if (app.querySelector('.swipe')) swipeTour(); }
+    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra ? null : extraTour());
+    else if (V.tab === 'profile') profileTour();
   }, 500);
 }
 export { scheduleTours };
-onChange(render);
+// Изменения данных: поле поиска не перерисовываем, чтобы не сбивать набор текста
+onChange(() => rerender());
 
 setNavigator((startStr) => {
   const ms = parseLocal(startStr);
   if (!Number.isFinite(ms)) return;
   const d = new Date(ms);
   V.y = d.getUTCFullYear(); V.m = d.getUTCMonth() + 1;
-  if (V.tab !== 'home') { V.tab = 'home'; }
+  if (V.tab !== 'home' || V.pages.length) { V.tab = 'home'; V.pages = []; }
   render();
 });
 
@@ -428,71 +449,50 @@ function goToday() { const d = new Date(nowLocal()); V.y = d.getUTCFullYear(); V
 document.querySelector('.tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('.tab');
   if (!b) return;
-  if (V.tab === b.dataset.tab) {
+  if (V.tab === b.dataset.tab && !V.pages.length) {
     if (b.dataset.tab === 'extra') { V.extra = null; docState.folder = null; }
     if (b.dataset.tab === 'home') goToday();
   }
   V.tab = b.dataset.tab;
-  if (V.tab === 'settings') refreshStorage().then(() => V.tab === 'settings' && render());
+  V.pages = [];
   render();
   window.scrollTo(0, 0);
 });
 
-// ---------------------------------------------------------------- свайп влево для удаления поездки
-const SWIPE_W = 92;
-let sw = null;          // текущий жест
-let swallowClick = false;
-const openSwipes = () => [...app.querySelectorAll('.swipe.open')];
-function setSwipe(el, x, animate) {
-  const row = el.querySelector('.swipe-row');
-  row.style.transition = animate ? '' : 'none';
-  row.style.transform = x ? `translateX(${x}px)` : '';
-  el.classList.toggle('open', x <= -SWIPE_W + 1);
-  el.classList.toggle('revealing', x < 0);
+// ---------------------------------------------------------------- действия
+const swipe = attachSwipe(app);
+const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll() };
+
+async function doExport() {
+  const ok = await confirmDialog({
+    title: 'Сохранить резервную копию?',
+    text: 'В файле ваши личные данные: поездки, отвлечения, заработок, профиль и фото. Не пересылайте его другим людям — храните у себя (в «Файлах», облаке или отправьте себе).',
+    ok: 'Сохранить копию', cancel: 'Отмена', danger: false,
+  });
+  if (!ok) return;
+  try {
+    const r = await exportBackup({ withDocs: V.bkDocs !== false, version: VERSION });
+    if (r) {
+      await saveBackupInfo({ lastAt: Date.now(), snoozeUntil: 0 });
+      toast(r.shared ? 'Резервная копия готова' : `Копия сохранена: ${r.name} (${fmtSize(r.size)})`, { ms: 4000 });
+      rerender();
+    }
+  } catch { toast('Не удалось создать копию', { error: true }); }
 }
-function closeSwipes(except) { openSwipes().forEach((s) => { if (s !== except) setSwipe(s, 0, true); }); }
-app.addEventListener('pointerdown', (e) => {
-  const row = e.target.closest('.swipe > .swipe-row');
-  if (!row || (e.pointerType === 'mouse' && e.button !== 0)) { if (!e.target.closest('.swipe-del')) closeSwipes(); return; }
-  const el = row.parentElement;
-  closeSwipes(el);
-  sw = { el, row, id: e.pointerId, x0: e.clientX, y0: e.clientY, base: el.classList.contains('open') ? -SWIPE_W : 0, lock: null, x: 0 };
-});
-app.addEventListener('pointermove', (e) => {
-  if (!sw || e.pointerId !== sw.id) return;
-  const dx = e.clientX - sw.x0;
-  const dy = e.clientY - sw.y0;
-  if (!sw.lock) {
-    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) { sw.lock = 'h'; try { sw.row.setPointerCapture(e.pointerId); } catch {} }
-    else if (Math.abs(dy) > 8) { sw = null; return; }
-    else return;
-  }
-  e.preventDefault();
-  let x = Math.min(0, sw.base + dx);
-  if (x < -SWIPE_W) x = -SWIPE_W - (Math.min(60, -SWIPE_W - x) * 0.35); // упругость
-  sw.x = x;
-  setSwipe(sw.el, x, false);
-});
-function endSwipe(e) {
-  if (!sw || e.pointerId !== sw.id) return;
-  if (sw.lock === 'h') {
-    swallowClick = true;
-    setTimeout(() => { swallowClick = false; }, 350);
-    setSwipe(sw.el, sw.x < -SWIPE_W / 2 ? -SWIPE_W : 0, true);
-  }
-  sw = null;
-}
-app.addEventListener('pointerup', endSwipe);
-app.addEventListener('pointercancel', (e) => { if (sw && sw.lock === 'h') endSwipe(e); else sw = null; });
 
 app.addEventListener('click', async (e) => {
-  if (swallowClick) { swallowClick = false; e.preventDefault(); return; }
-  const openRow = e.target.closest('.swipe.open > .swipe-row');
-  if (openRow) { closeSwipes(); e.preventDefault(); return; }
+  if (statsTap(e)) return;
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const { act, id } = b.dataset;
+  if (await workClick(act, b, ctx)) return;
+  if (await profileClick(act, b, ctx)) return;
+  if (statsClick(act, b, ctx)) return;
   switch (act) {
+    case 'go': go(b.dataset.page); break;
+    case 'back': back(); break;
+    case 'stats': go('stats'); break;
+    case 'set-rate': go('work'); V.pages.push('tariffs'); resetPayRole(); render(); break;
     case 'prev': shiftMonth(-1); break;
     case 'next': shiftMonth(1); break;
     case 'today': goToday(); render(); break;
@@ -502,46 +502,24 @@ app.addEventListener('click', async (e) => {
       const t = S.trips.find((x) => x.id === id);
       if (!t) break;
       const st = statsOf(t);
-      const ok = await confirmDialog({ title: 'Вы действительно хотите удалить поездку?', text: `${dayMonth(st.start)}, ${hm(st.start)} — ${hm(st.end)}${routeOf(t) ? ` · ${routeOf(t)}` : ''}`, ok: 'Да', cancel: 'Нет' });
-      if (ok) { await deleteTrip(id); toast('Поездка удалена'); } else closeSwipes();
+      const ok = await confirmDialog({ title: 'Вы действительно хотите удалить поездку?', text: `${dayMonth(st.start)}, ${hm(st.start)} — ${isLive(t) ? 'в пути' : hm(st.end)}${routeOf(t) ? ` · ${routeOf(t)}` : ''}`, ok: 'Да', cancel: 'Нет' });
+      if (ok) { await deleteTrip(id); toast('Поездка удалена'); } else swipe.closeAll();
       break;
     }
-    case 'add-absence': {
+    case 'absences': {
+      const sum = monthSummary(V.y, V.m, S.trips, S.absences);
       const now = new Date(nowLocal());
       const cur = now.getUTCFullYear() === V.y && now.getUTCMonth() + 1 === V.m;
-      openAbsenceForm(null, { defaultDate: cur ? undefined : `${V.y}-${p2(V.m)}-01` });
+      if (sum.monthAbs.length) openAbsenceList(V.y, V.m);
+      else openAbsenceForm(null, { defaultDate: cur ? undefined : `${V.y}-${p2(V.m)}-01` });
       break;
     }
-    case 'absence': openAbsenceForm(id); break;
-    case 'abs-type': {
-      const sum = monthSummary(V.y, V.m, S.trips, S.absences);
-      const list = sum.monthAbs.filter(({ a, hours }) => a.type === b.dataset.type && hours > 0).sort((x, y) => (x.a.start < y.a.start ? 1 : -1));
-      if (list.length === 1) openAbsenceForm(list[0].a.id);
-      else if (list.length > 1) {
-        const T = ABS_TYPES[b.dataset.type];
-        const pick = await actionSheet(`${T.label} в ${MONTHS_PREP[V.m - 1]}`, list.map(({ a, hours }) => ({ id: a.id, label: `${dateRange(a.start, a.end)} · −${fmtHours(hours)}`, icon: T.icon })));
-        if (pick) openAbsenceForm(pick);
-      }
-      break;
-    }
-    case 'add-route': openRouteForm(); break;
-    case 'route': openRouteForm(id); break;
-    case 'route-del': {
-      const r = S.routes.find((x) => x.id === id);
-      if (!r) break;
-      const used = S.trips.filter((t) => t.routeId === id).length;
-      const ok = await confirmDialog({ title: 'Вы действительно хотите удалить маршрут?', text: `${r.from} → ${r.to}${used ? `. Поездки с этим маршрутом сохранят его название.` : ''}`, ok: 'Да', cancel: 'Нет' });
-      if (ok) { await deleteRoute(id); toast('Маршрут удалён'); } else closeSwipes();
-      break;
-    }
-    case 'route-reverse': {
-      const r = S.routes.find((x) => x.id === id);
-      if (r) openRouteForm(null, { from: r.to, to: r.from, distanceKm: r.distanceKm });
-      break;
-    }
-    case 'extra-notes': V.extra = 'notes'; render(); window.scrollTo(0, 0); break;
+    case 'nag-save': await doExport(); break;
+    case 'nag-later': await saveBackupInfo({ snoozeUntil: Date.now() + 14 * DAY }); rerender(); break;
+    case 'extra-notes': V.extra = 'notes'; V.notesQ = ''; render(); window.scrollTo(0, 0); break;
     case 'extra-docs': V.extra = 'docs'; render(); window.scrollTo(0, 0); break;
     case 'extra-back': V.extra = null; render(); break;
+    case 'notes-clear': V.notesQ = ''; render(); app.querySelector('#notes-q')?.focus(); break;
     case 'note-add': openNoteForm(null, { type: b.dataset.type, number: b.dataset.number }); break;
     case 'note-edit': openNoteForm(id); break;
     case 'note-del': {
@@ -558,29 +536,38 @@ app.addEventListener('click', async (e) => {
     case 'doc-menu': docMenu(id); break;
     case 'doc-mkdir': mkdir(); break;
     case 'theme': await saveSettings({ theme: b.dataset.v }); applyTheme(); break;
-    case 'rest-minus': if (S.settings.minRest > 0) await saveSettings({ minRest: Math.max(0, S.settings.minRest - 30) }); break;
-    case 'rest-plus': if (S.settings.minRest < 24 * 60) await saveSettings({ minRest: S.settings.minRest + 30 }); break;
-    case 'bk-docs': V.bkDocs = V.bkDocs === false; render(); break;
-    case 'export': {
-      try {
-        const r = await exportBackup({ withDocs: V.bkDocs !== false, version: VERSION });
-        if (r) toast(r.shared ? 'Резервная копия готова' : `Копия сохранена: ${r.name} (${fmtSize(r.size)})`, { ms: 4000 });
-      } catch { toast('Не удалось создать копию', { error: true }); }
-      break;
-    }
+    case 'bk-docs': V.bkDocs = V.bkDocs === false; rerender(); break;
+    case 'export': await doExport(); break;
     case 'install': {
-      if (deferredInstall) { deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => {}); deferredInstall = null; render(); }
+      if (deferredInstall) { deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => {}); deferredInstall = null; rerender(); }
       break;
     }
     case 'about': showOnboarding(true); break;
     case 'whats-new': showWhatsNew(); break;
-    case 'tours-reset': await resetTours(); V.tab = 'home'; goToday(); render(); window.scrollTo(0, 0); break;
+    case 'tours-reset': await resetTours(); V.tab = 'home'; V.pages = []; goToday(); render(); window.scrollTo(0, 0); break;
     default: break;
+  }
+});
+// карточка итогов — тоже кнопка (клавиатура)
+app.addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.hero[data-act=stats]')) { e.preventDefault(); go('stats'); }
+});
+
+app.addEventListener('input', (e) => {
+  if (e.target.id === 'notes-q') {
+    V.notesQ = e.target.value;
+    app.querySelector('#notes-list').innerHTML = notesListHtml();
+    const head = e.target.parentElement;
+    const x = head.querySelector('.search-x');
+    if (V.notesQ && !x) head.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="notes-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);
+    else if (!V.notesQ && x) x.remove();
   }
 });
 
 app.addEventListener('change', async (e) => {
   const t = e.target;
+  if (await workChange(e)) return;
+  if (await profileChange(e)) return;
   if (t.id === 'tz') { await saveSettings({ tz: t.value }); toast('Часовой пояс сохранён'); }
   else if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
   else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) applyTheme(); }
@@ -591,12 +578,12 @@ function showOnboarding(again = false) {
   const el = openLayer(sheet({
     title: again ? 'О приложении' : 'Добро пожаловать',
     body: `<div class="onb">
-      <div class="onb-hero"><img src="icons/icon-192.png" alt="" width="84" height="84"><h2>CABINA</h2><div class="hint">Личный учёт поездок, часов и отдыха</div></div>
+      <div class="onb-hero"><img src="icons/icon-192.png" alt="" width="84" height="84"><h2>CABINA</h2><div class="hint">Личный учёт поездок, часов, отдыха и заработка</div></div>
       <div class="onb-item"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div><b>Без регистрации</b><span>Все данные хранятся только на этом устройстве и никуда не передаются.</span></div></div>
       <div class="onb-item"><span class="ico" style="--c:var(--night)">${I.globe}</span><div><b>Работает без интернета</b><span>После первого открытия CABINA доступна в дороге и вне зоны связи.</span></div></div>
-      <div class="onb-item"><span class="ico" style="--c:var(--warn)">${I.download}</span><div><b>Делайте резервные копии</b><span>Удаление приложения или очистка данных браузера сотрёт записи. Копия — в «Настройках».</span></div></div>
+      <div class="onb-item"><span class="ico" style="--c:var(--warn)">${I.download}</span><div><b>Делайте резервные копии</b><span>Удаление приложения или очистка данных браузера сотрёт записи. Копия — в «Профиль → Настройки».</span></div></div>
       <div class="onb-item"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div><b>Установите на экран</b><span>${isIOS() ? 'Safari → «Поделиться» → «На экран „Домой“».' : 'Chrome → меню ⋮ → «Добавить на главный экран».'}</span></div></div>
-      <div class="hint">CABINA ${VERSION}. Не является официальной системой ОАО «РЖД» и не использует корпоративные учётные записи.</div>
+      <div class="hint">CABINA ${VERSION}. Не является официальной системой ОАО «РЖД» и не использует корпоративные учётные записи. Расчёт заработка ориентировочный.</div>
     </div>`,
     foot: `<button class="btn btn-primary" data-act="onb-ok">${again ? 'Закрыть' : 'Начать'}</button>`,
   }));
@@ -613,15 +600,17 @@ function showOnboarding(again = false) {
 async function start() {
   goToday();
   try { await loadAll(); } catch (e) { console.error(e); }
+  // отсчёт для напоминания о резервной копии — с первого запуска этой версии
+  if (!S.backup.since) saveBackupInfo({ since: Date.now() }).catch(() => {});
   await loadTours();
   applyTheme();
   render();
   if (!S.onboarded) showOnboarding();
   // обновление календаря отдельно от приложения
   fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); render(); } }).catch(() => {});
-  // обновлять «сейчас» (статус отдыха) раз в минуту
-  setInterval(() => { if (V.tab === 'home' && !layerCount() && !sw && !app.querySelector('.swipe.revealing')) render(); }, 60000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !layerCount()) render(); });
+  // обновлять «сейчас» (поездка «в пути», статус отдыха) раз в минуту
+  setInterval(() => { if (V.tab === 'home' && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !layerCount()) rerender(); });
   registerSW();
 }
 
@@ -652,7 +641,7 @@ async function showUpdate(worker, { force = false } = {}) {
     title: 'Новая версия CABINA',
     body: `<div class="news-intro">${newest ? `Вышла версия <b>${esc(newest)}</b>. Вот что изменилось:` : 'Вышло обновление с исправлениями и улучшениями.'}</div>
       ${fresh.length ? changelogHtml(fresh) : ''}
-      <div class="hint">Ваши поездки, отвлечения и документы при обновлении сохранятся.</div>`,
+      <div class="hint">Ваши поездки, отвлечения, профиль и документы при обновлении сохранятся.</div>`,
     foot: `<button class="btn btn-primary" data-act="do-update">${I.download} Обновить</button>`,
   }), { onClose: () => { if (!updating) prompt(); } });
   let updating = false;

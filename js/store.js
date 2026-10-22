@@ -1,21 +1,29 @@
 // Состояние приложения в памяти + сохранение в IndexedDB.
 import * as db from './db.js';
-import { tripStats, parseLocal } from './calc.js';
+import { tripStats, parseLocal, MIN } from './calc.js';
+import { payCfg, overRestIntervals } from './pay.js';
 
-export const DEFAULT_SETTINGS = { id: 'settings', theme: 'system', minRest: 240, tz: 'Europe/Moscow' };
+// minRest — общий минимальный отдых в пункте оборота, minShiftRest — минимальный междусменный отдых (мин).
+// houses — свой минимум для домов отдыха: { [ключ станции]: { name, minRest } }.
+// pay — наборы тарифных ставок: { assistant: {...}, driver: {...} } (см. pay.js).
+export const DEFAULT_SETTINGS = { id: 'settings', theme: 'dark', minRest: 240, minShiftRest: 16 * 60, tz: 'Europe/Moscow', houses: {}, pay: {} };
+export const DEFAULT_PROFILE = { id: 'profile', name: '', role: 'assistant', depot: '', klass: '', photo: '' };
 
 export const S = {
   trips: [], absences: [], routes: [], notes: [], files: [],
   settings: { ...DEFAULT_SETTINGS },
+  profile: { ...DEFAULT_PROFILE },
+  backup: { id: 'backup', lastAt: 0, since: 0, snoozeUntil: 0 },
   locoTypes: [],
   onboarded: false,
 };
 
 const listeners = new Set();
 export const onChange = (fn) => listeners.add(fn);
+export const offChange = (fn) => listeners.delete(fn);
 export const emit = () => listeners.forEach((fn) => fn());
 
-const clean = (o) => { const c = { ...o }; delete c._stats; return c; };
+const clean = (o) => { const c = { ...o }; delete c._stats; delete c._statsAt; return c; };
 
 export async function loadAll() {
   const [trips, absences, routes, notes, files, meta] = await Promise.all(
@@ -23,13 +31,47 @@ export async function loadAll() {
   S.trips = trips; S.absences = absences; S.routes = routes; S.notes = notes; S.files = files;
   const m = Object.fromEntries(meta.map((x) => [x.id, x]));
   S.settings = { ...DEFAULT_SETTINGS, ...(m.settings || {}) };
+  // 2.0: вариант «Как в системе» убран, тема по умолчанию — тёмная
+  if (S.settings.theme !== 'light' && S.settings.theme !== 'dark') S.settings.theme = 'dark';
+  if (!S.settings.houses || typeof S.settings.houses !== 'object') S.settings.houses = {};
+  if (!S.settings.pay || typeof S.settings.pay !== 'object') S.settings.pay = {};
+  S.profile = { ...DEFAULT_PROFILE, ...(m.profile || {}) };
+  S.backup = { id: 'backup', lastAt: 0, since: 0, snoozeUntil: 0, ...(m.backup || {}) };
   S.locoTypes = m.locoTypes?.list || [];
   S.onboarded = !!m.onboarded;
-  S.trips.forEach((t) => { t._stats = tripStats(t); });
+  S.trips.forEach(normalizeTrip);
+  S.trips.forEach((t) => { t._stats = null; statsOf(t); });
   try { localStorage.setItem('cabina-theme', S.settings.theme); } catch {}
 }
 
-export function statsOf(t) { return t._stats || (t._stats = tripStats(t)); }
+// Поездки из версий 1.x: полный отдых считался и сразу показывался на главной — считаем это выбором «Полный отдых».
+function normalizeTrip(t) {
+  if (t.restType === 'home' && t.homeRest?.ids?.length && t.homeChoice === undefined) t.homeChoice = 'full';
+  if (t.restType !== 'home') t.homeChoice = null;
+  if (t.end == null) t.end = '';
+}
+
+export const isLive = (t) => !!t && !t.end;
+export const refreshLive = () => S.trips.forEach((t) => { if (isLive(t)) statsOf(t); });
+
+// Набор ставок для должности из профиля и отдых сверх нормы по поездкам (минуты)
+export const myPay = () => payCfg(S.settings.pay, S.profile.role);
+export function overRestByTrip() {
+  const m = new Map();
+  for (const x of overRestIntervals(S.trips, statsOf)) m.set(x.trip.id, (m.get(x.trip.id) || 0) + (x.e - x.s) / MIN);
+  return m;
+}
+export const liveTrip = () => S.trips.find(isLive) || null;
+
+// Статистика поездки. Поездка «в пути» пересчитывается раз в минуту до текущего момента.
+export function statsOf(t) {
+  if (isLive(t)) {
+    const now = nowLocal();
+    if (!t._stats || t._statsAt !== now) { t._stats = tripStats(t, now); t._statsAt = now; }
+    return t._stats;
+  }
+  return t._stats || (t._stats = tripStats(t));
+}
 
 // ---- Время «сейчас» в выбранном часовом поясе ----
 export function nowLocal() {
@@ -87,6 +129,17 @@ export async function saveSettings(patch) {
   emit();
 }
 
+export async function saveProfile(patch) {
+  S.profile = { ...S.profile, ...patch, id: 'profile' };
+  await db.put('meta', S.profile);
+  emit();
+}
+
+export async function saveBackupInfo(patch) {
+  S.backup = { ...S.backup, ...patch, id: 'backup' };
+  await db.put('meta', S.backup);
+}
+
 export async function setOnboarded() {
   S.onboarded = true;
   await db.put('meta', { id: 'onboarded', at: Date.now() });
@@ -111,7 +164,8 @@ export async function saveTrip(trip, noteOp) {
   if (noteOp?.del) ops.push({ store: 'notes', del: noteOp.del });
   await db.write(ops);
   S.locoTypes = types;
-  trip._stats = tripStats(trip);
+  trip._stats = null;
+  statsOf(trip);
   const i = S.trips.findIndex((x) => x.id === trip.id);
   if (i >= 0) S.trips[i] = trip; else S.trips.push(trip);
   if (noteOp?.put) { const j = S.notes.findIndex((n) => n.id === noteOp.put.id); if (j >= 0) S.notes[j] = noteOp.put; else S.notes.push(noteOp.put); }
@@ -155,7 +209,7 @@ export async function deleteRoute(id) {
   const affected = S.trips.filter((t) => t.routeId === id).map((t) => ({ ...t, routeId: null, routeLabel: label }));
   await db.write([{ store: 'routes', del: id }, ...affected.map((t) => ({ store: 'trips', put: clean(t) }))]);
   S.routes = S.routes.filter((x) => x.id !== id);
-  affected.forEach((t) => { t._stats = tripStats(t); const i = S.trips.findIndex((x) => x.id === t.id); S.trips[i] = t; });
+  affected.forEach((t) => { t._stats = null; statsOf(t); const i = S.trips.findIndex((x) => x.id === t.id); S.trips[i] = t; });
   emit();
 }
 

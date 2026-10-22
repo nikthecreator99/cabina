@@ -44,10 +44,43 @@ export const I = {
   calendar: sv('<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>'),
   database: sv('<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/>'),
   globe: sv('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z"/>'),
+  wallet: sv('<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16.5" height="11" rx="2.5"/><path d="M16 13.5h1.5"/>'),
+  menu: sv('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+  user: sv('<circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/>'),
+  chart: sv('<path d="M4 20h16"/><rect x="6" y="11" width="3" height="7" rx="1"/><rect x="11" y="6" width="3" height="12" rx="1"/><rect x="16" y="13" width="3" height="5" rx="1"/>'),
+  search: sv('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
+  camera: sv('<path d="M4 8.5A2 2 0 0 1 6 6.5h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/>'),
   bed2: sv('<path d="M2.5 19v-9M2.5 15h19v4M21.5 15v-1.5a3 3 0 0 0-3-3H10v4.5"/><circle cx="6.5" cy="12" r="1.8"/>'),
 };
 
+export const small = (svg, s = 14) => svg.replace('width="22" height="22"', `width="${s}" height="${s}"`);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Поиск без учёта регистра и буквы «ё». Длина строки не меняется, поэтому позиции совпадений
+// в нормализованном тексте совпадают с позициями в исходном.
+export const normSearch = (s) => String(s ?? '').toLowerCase().replace(/ё/g, 'е');
+export const searchWords = (q) => normSearch(q).split(/\s+/).filter(Boolean);
+// Текст с подсвеченными совпадениями (<mark>), всё остальное экранировано.
+export function highlight(text, words) {
+  const src = String(text ?? '');
+  if (!words?.length) return esc(src);
+  const low = normSearch(src);
+  const marks = new Array(src.length).fill(false);
+  for (const w of words) {
+    let i = low.indexOf(w);
+    while (i >= 0) { for (let k = i; k < i + w.length; k++) marks[k] = true; i = low.indexOf(w, i + w.length); }
+  }
+  let out = '';
+  let k = 0;
+  while (k < src.length) {
+    const on = marks[k];
+    let j = k;
+    while (j < src.length && marks[j] === on) j++;
+    out += on ? `<mark>${esc(src.slice(k, j))}</mark>` : esc(src.slice(k, j));
+    k = j;
+  }
+  return out;
+}
 
 // ---- Даты ----
 export const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -243,4 +276,71 @@ export async function saveToDevice(blob, filename) {
   a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   return 'saved';
+}
+
+// ---- Свайп влево по строке списка (.swipe > .swipe-row) открывает кнопку удаления ----
+// Возвращает { closeAll, busy }. Клик сразу после свайпа и тап по открытой строке «съедаются».
+export function attachSwipe(root, W = 92) {
+  let sw = null;
+  let swallow = false;
+  const opened = () => [...root.querySelectorAll('.swipe.open')];
+  function set(el, x, animate) {
+    const row = el.querySelector('.swipe-row');
+    row.style.transition = animate ? '' : 'none';
+    row.style.transform = x ? `translateX(${x}px)` : '';
+    el.classList.toggle('open', x <= -W + 1);
+    el.classList.toggle('revealing', x < 0);
+  }
+  const closeAll = (except) => opened().forEach((s) => { if (s !== except) set(s, 0, true); });
+  root.addEventListener('pointerdown', (e) => {
+    const row = e.target.closest('.swipe > .swipe-row');
+    if (!row || !root.contains(row) || (e.pointerType === 'mouse' && e.button !== 0)) { if (!e.target.closest('.swipe-del')) closeAll(); return; }
+    const el = row.parentElement;
+    closeAll(el);
+    sw = { el, row, id: e.pointerId, x0: e.clientX, y0: e.clientY, base: el.classList.contains('open') ? -W : 0, lock: null, x: 0 };
+  });
+  root.addEventListener('pointermove', (e) => {
+    if (!sw || e.pointerId !== sw.id) return;
+    const dx = e.clientX - sw.x0;
+    const dy = e.clientY - sw.y0;
+    if (!sw.lock) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) { sw.lock = 'h'; try { sw.row.setPointerCapture(e.pointerId); } catch {} }
+      else if (Math.abs(dy) > 8) { sw = null; return; }
+      else return;
+    }
+    e.preventDefault();
+    let x = Math.min(0, sw.base + dx);
+    if (x < -W) x = -W - (Math.min(60, -W - x) * 0.35); // упругость
+    sw.x = x;
+    set(sw.el, x, false);
+  });
+  function end(e) {
+    if (!sw || e.pointerId !== sw.id) return;
+    if (sw.lock === 'h') {
+      swallow = true;
+      setTimeout(() => { swallow = false; }, 350);
+      set(sw.el, sw.x < -W / 2 ? -W : 0, true);
+    }
+    sw = null;
+  }
+  root.addEventListener('pointerup', end);
+  root.addEventListener('pointercancel', (e) => { if (sw && sw.lock === 'h') end(e); else sw = null; });
+  root.addEventListener('click', (e) => {
+    if (swallow) { swallow = false; e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (e.target.closest('.swipe.open > .swipe-row')) { closeAll(); e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+  return { closeAll, busy: () => !!sw || !!root.querySelector('.swipe.revealing') };
+}
+
+// Заголовок экрана: кнопка «Назад» (data-act="back"), название, справа — кнопка по желанию
+export function pageHead(title, { back = false, right = '' } = {}) {
+  return `<div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="Назад">${I.left}</button>` : ''}<h1>${esc(title)}</h1>${right}</div>`;
+}
+
+// Кнопки −/+ со значением в часах и минутах
+export function stepperHtml(id, value, { minus, plus, step = '30 минут', fmt }) {
+  return `<div class="stepper">
+    <button class="icon-btn" data-act="${minus}" aria-label="Уменьшить на ${step}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+    <output id="${id}" class="num">${fmt(value)}</output>
+    <button class="icon-btn" data-act="${plus}" aria-label="Увеличить на ${step}">${small(I.plus, 18)}</button></div>`;
 }

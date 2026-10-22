@@ -3,6 +3,8 @@
 // поэтому полночь, месяц и ночные часы всегда считаются по фактическим датам.
 import { dayInfo, isHoliday, monthNorm } from './calendar.js';
 
+const REST_KINDS = new Set(['holiday', 'off', 'weekend']);
+
 export const MIN = 60000;
 export const HOUR = 60 * MIN;
 export const DAY = 24 * HOUR;
@@ -60,6 +62,15 @@ function holidayIn(s, e) {
   return total;
 }
 
+// Время в выходные и праздничные дни по календарю (для оплаты переработки в выходные)
+function restDayIn(s, e) {
+  let total = 0;
+  for (let d = Math.floor(s / DAY); d * DAY < e; d++) {
+    if (REST_KINDS.has(dayInfo(dateKeyOf(d * DAY)).kind)) total += ov(s, e, d * DAY, (d + 1) * DAY);
+  }
+  return total;
+}
+
 function monthStart(ms) {
   const d = new Date(ms);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
@@ -69,11 +80,14 @@ function nextMonthStart(ms) {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
 }
 
-// Возвращает минуты: { work, night, holiday, start, end, byMonth: { 'YYYY-MM': {work, night, holiday} } }
-export function tripStats(trip) {
-  const iv = tripIntervals(trip);
-  const res = { work: 0, night: 0, holiday: 0, byMonth: {}, start: NaN, end: NaN, intervals: iv };
-  if (!iv.length) return res;
+// Возвращает минуты: { work, night, holiday, restDay, start, end, byMonth: { 'YYYY-MM': {work, night, holiday, restDay} } }
+// restDay — время в выходные и праздничные дни по производственному календарю.
+// Поездка «в пути» (без окончания) считается до момента liveEnd, если он передан.
+export function tripStats(trip, liveEnd) {
+  const t = !trip.end && Number.isFinite(liveEnd) && liveEnd > parseLocal(trip.start) ? { ...trip, end: fmtLocal(liveEnd) } : trip;
+  const iv = tripIntervals(t);
+  const res = { work: 0, night: 0, holiday: 0, restDay: 0, byMonth: {}, start: NaN, end: NaN, intervals: iv, live: !trip.end };
+  if (!iv.length) { res.start = parseLocal(trip.start); return res; }
   res.start = iv[0][0];
   res.end = iv[iv.length - 1][1];
   for (const [s, e] of iv) {
@@ -81,25 +95,31 @@ export function tripStats(trip) {
     while (cur < e) {
       const stop = Math.min(e, nextMonthStart(cur));
       const mk = monthKeyOf(cur);
-      const b = res.byMonth[mk] || (res.byMonth[mk] = { work: 0, night: 0, holiday: 0 });
+      const b = res.byMonth[mk] || (res.byMonth[mk] = { work: 0, night: 0, holiday: 0, restDay: 0 });
       const w = (stop - cur) / MIN;
       const n = nightIn(cur, stop) / MIN;
       const h = holidayIn(cur, stop) / MIN;
-      b.work += w; b.night += n; b.holiday += h;
-      res.work += w; res.night += n; res.holiday += h;
+      const r = restDayIn(cur, stop) / MIN;
+      b.work += w; b.night += n; b.holiday += h; b.restDay += r;
+      res.work += w; res.night += n; res.holiday += h; res.restDay += r;
       cur = stop;
     }
   }
   return res;
 }
 
-export function validateTrip(trip) {
+// { live: true } — разрешить поездку «в пути» без окончания (не позже now).
+export function validateTrip(trip, { live = false, now } = {}) {
   const s = parseLocal(trip.start);
   const e = parseLocal(trip.end);
   if (!Number.isFinite(s)) return 'Укажите дату и время начала поездки.';
-  if (!Number.isFinite(e)) return 'Укажите дату и время окончания поездки.';
-  if (e < s) return 'Окончание поездки раньше начала. Проверьте даты и время.';
-  if (e === s) return 'Поездка не может длиться 0 минут. Проверьте время окончания.';
+  if (!trip.end && live) {
+    if (Number.isFinite(now) && s > now) return 'Поездка «в пути» не может начаться позже текущего времени. Проверьте начало или укажите окончание.';
+  } else {
+    if (!Number.isFinite(e)) return 'Укажите дату и время окончания поездки.';
+    if (e < s) return 'Окончание поездки раньше начала. Проверьте даты и время.';
+    if (e === s) return 'Поездка не может длиться 0 минут. Проверьте время окончания.';
+  }
   for (const [i, p] of (trip.passenger || []).entries()) {
     const ps = parseLocal(p.start);
     const pe = parseLocal(p.end);
@@ -160,15 +180,15 @@ export function validateAbsence(a, others) {
 export function monthSummary(y, m, trips, absences) {
   const mk = `${y}-${p2(m)}`;
   const base = monthNorm(y, m).hours;
-  let work = 0, night = 0, holiday = 0;
+  let work = 0, night = 0, holiday = 0, restDay = 0;
   const monthTrips = [];
   for (const t of trips) {
     const st = t._stats || tripStats(t);
     const b = st.byMonth[mk];
     if (b && b.work > 0) {
-      work += b.work; night += b.night; holiday += b.holiday;
+      work += b.work; night += b.night; holiday += b.holiday; restDay += b.restDay || 0;
       monthTrips.push(t);
-    }
+    } else if (st.live && monthKeyOf(st.start) === mk) monthTrips.push(t); // только что начатая поездка «в пути»
   }
   const absByType = { sick: 0, vacation: 0, medical: 0 };
   const monthAbs = [];
@@ -182,7 +202,8 @@ export function monthSummary(y, m, trips, absences) {
   const norm = Math.max(0, base - absTotal);
   const normMin = Math.round(norm * 60);
   const pct = normMin > 0 ? work / normMin : null;
-  return { mk, base, absTotal, norm, normMin, work, night, holiday, absByType, pct, monthTrips, monthAbs };
+  const overtime = normMin > 0 || work > 0 ? Math.max(0, work - normMin) : 0;
+  return { mk, base, absTotal, norm, normMin, work, night, holiday, restDay, overtime, absByType, pct, monthTrips, monthAbs };
 }
 
 // ---- Отдых ----

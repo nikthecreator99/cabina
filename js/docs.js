@@ -153,26 +153,74 @@ export async function openDoc(id) {
   } catch { toast('Не удалось открыть файл', { error: true }); }
 }
 
+// Просмотр фото: листание свайпом влево и вправо по фото той же папки (в порядке списка).
+const sortedItems = (parentId) => children(parentId).sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name, 'ru') : a.kind === 'folder' ? -1 : 1));
+
 async function viewImage(f) {
-  let url;
-  try { url = URL.createObjectURL(await fileBlob(f)); } catch { toast('Не удалось открыть изображение', { error: true }); return; }
+  const photos = sortedItems(f.parentId || null).filter(isImage);
+  let i = Math.max(0, photos.findIndex((x) => x.id === f.id));
+  let url = null;
   const v = document.createElement('div');
   v.className = 'viewer';
   v.setAttribute('role', 'dialog');
-  v.innerHTML = `<div class="viewer-bar"><button class="icon-btn" data-v="close" aria-label="Закрыть">${I.x}</button><div class="name">${esc(f.name)}</div>
+  v.innerHTML = `<div class="viewer-bar"><button class="icon-btn" data-v="close" aria-label="Закрыть">${I.x}</button><div class="name"></div>
     <button class="icon-btn" data-v="share" aria-label="Поделиться">${I.share}</button><button class="icon-btn" data-v="download" aria-label="Скачать">${I.download}</button></div>
-    <div class="viewer-body"><img src="${url}" alt="${esc(f.name)}"></div>`;
+    <div class="viewer-body"><img alt=""></div>
+    ${photos.length > 1 ? `<button class="viewer-nav prev" data-v="prev" aria-label="Предыдущее фото">${I.left}</button><button class="viewer-nav next" data-v="next" aria-label="Следующее фото">${I.right}</button><div class="viewer-count" aria-live="polite"></div>` : ''}`;
   document.body.appendChild(v);
-  const close = () => { v.remove(); URL.revokeObjectURL(url); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const img = v.querySelector('img');
+
+  async function show(n, dir = 0) {
+    const cur = photos[n];
+    let next;
+    try { next = URL.createObjectURL(await fileBlob(cur)); } catch { toast('Не удалось открыть изображение', { error: true }); return false; }
+    if (url) URL.revokeObjectURL(url);
+    url = next; i = n;
+    img.src = url; img.alt = cur.name;
+    v.querySelector('.name').textContent = cur.name;
+    const cnt = v.querySelector('.viewer-count');
+    if (cnt) cnt.textContent = `${i + 1} из ${photos.length}`;
+    v.querySelector('[data-v=prev]')?.toggleAttribute('hidden', i === 0);
+    v.querySelector('[data-v=next]')?.toggleAttribute('hidden', i === photos.length - 1);
+    if (dir) { img.classList.remove('slide-l', 'slide-r'); void img.offsetWidth; img.classList.add(dir > 0 ? 'slide-l' : 'slide-r'); }
+    return true;
+  }
+  const go = (d) => { const n = i + d; if (n >= 0 && n < photos.length) show(n, d); };
+  if (!(await show(i))) { v.remove(); return; }
+
+  const close = () => { v.remove(); if (url) URL.revokeObjectURL(url); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1); };
   document.addEventListener('keydown', onKey);
   v.addEventListener('click', (e) => {
     const b = e.target.closest('[data-v]');
     if (!b) return;
-    if (b.dataset.v === 'close') close();
-    else if (b.dataset.v === 'share') shareFile(f);
-    else downloadFile(f);
+    const act = b.dataset.v;
+    if (act === 'close') close();
+    else if (act === 'prev') go(-1);
+    else if (act === 'next') go(1);
+    else if (act === 'share') shareFile(photos[i]);
+    else downloadFile(photos[i]);
   });
+
+  // свайп одним пальцем; при увеличении (щипком) не листаем, чтобы можно было рассматривать фото
+  const body = v.querySelector('.viewer-body');
+  const touches = new Set();
+  let g = null;
+  body.addEventListener('pointerdown', (e) => {
+    touches.add(e.pointerId);
+    g = touches.size === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now() } : null;
+  });
+  const end = (e) => {
+    touches.delete(e.pointerId);
+    if (!g || g.id !== e.pointerId) return;
+    const dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+    const zoomed = (window.visualViewport?.scale || 1) > 1.05;
+    g = null;
+    if (!zoomed && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) go(dx < 0 ? 1 : -1);
+  };
+  body.addEventListener('pointerup', end);
+  body.addEventListener('pointercancel', (e) => { touches.delete(e.pointerId); g = null; });
 }
 
 export async function docMenu(id) {
