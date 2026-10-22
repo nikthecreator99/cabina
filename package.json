@@ -1,0 +1,15 @@
+{
+  "name": "cabina",
+  "private": true,
+  "type": "module",
+  "description": "CABINA — PWA для учёта поездок локомотивных бригад. Сборки нет: сайт — это файлы репозитория как есть.",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
+    "test:all": "npm test && npm run test:e2e",
+    "serve": "node tests/serve.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
