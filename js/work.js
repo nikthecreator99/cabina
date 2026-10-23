@@ -13,6 +13,8 @@ const numText = (v) => (v === '' || v == null ? '' : String(v).replace('.', ',')
 const parseNum = (s) => { const t = String(s ?? '').trim().replace(/\s/g, '').replace(',', '.'); if (t === '') return ''; const n = Number(t); return Number.isFinite(n) && n >= 0 ? n : NaN; };
 
 // ---------------------------------------------------------------- меню
+// Междусменный отдых и выходной свёрнуты: видно значение, по нажатию открывается настройка
+const wkOpen = new Set();
 export function renderWork() {
   const cfg = payCfg(S.settings.pay, S.profile.role);
   const rate = currentRate(cfg, todayKey());
@@ -25,12 +27,14 @@ export function renderWork() {
       <button class="row" data-act="go" data-page="houses"><span class="ico" style="--c:var(--night)">${I.bed2}</span><div class="grow"><div class="t1">Дома отдыха</div><div class="t2">${houses.length ? `${houses.length} ${plural(houses.length, 'дом отдыха', 'дома отдыха', 'домов отдыха')} · минимум ${fmtDur(S.settings.minRest ?? 240, { short: true })}` : 'Минимальный отдых в пункте оборота'}</div></div>${small(I.right, 18)}</button>
     </div>
     <div class="panel" id="shift-panel">
-      <div class="row"><span class="ico" style="--c:var(--warn)">${I.clock}</span><div class="grow"><div class="t1">Минимальный междусменный отдых</div><div class="t2">После домашнего отдыха «На очередь» вызвать на явку могут не раньше, чем через это время</div></div></div>
-      <div class="row" style="justify-content:center">${stepperHtml('min-shift', S.settings.minShiftRest ?? 960, { minus: 'shift-minus', plus: 'shift-plus', fmt: fmtDur })}</div>
+      <button class="row wk-head" data-act="wk-toggle" data-k="shift" aria-expanded="${wkOpen.has('shift')}" aria-controls="wk-shift"><span class="ico" style="--c:var(--warn)">${I.clock}</span><div class="grow"><div class="t1">Междусменный отдых</div><div class="t2">Минимум дома перед вызовом «На очередь»</div></div><span class="wk-val">${fmtDur(S.settings.minShiftRest ?? 960, { short: true })}</span><span class="chev">${small(I.right, 18)}</span></button>
+      ${wkOpen.has('shift') ? `<div id="wk-shift"><div class="row"><div class="grow"><div class="t2">После домашнего отдыха «На очередь» вызвать на явку могут не раньше, чем через это время. Кнопками − и + меняйте по 30 минут.</div></div></div>
+      <div class="row" style="justify-content:center">${stepperHtml('min-shift', S.settings.minShiftRest ?? 960, { minus: 'shift-minus', plus: 'shift-plus', fmt: fmtDur })}</div></div>` : ''}
     </div>
     <div class="panel" id="dayoff-panel">
-      <div class="row"><span class="ico" style="--c:var(--ok)">${I.calendar}</span><div class="grow"><div class="t1"><label for="day-off">Выходной</label></div><div class="t2">Сколько часов длится выходной в вашем депо. После поездки нажмите «Пойти на выходной» — на главном экране будет видно, когда он закончится.</div></div></div>
-      <div class="row"><div class="input-unit grow"><input class="input" id="day-off" inputmode="decimal" autocomplete="off" value="${esc(numText(Math.round(dayOffMin() / 60 * 100) / 100))}" placeholder="Например, 60"><span>ч</span></div></div>
+      <button class="row wk-head" data-act="wk-toggle" data-k="dayoff" aria-expanded="${wkOpen.has('dayoff')}" aria-controls="wk-dayoff"><span class="ico" style="--c:var(--ok)">${I.calendar}</span><div class="grow"><div class="t1">Выходной</div><div class="t2">Сколько длится выходной в вашем депо</div></div><span class="wk-val">${fmtDur(dayOffMin(), { short: true })}</span><span class="chev">${small(I.right, 18)}</span></button>
+      ${wkOpen.has('dayoff') ? `<div id="wk-dayoff"><div class="row"><div class="grow"><div class="t2"><label for="day-off">Часы выходного.</label> После поездки нажмите «Пойти на выходной» — на главном экране будет видно, когда он закончится.</div></div></div>
+      <div class="row"><div class="input-unit grow"><input class="input" id="day-off" inputmode="decimal" autocomplete="off" value="${esc(numText(Math.round(dayOffMin() / 60 * 100) / 100))}" placeholder="Например, 60"><span>ч</span></div></div></div>` : ''}
     </div>`;
 }
 
@@ -85,6 +89,11 @@ export function renderTariffs() {
         <div class="input-unit"><input class="input" id="pf-rate" inputmode="decimal" autocomplete="off" value="${cur ? esc(numText(cur)) : ''}" placeholder="Например, 250,00"><span>₽/ч</span></div>
         <div class="hint">В квитке — «Оклад/Тариф» в шапке. Все часы умножаются на неё, от неё считаются все доплаты.</div>
         ${rates.length > 1 || (rates[0] && rates[0].from) ? `<div class="rate-hist"><div class="mini-label">История ставки</div>${rates.map((r, i) => `<div class="rate-row"><span>${r.from ? `с ${dateText(r.from)}` : rates.length > 1 ? 'раньше' : 'всегда'}</span><b>${fmtRub(r.rate, true)}</b>${rates.length > 1 ? `<button class="icon-btn danger sm" data-act="rate-del" data-i="${cfg.rates.indexOf(r)}" aria-label="Удалить ставку ${fmtRub(r.rate, true)}">${small(I.trash, 16)}</button>` : ''}</div>`).join('')}</div>` : ''}
+      </div>
+      <div class="pay-field">
+        <label for="pf-oklad">Оклад, ₽ в месяц</label>
+        <div class="input-unit"><input class="input" id="pf-oklad" inputmode="decimal" autocomplete="off" value="${raw.oklad ? esc(numText(raw.oklad)) : ''}" placeholder="Например, 48 000"><span>₽</span></div>
+        <div class="hint">Месячный оклад (тарифная ставка за месяц) без премий и надбавок. От него считается вознаграждение за преданность компании — см. «Профиль → ⚙ → Настройка профиля → Карьера».</div>
       </div>
       ${fields.filter((f) => !f.deduct).map(field).join('')}
     </div>
@@ -217,6 +226,7 @@ export async function workClick(act, b, ctx) {
     case 'shift-plus': { const v = S.settings.minShiftRest ?? 960; if (v < 48 * 60) await saveSettings({ minShiftRest: v + 30 }); return true; }
     case 'rest-minus': if (S.settings.minRest > 0) await saveSettings({ minRest: Math.max(0, S.settings.minRest - 30) }); return true;
     case 'rest-plus': if (S.settings.minRest < 24 * 60) await saveSettings({ minRest: S.settings.minRest + 30 }); return true;
+    case 'wk-toggle': { const k = b.dataset.k; if (wkOpen.has(k)) wkOpen.delete(k); else wkOpen.add(k); ctx.rerender(); if (wkOpen.has(k)) document.getElementById(k === 'dayoff' ? 'day-off' : 'min-shift')?.closest('.panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return true; }
     case 'house': openHouse(b.dataset.key); return true;
     case 'add-route': openRouteForm(); return true;
     case 'route': openRouteForm(b.dataset.id); return true;
@@ -269,6 +279,13 @@ export async function workChange(e) {
     return true;
   }
   if (t.id === 'pf-rate') { await changeRate(t); return true; }
+  if (t.id === 'pf-oklad') {
+    const v = parseNum(t.value);
+    if (Number.isNaN(v) || (v !== '' && v > 1000000)) { toast('Оклад — число в рублях, например 48000', { error: true }); return true; }
+    await savePaySet(payRole, { oklad: v === '' ? '' : Math.round(v * 100) / 100 });
+    toast(v === '' || v === 0 ? 'Оклад удалён' : 'Оклад сохранён');
+    return true;
+  }
   if (t.dataset.pf) {
     const v = parseNum(t.value);
     if (Number.isNaN(v)) { toast('Введите число, например 12 или 12,5', { error: true }); return true; }

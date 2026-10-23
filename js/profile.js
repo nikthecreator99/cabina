@@ -5,6 +5,7 @@ import { S, saveProfile, nowLocal, liveTrip, statsOf, routeOf } from './store.js
 import { dateKeyOf, monthSummary, fmtDur, parseLocal } from './calc.js';
 import { ROLES } from './pay.js';
 import { currentRest, dayOffIntervals } from './rest.js';
+import { careerOf, tenure, tenureText, todayKey } from './career.js';
 
 const CLASSES = ['3', '2', '1'];
 const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -61,6 +62,7 @@ export function renderProfile() {
       <div class="avatar view">${avatarHtml(p)}</div>
       <div class="profile-name">${p.name ? esc(p.name) : '<span class="ph">Имя не указано</span>'}</div>
       <div class="profile-sub">${esc(subLine(p))}</div>
+      ${(() => { const c = careerOf(p); const t = c.hired ? tenure(c.hired, todayKey()) : null; return t ? `<div class="profile-sub">${small(I.briefcase, 14)} Стаж ${tenureText(t)}</div>` : ''; })()}
       ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
       <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.edit, 16)} Редактировать профиль</button>
     </section>

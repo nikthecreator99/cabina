@@ -8,15 +8,17 @@ import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docSta
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { loadTours, resetTours, tourActive } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange, resetPayRole } from './work.js';
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
+import { renderFix, fixInput, fixSlope } from './fix.js';
+import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 
-export const VERSION = '2.1.0';
+export const VERSION = '2.2.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
@@ -135,6 +137,9 @@ function tripRow(t, mk, payCtx) {
   </button></div>`;
 }
 
+// Напоминание о вознаграждении за преданность (за 90 дней до срока и до месяца выплаты)
+function loyaltyBanner() { const r = loyaltyReminder(); return r ? reminderHtml(r) : ''; }
+
 // Плашка о резервной копии: раз в 2 недели, если есть что терять
 function backupNag(now) {
   if (!S.trips.length) return '';
@@ -218,6 +223,7 @@ function renderHome() {
     <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${rest ? `<button class="rest-banner" data-act="trip" data-id="${rest.trip.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${isCurrent ? loyaltyBanner() : ''}
     ${backupNag(now)}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
@@ -273,16 +279,36 @@ function renderExtra() {
   let html;
   if (V.extra === 'notes') html = renderNotes();
   else if (V.extra === 'docs') html = renderDocs();
+  else if (V.extra === 'fix') html = renderFix();
   else {
     const locos = new Set(S.notes.map((n) => locoKey(n.type, n.number))).size;
     const docs = docsCount();
-    html = `<div class="page-head"><h1>Дополнительно</h1></div>
+    html = `<div class="page-head"><h1>Ещё</h1></div>
       <button class="tile-link" data-act="extra-notes"><span class="big-ico" style="--c:var(--accent)">${I.note}</span>
         <div><div class="t1">Заметки о локомотивах</div><div class="t2">${S.notes.length ? `${S.notes.length} ${plural(S.notes.length, 'заметка', 'заметки', 'заметок')} · ${locos} ${plural(locos, 'локомотив', 'локомотива', 'локомотивов')}` : 'Пока пусто'}</div></div><span class="chev">${I.right}</span></button>
       <button class="tile-link" data-act="extra-docs"><span class="big-ico" style="--c:var(--warn)">${I.folder}</span>
-        <div><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div><span class="chev">${I.right}</span></button>`;
+        <div><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div><span class="chev">${I.right}</span></button>
+      <button class="tile-link" data-act="extra-fix"><span class="big-ico" style="--c:var(--night)">${I.shoe}</span>
+        <div><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div><span class="chev">${I.right}</span></button>`;
   }
   return html;
+}
+
+// ---------------------------------------------------------------- обучение и чаты (скоро)
+function renderLearn() {
+  return `<div class="page-head"><h1>Обучение</h1></div>
+    <section class="soon"><div class="em-ico">${I.learn}</div><span class="soon-badge">Скоро</span>
+      <b>Подготовка к испытаниям и техзанятиям</b>
+      <p>Короткие уроки по 3–5 минут: сигнализация, ПТЭ, ИДП, регламент переговоров. Серия дней, повторение ошибок и режим «как на испытаниях».</p>
+      <p class="hint">Вопросы составляем сами по открытым документам, и каждый проверяет опытный машинист. Ошибка в учебнике по безопасности движения хуже, чем его отсутствие, поэтому раздел откроется, когда первая тема будет проверена.</p></section>`;
+}
+function renderChats() {
+  return `<div class="page-head"><h1>Чаты</h1></div>
+    <section class="soon"><div class="em-ico">${I.chat}</div><span class="soon-badge">Скоро</span>
+      <b>Общение с коллегами</b>
+      <p>Переписка, группы своего депо, отзывы об оборотных депо и домах отдыха.</p>
+      <p class="hint">Чаты появятся вместе с аккаунтами и сервером CABINA в России. Ваши поездки, отвлечения и заработок останутся в телефоне. Что видят коллеги, вы решите сами в профиле, а сейчас там скрыто всё.</p>
+      <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.shield, 16)} Настроить приватность</button></section>`;
 }
 
 // ---------------------------------------------------------------- настройки (из профиля, шестерёнка)
@@ -315,6 +341,9 @@ function renderSettings() {
   const themeBtn = (v, label, ic) => `<button data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${small(ic, 16)} ${label}</button>`;
   const lastBk = S.backup.lastAt ? `Последняя копия: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Копия ещё не сохранялась';
   return `${pageHead('Настройки', { back: true })}
+    <div class="group"><div class="group-title">Профиль</div>
+      <div class="panel"><button class="row" data-act="go" data-page="profile-settings"><span class="ico" style="--c:var(--accent)">${I.user}</span><div class="grow"><div class="t1">Настройка профиля</div><div class="t2">Профиль и карьера: стаж, должности, вознаграждение за преданность</div></div>${small(I.right, 18)}</button></div>
+    </div>
     <div class="group"><div class="group-title">Оформление</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
     </div>
@@ -361,15 +390,20 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit };
+const PAGES = { work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, 'profile-settings': renderProfileSettings, career: renderCareer };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
 }
-function render() {
+// still — перерисовка того же экрана (сохранение, обновление раз в минуту): без анимации появления,
+// иначе экран «дёргается»
+function render({ still = false } = {}) {
   const p = page();
+  app.classList.toggle('still', still);
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
+  else if (V.tab === 'learn') app.innerHTML = `<div class="screen">${renderLearn()}</div>`;
+  else if (V.tab === 'chats') app.innerHTML = `<div class="screen">${renderChats()}</div>`;
   else app.innerHTML = `<div class="screen">${renderProfile()}</div>`;
   renderTabbar();
   scheduleTours();
@@ -383,7 +417,7 @@ function rerender() {
   const val = keep ? a.value : null;
   let sel = null;
   if (keep) try { sel = [a.selectionStart, a.selectionEnd]; } catch {}
-  render();
+  render({ still: true });
   if (keep) {
     const n = document.getElementById(a.id);
     if (n && n !== a) {
@@ -419,9 +453,11 @@ function scheduleTours() {
     else if (p === 'stats') statsTour();
     else if (p === 'settings') settingsTour();
     else if (p === 'profile-edit') profileEditTour();
+    else if (p === 'profile-settings') profileSettingsTour();
+    else if (p === 'career') careerTour();
     else if (p) return;
-    else if (V.tab === 'home') { homeTour(); if (app.querySelector('.swipe')) swipeTour(); }
-    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra ? null : extraTour());
+    else if (V.tab === 'home') { homeTour(); tabsTour(); if (app.querySelector('.swipe')) swipeTour(); }
+    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), fixTileTour()));
     else if (V.tab === 'profile') profileTour();
   }, 500);
 }
@@ -488,6 +524,7 @@ app.addEventListener('click', async (e) => {
   const { act, id } = b.dataset;
   if (await workClick(act, b, ctx)) return;
   if (await profileClick(act, b, ctx)) return;
+  if (await careerClick(act, b, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   switch (act) {
     case 'go': go(b.dataset.page); break;
@@ -519,6 +556,8 @@ app.addEventListener('click', async (e) => {
     case 'nag-later': await saveBackupInfo({ snoozeUntil: Date.now() + 14 * DAY }); rerender(); break;
     case 'extra-notes': V.extra = 'notes'; V.notesQ = ''; render(); window.scrollTo(0, 0); break;
     case 'extra-docs': V.extra = 'docs'; render(); window.scrollTo(0, 0); break;
+    case 'extra-fix': V.extra = 'fix'; render(); window.scrollTo(0, 0); break;
+    case 'fix-slope': fixSlope(b); break;
     case 'extra-back': V.extra = null; render(); break;
     case 'notes-clear': V.notesQ = ''; render(); app.querySelector('#notes-q')?.focus(); break;
     case 'note-add': openNoteForm(null, { type: b.dataset.type, number: b.dataset.number }); break;
@@ -555,6 +594,7 @@ app.addEventListener('keydown', (e) => {
 });
 
 app.addEventListener('input', (e) => {
+  if (fixInput(e.target)) return;
   if (e.target.id === 'notes-q') {
     V.notesQ = e.target.value;
     app.querySelector('#notes-list').innerHTML = notesListHtml();
@@ -569,6 +609,7 @@ app.addEventListener('change', async (e) => {
   const t = e.target;
   if (await workChange(e)) return;
   if (await profileChange(e)) return;
+  if (await careerChange(e)) return;
   if (t.id === 'tz') { await saveSettings({ tz: t.value }); toast('Часовой пояс сохранён'); }
   else if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
   else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) applyTheme(); }
@@ -608,7 +649,7 @@ async function start() {
   render();
   if (!S.onboarded) showOnboarding();
   // обновление календаря отдельно от приложения
-  fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); render(); } }).catch(() => {});
+  fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); rerender(); } }).catch(() => {});
   // обновлять «сейчас» (поездка «в пути», статус отдыха) раз в минуту
   // раз в минуту: время «в пути», остаток отдыха и статус в профиле
   setInterval(() => { if ((V.tab === 'home' || V.tab === 'profile') && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); }, 60000);

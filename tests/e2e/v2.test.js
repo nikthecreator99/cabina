@@ -112,6 +112,8 @@ test('«На очередь»: на главном — когда могут в�
   assert.match(b, /Осталось 10 ч 00 мин/);
   // междусменный отдых меняется в ☰
   await workPage(page);
+  assert.match(await text(page, '#shift-panel'), /16 ч/);
+  await page.locator('[data-act=wk-toggle][data-k=shift]').click();
   await page.locator('[data-act=shift-plus]').click();
   await page.waitForFunction(() => document.querySelector('#min-shift')?.textContent === '16 ч 30 мин');
   await tab(page, 'home');

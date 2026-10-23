@@ -50,6 +50,11 @@ export const I = {
   chart: sv('<path d="M4 20h16"/><rect x="6" y="11" width="3" height="7" rx="1"/><rect x="11" y="6" width="3" height="12" rx="1"/><rect x="16" y="13" width="3" height="5" rx="1"/>'),
   search: sv('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
   camera: sv('<path d="M4 8.5A2 2 0 0 1 6 6.5h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/>'),
+  medal: sv('<circle cx="12" cy="15" r="5.5"/><path d="M8 3.5 11 9.6M16 3.5 13 9.6M7 3.5h3M14 3.5h3"/><path d="m12 12.4.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z" fill="currentColor" stroke-width="1"/>'),
+  briefcase: sv('<rect x="3.5" y="7.5" width="17" height="12" rx="2.2"/><path d="M9 7.5v-2a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2M3.5 12.5h17M11 12.5v2h2v-2"/>'),
+  learn: sv('<path d="M2.5 9.2 12 4.5l9.5 4.7L12 14z"/><path d="M6.5 11.3v4.3c1.6 1.5 3.5 2.2 5.5 2.2s3.9-.7 5.5-2.2v-4.3M21.5 9.2v5.3"/>'),
+  chat: sv('<path d="M5 5h14a1.8 1.8 0 0 1 1.8 1.8v8.4A1.8 1.8 0 0 1 19 17h-8.5L6 20.5V17H5a1.8 1.8 0 0 1-1.8-1.8V6.8A1.8 1.8 0 0 1 5 5z"/><path d="M8 10h8M8 13h5"/>'),
+  shoe: sv('<path d="M2.5 19.5h19"/><path d="M4 19.5 14.5 10H18v9.5"/><path d="M14.5 10V6.5H20"/><path d="M8 19.5l3.5-3.2"/>'),
   bed2: sv('<path d="M2.5 19v-9M2.5 15h19v4M21.5 15v-1.5a3 3 0 0 0-3-3H10v4.5"/><circle cx="6.5" cy="12" r="1.8"/>'),
 };
 

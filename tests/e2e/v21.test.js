@@ -36,6 +36,10 @@ test('«Пойти на выходной»: таймер на главном, д
 
   // ☰ → «Выходной»: своя длительность депо; уже выбранный выходной не меняется
   await page.locator('.home-head [data-page=work]').click();
+  // 2.2: панель свёрнута — видно значение, настройка открывается нажатием
+  assert.equal(await page.locator('#day-off').count(), 0);
+  assert.match(await text(page, '#dayoff-panel'), /60 ч/);
+  await page.locator('[data-act=wk-toggle][data-k=dayoff]').click();
   const inp = page.locator('#day-off');
   assert.equal(await inp.inputValue(), '60');
   await inp.fill('0');
