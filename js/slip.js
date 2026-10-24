@@ -47,7 +47,6 @@ export function slipData(y, m) {
 const K = 2.5; // пикселей на пункт: ≈ 180 точек на дюйм, чётко при печати и на экране
 const C = { ink: '#0b1020', text: '#1d2333', muted: '#6b7386', line: '#dfe3ec', zebra: '#f5f7fb', head: '#0b1020', accent: '#e53935', warnBg: '#fff6e0', warnLine: '#f0c36d', card: '#f3f5f9' };
 const FONT = "'Onest', 'Segoe UI', Roboto, Arial, sans-serif";
-const DISPLAY = "'Unbounded', 'Arial Black', Arial, sans-serif";
 
 function wrap(ctx, text, maxW) {
   const words = String(text).split(' ');
@@ -77,7 +76,7 @@ export function drawSlip(ctx, d, { today = new Date() } = {}) {
 
   // предупреждение готовим заранее: от его высоты зависит, сколько места останется таблицам
   font(9.5);
-  const note = `Расчёт сделан приложением CABINA только по данным, которые вы сами ввели: поездки, отвлечения, тарифная ставка и надбавки. Премия, надбавки и удержания у каждого свои и меняются, поэтому суммы могут отличаться от начисленных. Отпускные, больничные, техучёба и разовые выплаты не учитываются. Премия посчитана за работу этого же месяца (${cfg.bonus}%), НДФЛ ${NDFL}%.`;
+  const note = `Расчёт сделан приложением CABINA только по данным, которые вы сами ввели: поездки, отвлечения, тарифная ставка и надбавки. Премия, надбавки и удержания у каждого свои и меняются, поэтому суммы могут отличаться от начисленных. Отпускные, техучёба и разовые выплаты не учитываются${r.sickDays && !cfg.sickDay ? ', больничный — тоже: оплата дня не указана' : ''}. Премия посчитана за работу этого же месяца (${cfg.bonus}%), НДФЛ ${NDFL}%.`;
   const lines = wrap(ctx, note, W - 28);
   const nh = 24 + lines.length * 12 + 8;
   // высота строки таблиц: всё должно поместиться на один лист A4 над подвалом
@@ -92,7 +91,10 @@ export function drawSlip(ctx, d, { today = new Date() } = {}) {
   rect(0, 0, PAGE_W, PAGE_H, '#ffffff');
   rect(0, 0, PAGE_W, 84, C.ink);
   rect(0, 84, PAGE_W, 3, C.accent);
-  text('CABINA', L, 46, { size: 24, weight: 800, color: '#ffffff', fam: DISPLAY });
+  // строгая надпись, как в приложении: прямой шрифт с разрядкой (отдельные буквы — разрядка работает везде)
+  font(23, 800); ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  let wx = L;
+  for (const ch of 'CABINA') { ctx.fillText(ch, wx, 46); wx += ctx.measureText(ch).width + 4.5; }
   text('Личный учёт поездок для железнодорожников', L, 66, { size: 9, color: '#a9b2c7' });
   text('ОРИЕНТИРОВОЧНЫЙ РАСЧЁТ ЗАРАБОТКА', R, 38, { size: 8.5, weight: 700, color: '#ffb547', align: 'right' });
   text(`${MONTHS[m - 1]} ${y}`, R, 62, { size: 19, weight: 700, color: '#ffffff', align: 'right' });
@@ -129,14 +131,14 @@ export function drawSlip(ctx, d, { today = new Date() } = {}) {
   const table = (title, rows, total) => {
     section(title);
     rect(L, yy, W, HEAD, C.head, 6);
-    for (const [t, x, align] of [['Вид', cols[0], 'left'], ['Часы', cols[1], 'right'], ['%', cols[2], 'right'], ['Сумма', cols[3], 'right']]) {
+    for (const [t, x, align] of [['Вид', cols[0], 'left'], [rows.some((l) => l.days) ? 'Часы, дни' : 'Часы', cols[1], 'right'], ['%', cols[2], 'right'], ['Сумма', cols[3], 'right']]) {
       text(t, x, yy + 13.5, { size: 8.5, weight: 700, color: '#ffffff', align });
     }
     yy += HEAD;
     rows.forEach((l, i) => {
       if (i % 2) rect(L, yy, W, rowH, C.zebra);
       text(l.label, cols[0], yy + base, { size: rowFont });
-      if (l.hours) text(fmtH(l.hours), cols[1], yy + base, { size: rowFont, color: C.muted, align: 'right' });
+      if (l.hours || l.days) text(l.days ? `${l.days} дн.` : fmtH(l.hours), cols[1], yy + base, { size: rowFont, color: C.muted, align: 'right' });
       if (l.pct) text(pct(l.pct), cols[2], yy + base, { size: rowFont, color: C.muted, align: 'right' });
       text(fmtRub(l.amount, true), cols[3], yy + base, { size: rowFont, weight: 600, align: 'right' });
       yy += rowH;
@@ -160,7 +162,7 @@ export function drawSlip(ctx, d, { today = new Date() } = {}) {
   rect(L, yy, 5, NET, C.accent, 0);
   text('На руки', L + 18, yy + 22, { size: 12, weight: 700, color: C.ink });
   text('ориентировочно', L + 18, yy + 37, { size: 9, color: C.muted });
-  text(`≈ ${fmtRub(r.net)}`, R - 16, yy + 33, { size: 20, weight: 700, color: C.ink, align: 'right', fam: DISPLAY });
+  text(`≈ ${fmtRub(r.net)}`, R - 16, yy + 34, { size: 22, weight: 800, color: C.ink, align: 'right' });
   yy += NET;
 
   // предупреждение
@@ -174,15 +176,14 @@ export function drawSlip(ctx, d, { today = new Date() } = {}) {
 
   // подвал
   hline(PAGE_H - 46);
-  text('CABINA · nikthecreator99.github.io/cabina', PAGE_W / 2, PAGE_H - 30, { size: 8.5, weight: 600, color: C.muted, align: 'center' });
-  text('Не является официальной системой ОАО «РЖД» и не заменяет расчётный листок', PAGE_W / 2, PAGE_H - 18, { size: 8.5, color: C.muted, align: 'center' });
+  text('Сформировано в CABINA. Не является официальной системой ОАО «РЖД» и не заменяет расчётный листок', PAGE_W / 2, PAGE_H - 24, { size: 8.5, color: C.muted, align: 'center' });
 }
 
 // ---------------------------------------------------------------- сборка и выдача файла
 export async function slipPdfBlob(y, m) {
   const d = slipData(y, m);
   if (!d) return null;
-  try { await Promise.all(['400 10px Onest', '700 10px Onest', '800 26px Unbounded', '700 22px Unbounded'].map((f) => document.fonts.load(f))); } catch {}
+  try { await Promise.all(['400 10px Onest', '600 10px Onest', '700 10px Onest', '800 10px Onest'].map((f) => document.fonts.load(f))); } catch {}
   const cv = document.createElement('canvas');
   cv.width = Math.round(PAGE_W * K); cv.height = Math.round(PAGE_H * K);
   const ctx = cv.getContext('2d');

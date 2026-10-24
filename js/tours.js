@@ -162,6 +162,12 @@ export function absenceTour(el) {
   ]);
 }
 
+export function sickPayTour() {
+  runTour('sickPay', [
+    { target: '#pay-sick', title: 'Больничный', text: 'Впишите, сколько вам начисляют за <b>один день больничного</b>. Тогда больничные из «Отвлечений» появятся в квитке.' },
+  ]);
+}
+
 export function slipPdfTour() {
   runTour('slipPdf', [
     { target: '[data-act=slip-pdf]', title: 'Квиток в PDF', text: 'Квиток за месяц одним файлом: можно сохранить в «Файлы», распечатать или отправить. В нём написано, что расчёт <b>ориентировочный</b> — по вашим данным.' },

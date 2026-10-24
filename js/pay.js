@@ -29,6 +29,7 @@ export const PAY_FIELDS = [
   { k: 'zone', label: 'Зональная надбавка', unit: '%', def: null, hint: 'Есть не во всех регионах. Если в квитке её нет — оставьте пустым.' },
   { k: 'bam', label: 'Бамовская надбавка', unit: '%', def: null, hint: 'Только для работающих на БАМе. Если в квитке её нет — оставьте пустым.' },
   { k: 'trip', label: 'Ком. расходы за поездку', unit: '₽', def: null, hint: 'Фиксированная выплата за каждую поездку, если она у вас есть. Налогом не облагается.' },
+  { k: 'sickDay', label: 'Оплата одного дня больничного', unit: '₽', def: null, hint: 'Сколько вам начисляют за один календарный день больничного. Найти можно в расчётном листке: сумму по больничному разделите на число дней болезни. Если оставить пустым, больничный не считается.', group: 'sick', ph: 'Например, 2 500' },
   { k: 'union', label: 'Профсоюзный взнос', unit: '%', def: null, hint: 'Удержание, если вы в профсоюзе. В квитке — «Профсоюз…», обычно 1%.', deduct: true },
   { k: 'pension', label: 'Корпоративная пенсия', unit: '%', def: null, hint: 'Добровольный взнос, если вы его платите. В квитке — «Удержание взнос КорпПенсия».', deduct: true },
 ];
@@ -148,8 +149,8 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const orPay = (orMin / 60) * rateEnd * 2 / 3;
 
   const h = (min) => Math.round(min) / 60;
-  // label — название строки, pct — процент (показывается рядом), hours — часы, к которым он применён
-  const L = (key, label, amount, { pct, hours } = {}) => { if (amount > 0.004) res.lines.push({ key, label, pct, hours, amount: round2(amount) }); };
+  // label — название строки, pct — процент (показывается рядом), hours — часы, к которым он применён, days — дни
+  const L = (key, label, amount, { pct, hours, days } = {}) => { if (amount > 0.004) res.lines.push({ key, label, pct, hours, days, amount: round2(amount) }); };
   L('base', 'Оплата по тарифу', acc.base, { hours: h(sum.work - (sum.wait || 0)) });
   L('wait', 'Ожидание следования пассажиром', acc.wait, { hours: h(sum.wait || 0) });
   L('night', 'Ночные', acc.night, { pct: cfg.night, hours: h(sum.night) });
@@ -167,8 +168,13 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   L('sn', 'Северная надбавка', withBonus * cfg.sn / 100, { pct: cfg.sn });
   L('zone', 'Зональная надбавка', withBonus * cfg.zone / 100, { pct: cfg.zone });
   L('bam', 'Бамовская надбавка', withBonus * cfg.bam / 100, { pct: cfg.bam });
+  // больничный: календарные дни в этом месяце × оплата дня из настроек; премия и надбавки на него не начисляются
+  const sickDays = sickDaysInMonth(absences, y, m);
+  const sickPay = sickDays * cfg.sickDay;
+  L('sick', 'Больничный', sickPay, { days: sickDays });
+  res.sickDays = sickDays;
   res.rate = rateEnd;
-  const gross = withBonus * (1 + regionalPct(cfg) / 100);
+  const gross = withBonus * (1 + regionalPct(cfg) / 100) + sickPay;
   res.workPay = round2(workPay);
   res.gross = round2(gross);
   res.ndfl = Math.round(gross * NDFL / 100); // НДФЛ считается в целых рублях
@@ -183,6 +189,21 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   return res;
 }
 
+// Календарные дни больничного внутри месяца (отвлечения «Больничный»)
+export function sickDaysInMonth(absences, y, m) {
+  const p2 = (n) => String(n).padStart(2, '0');
+  const first = `${y}-${p2(m)}-01`;
+  const last = `${y}-${p2(m)}-${p2(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+  let n = 0;
+  for (const a of absences || []) {
+    if (a.type !== 'sick' || !a.start || !a.end) continue;
+    const s = a.start > first ? a.start : first;
+    const e = a.end < last ? a.end : last;
+    if (e >= s) n += Math.round((Date.parse(`${e}T00:00Z`) - Date.parse(`${s}T00:00Z`)) / 86400000) + 1;
+  }
+  return n;
+}
+
 // Сумма нескольких месяцев (квартал, год, всё время)
 export function payTotal(months) {
   const out = { lines: new Map(), deductions: new Map(), gross: 0, net: 0, comp: 0, months };
@@ -192,6 +213,7 @@ export function payTotal(months) {
     if (x.pct !== l.pct) x.pct = undefined;
     x.amount += l.amount;
     if (l.hours != null) x.hours = (x.hours || 0) + l.hours; else x.hours = undefined;
+    if (l.days) x.days = (x.days || 0) + l.days;
     map.set(l.key, x);
   };
   for (const r of months) {
@@ -199,7 +221,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['base', 'wait', 'night', 'harm', 'klass', 'holiday', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'ndfl', 'union', 'pension'];
+  const order = ['base', 'wait', 'night', 'harm', 'klass', 'holiday', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'ndfl', 'union', 'pension'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));

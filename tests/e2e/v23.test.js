@@ -103,7 +103,8 @@ test('квиток: страница рисуется с названием, м�
     return { words, none: m.slipData(2026, 9) };
   });
   const all = drawn.words.join('\n');
-  assert.match(all, /^CABINA$/m);
+  assert.match(all, /^C\nA\nB\nI\nN\nA$/m, 'надпись CABINA по буквам, с разрядкой');
+  assert.doesNotMatch(all, /github/, 'адреса репозитория в квитке нет');
   assert.match(all, /Октябрь 2026/);
   assert.match(all, /ОРИЕНТИРОВОЧНЫЙ РАСЧЁТ/);
   assert.match(all, /Расчёт ориентировочный, итог — по вашему расчётному листку\./);

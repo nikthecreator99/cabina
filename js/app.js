@@ -3,12 +3,12 @@ import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDi
 import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
-import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, fmtDate } from './forms.js';
+import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { loadTours, resetTours, tourActive } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour, slipPdfTour, medSettingsTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour, slipPdfTour, medSettingsTour, sickPayTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -19,7 +19,7 @@ import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick, medChange, medSettingsHtml } from './med.js';
 
-export const VERSION = '2.3.0';
+export const VERSION = '2.4.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
@@ -453,7 +453,7 @@ function scheduleTours() {
     const p = page();
     if (p === 'work') workTour();
     else if (p === 'routes') routesTour();
-    else if (p === 'tariffs') tariffsTour();
+    else if (p === 'tariffs') { tariffsTour(); sickPayTour(); }
     else if (p === 'houses') housesTour();
     else if (p === 'stats') { statsTour(); slipPdfTour(); }
     else if (p === 'settings') { settingsTour(); medSettingsTour(); }
@@ -470,6 +470,8 @@ export { scheduleTours };
 // Изменения данных: поле поиска не перерисовываем, чтобы не сбивать набор текста
 onChange(() => rerender());
 
+function openTariffsPage() { go('work'); V.pages.push('tariffs'); resetPayRole(); render(); }
+setTariffsOpener(() => { openTariffsPage(); setTimeout(() => document.getElementById('pay-sick')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
 setNavigator((startStr) => {
   const ms = parseLocal(startStr);
   if (!Number.isFinite(ms)) return;
@@ -536,7 +538,7 @@ app.addEventListener('click', async (e) => {
     case 'go': go(b.dataset.page); break;
     case 'back': back(); break;
     case 'stats': go('stats'); break;
-    case 'set-rate': go('work'); V.pages.push('tariffs'); resetPayRole(); render(); break;
+    case 'set-rate': openTariffsPage(); break;
     case 'prev': shiftMonth(-1); break;
     case 'next': shiftMonth(1); break;
     case 'today': goToday(); render(); break;

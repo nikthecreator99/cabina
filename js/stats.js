@@ -250,7 +250,7 @@ function collectLite(p) {
 }
 
 function slipHtml(t, { single }) {
-  const row = (l) => `<div class="slip-row"><span>${esc(l.label)}${l.pct ? ` ${String(l.pct).replace('.', ',')}%` : ''}${l.hours ? `<small>${fmtH(l.hours)}</small>` : ''}</span><b>${fmtRub(l.amount, true)}</b></div>`;
+  const row = (l) => `<div class="slip-row"><span>${esc(l.label)}${l.pct ? ` ${String(l.pct).replace('.', ',')}%` : ''}${l.hours ? `<small>${fmtH(l.hours)}</small>` : ''}${l.days ? `<small>${l.days} ${plural(l.days, 'день', 'дня', 'дней')}</small>` : ''}</span><b>${fmtRub(l.amount, true)}</b></div>`;
   return `<section class="slip">
     <div class="slip-head">Начислено</div>
     ${t.lines.map(row).join('')}
@@ -284,7 +284,7 @@ function payView(R) {
   }
   html += block(ST.period === 'month' ? 'Квиток' : 'Квиток за период', slipHtml(total, { single: months.length === 1 ? months[0] : null }));
   if (ST.period === 'month') html += `<button class="btn btn-ghost" data-act="slip-pdf">${I.download} Скачать квиток в PDF</button>`;
-  html += `<div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Отпускные, больничные, техучёба и разовые выплаты не учитываются.</div></div>`;
+  html += `<div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Отпускные, техучёба и разовые выплаты не учитываются. Больничный — если в «Тарифных ставках» указана оплата одного дня.</div></div>`;
   return html;
 }
 

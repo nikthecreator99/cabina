@@ -76,7 +76,7 @@ export function renderTariffs() {
     const shown = v === undefined || v === null ? (f.def ?? '') : v;
     return `<div class="pay-field">
       <label for="pf-${f.k}">${esc(f.label)}</label>
-      <div class="input-unit"><input class="input" id="pf-${f.k}" data-pf="${f.k}" inputmode="decimal" autocomplete="off" value="${esc(numText(shown))}" placeholder="0"><span>${f.unit}</span></div>
+      <div class="input-unit"><input class="input" id="pf-${f.k}" data-pf="${f.k}" inputmode="decimal" autocomplete="off" value="${esc(numText(shown))}" placeholder="${f.ph || '0'}"><span>${f.unit}</span></div>
       <div class="hint">${esc(f.hint)}</div></div>`;
   };
   const fields = PAY_FIELDS.filter((f) => !f.role || f.role === payRole);
@@ -95,8 +95,11 @@ export function renderTariffs() {
         <div class="input-unit"><input class="input" id="pf-oklad" inputmode="decimal" autocomplete="off" value="${raw.oklad ? esc(numText(raw.oklad)) : ''}" placeholder="Например, 48 000"><span>₽</span></div>
         <div class="hint">Месячный оклад (тарифная ставка за месяц) без премий и надбавок. От него считается вознаграждение за преданность компании — см. «Профиль → ⚙ → Настройка профиля → Карьера».</div>
       </div>
-      ${fields.filter((f) => !f.deduct).map(field).join('')}
+      ${fields.filter((f) => !f.deduct && !f.group).map(field).join('')}
     </div>
+    <div class="group-title">Больничный</div>
+    <div class="panel pay-panel" id="pay-sick">${fields.filter((f) => f.group === 'sick').map(field).join('')}
+      <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Больничный»: число дней больничного в месяце × оплата одного дня. НДФЛ с неё тоже вычитается.</div></div></div>
     <div class="group-title">Удержания (необязательно)</div>
     <div class="panel pay-panel">${fields.filter((f) => f.deduct).map(field).join('')}
       <div class="pay-field"><div class="hint">НДФЛ 13% вычитается всегда.</div></div></div>

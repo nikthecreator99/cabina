@@ -23,6 +23,8 @@ const monthName = (mk) => `${MONTHS[+mk.slice(5, 7) - 1]} ${mk.slice(0, 4)}`;
 
 export let navigateToMonth = () => {};
 export const setNavigator = (fn) => { navigateToMonth = fn; };
+export let openTariffs = () => {};
+export const setTariffsOpener = (fn) => { openTariffs = fn; };
 
 export const ABS_TYPES = {
   sick: { label: 'Больничный', icon: I.sick, cls: 'c-sick', color: 'var(--sick)' },
@@ -677,8 +679,19 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
       toast(existing ? 'Изменения сохранены' : 'Отвлечение добавлено');
       // прошёл медкомиссию — предложить напомнить о следующей
       if (obj.type === 'medical' && existing?.type !== 'medical' && obj.end === lastMedical()) setTimeout(offerMedReminder, 350);
+      // больничный без оплаты дня в настройках — подсказать, что его можно посчитать
+      if (obj.type === 'sick' && existing?.type !== 'sick' && !myPay().sickDay) setTimeout(offerSickPay, 350);
     }
   });
+}
+
+async function offerSickPay() {
+  const ok = await confirmDialog({
+    title: 'Посчитать оплату больничного?',
+    text: 'CABINA добавит больничный в расчёт заработка, если указать, сколько вам начисляют за один день больничного. Это делается в ☰ → «Тарифные ставки и надбавки» → «Больничный».',
+    ok: 'Указать', cancel: 'Позже',
+  });
+  if (ok) openTariffs();
 }
 
 // =====================================================================

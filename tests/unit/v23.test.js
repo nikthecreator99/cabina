@@ -54,3 +54,30 @@ test('PDF: правильная структура, таблица ссылок 
   assert.deepEqual([...pdf.slice(at, at + jpeg.length)], [...jpeg]);
   assert.match(s, /\/Title <FEFF0043004100420049004E0041/);
 });
+
+test('больничный: календарные дни в месяце × оплата дня, без премии и надбавок, с НДФЛ', async () => {
+  const { sickDaysInMonth, payMonth, payCfg, payTotal } = await import('../../js/pay.js');
+  const sick = [
+    { id: 's1', type: 'sick', start: '2026-10-05', end: '2026-10-14' }, // 10 дней
+    { id: 's2', type: 'sick', start: '2026-10-28', end: '2026-11-03' }, // 4 дня в октябре, 3 в ноябре
+    { id: 'v', type: 'vacation', start: '2026-10-20', end: '2026-10-21' },
+  ];
+  assert.equal(sickDaysInMonth(sick, 2026, 10), 14);
+  assert.equal(sickDaysInMonth(sick, 2026, 11), 3);
+  assert.equal(sickDaysInMonth(sick, 2026, 9), 0);
+  const cfg = payCfg({ assistant: { rates: [{ from: null, rate: 300 }], bonus: 12, rk: 20, sn: 50, sickDay: 2500 } });
+  const r = payMonth(2026, 10, [], [sick[0]], cfg, () => ({}));
+  const line = r.lines.find((l) => l.key === 'sick');
+  assert.deepEqual({ amount: line.amount, days: line.days }, { amount: 25000, days: 10 });
+  assert.equal(r.lines.length, 1, 'премия и районный на больничный не начисляются');
+  assert.equal(r.gross, 25000);
+  assert.equal(r.ndfl, 3250);
+  assert.equal(r.net, 21750);
+  // без оплаты дня больничный не считается
+  const r0 = payMonth(2026, 10, [], [sick[0]], payCfg({ assistant: { rates: [{ from: null, rate: 300 }] } }), () => ({}));
+  assert.equal(r0.lines.length, 0);
+  assert.equal(r0.sickDays, 10);
+  // в сумме за период дни складываются
+  const r2 = payMonth(2026, 11, [], sick, cfg, () => ({}));
+  assert.equal(payTotal([r, r2]).lines.find((l) => l.key === 'sick').days, 13);
+});
