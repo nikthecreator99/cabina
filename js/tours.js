@@ -162,6 +162,18 @@ export function absenceTour(el) {
   ]);
 }
 
+export function slipPdfTour() {
+  runTour('slipPdf', [
+    { target: '[data-act=slip-pdf]', title: 'Квиток в PDF', text: 'Квиток за месяц одним файлом: можно сохранить в «Файлы», распечатать или отправить. В нём написано, что расчёт <b>ориентировочный</b> — по вашим данным.' },
+  ]);
+}
+
+export function medSettingsTour() {
+  runTour('medRemind', [
+    { target: '#med-panel', title: 'Медкомиссия', text: 'Напомним о следующей медкомиссии <b>за 2 недели</b>. Срок считается от последней медкомиссии в «Отвлечениях». Здесь же можно выбрать, как часто вы её проходите.' },
+  ]);
+}
+
 export function fixTileTour() {
   runTour('fixTile', [
     { target: '[data-act=extra-fix]', title: 'Закрепление состава', text: 'Сколько <b>тормозных башмаков</b> нужно на уклоне и сколько <b>ручных тормозных осей</b> их заменят. Считает по таблице норм на 100 тс веса.' },

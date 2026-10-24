@@ -11,6 +11,7 @@ import {
 import { dayInfo } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
+import { offerMedReminder, lastMedical } from './med.js';
 import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour } from './tours.js';
 
 export { computeHomeRest };
@@ -572,10 +573,10 @@ function openLocoNotesSheet(type, number, excludeTripId) {
 // ОТВЛЕЧЕНИЕ
 // =====================================================================
 // stay — открыто из списка отвлечений: после сохранения не переключать месяц на главной
-export function openAbsenceForm(id, { defaultDate, stay = false } = {}) {
+export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' } = {}) {
   const existing = id ? S.absences.find((a) => a.id === id) : null;
   const today = defaultDate || fmtLocal(nowLocal()).slice(0, 10);
-  const A = existing ? JSON.parse(JSON.stringify(existing)) : { id: uid(), type: 'sick', start: today, end: today, auto: true, monthHours: {}, createdAt: Date.now() };
+  const A = existing ? JSON.parse(JSON.stringify(existing)) : { id: uid(), type, start: today, end: today, auto: true, monthHours: {}, createdAt: Date.now() };
   if (A.auto === undefined) A.auto = true;
   const el = openLayer(sheet({
     title: existing ? 'Отвлечение' : 'Новое отвлечение', tall: false,
@@ -674,6 +675,8 @@ export function openAbsenceForm(id, { defaultDate, stay = false } = {}) {
       closeLayer(el);
       if (!stay) navigateToMonth(`${obj.start}T00:00`);
       toast(existing ? 'Изменения сохранены' : 'Отвлечение добавлено');
+      // прошёл медкомиссию — предложить напомнить о следующей
+      if (obj.type === 'medical' && existing?.type !== 'medical' && obj.end === lastMedical()) setTimeout(offerMedReminder, 350);
     }
   });
 }

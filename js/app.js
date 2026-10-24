@@ -8,7 +8,7 @@ import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docSta
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { loadTours, resetTours, tourActive } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour, slipPdfTour, medSettingsTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -17,8 +17,9 @@ import { renderProfile, renderProfileEdit, profileClick, profileChange } from '.
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
+import { medReminder, medBannerHtml, medClick, medChange, medSettingsHtml } from './med.js';
 
-export const VERSION = '2.2.0';
+export const VERSION = '2.3.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
@@ -139,6 +140,7 @@ function tripRow(t, mk, payCtx) {
 
 // Напоминание о вознаграждении за преданность (за 90 дней до срока и до месяца выплаты)
 function loyaltyBanner() { const r = loyaltyReminder(); return r ? reminderHtml(r) : ''; }
+function medBanner() { const r = medReminder(); return r ? medBannerHtml(r) : ''; }
 
 // Плашка о резервной копии: раз в 2 недели, если есть что терять
 function backupNag(now) {
@@ -223,7 +225,7 @@ function renderHome() {
     <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${rest ? `<button class="rest-banner" data-act="trip" data-id="${rest.trip.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
-    ${isCurrent ? loyaltyBanner() : ''}
+    ${isCurrent ? medBanner() + loyaltyBanner() : ''}
     ${backupNag(now)}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
@@ -344,6 +346,9 @@ function renderSettings() {
     <div class="group"><div class="group-title">Профиль</div>
       <div class="panel"><button class="row" data-act="go" data-page="profile-settings"><span class="ico" style="--c:var(--accent)">${I.user}</span><div class="grow"><div class="t1">Настройка профиля</div><div class="t2">Профиль и карьера: стаж, должности, вознаграждение за преданность</div></div>${small(I.right, 18)}</button></div>
     </div>
+    <div class="group"><div class="group-title">Напоминания</div>
+      <div class="panel" id="med-panel">${medSettingsHtml()}</div>
+    </div>
     <div class="group"><div class="group-title">Оформление</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
     </div>
@@ -450,8 +455,8 @@ function scheduleTours() {
     else if (p === 'routes') routesTour();
     else if (p === 'tariffs') tariffsTour();
     else if (p === 'houses') housesTour();
-    else if (p === 'stats') statsTour();
-    else if (p === 'settings') settingsTour();
+    else if (p === 'stats') { statsTour(); slipPdfTour(); }
+    else if (p === 'settings') { settingsTour(); medSettingsTour(); }
     else if (p === 'profile-edit') profileEditTour();
     else if (p === 'profile-settings') profileSettingsTour();
     else if (p === 'career') careerTour();
@@ -498,7 +503,7 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
 
 // ---------------------------------------------------------------- действия
 const swipe = attachSwipe(app);
-const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll() };
+const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll(), openAbsenceForm };
 
 async function doExport() {
   const ok = await confirmDialog({
@@ -525,6 +530,7 @@ app.addEventListener('click', async (e) => {
   if (await workClick(act, b, ctx)) return;
   if (await profileClick(act, b, ctx)) return;
   if (await careerClick(act, b, ctx)) return;
+  if (await medClick(act, b, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   switch (act) {
     case 'go': go(b.dataset.page); break;
@@ -610,6 +616,7 @@ app.addEventListener('change', async (e) => {
   if (await workChange(e)) return;
   if (await profileChange(e)) return;
   if (await careerChange(e)) return;
+  if (await medChange(e)) return;
   if (t.id === 'tz') { await saveSettings({ tz: t.value }); toast('Часовой пояс сохранён'); }
   else if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
   else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) applyTheme(); }

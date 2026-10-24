@@ -13,7 +13,7 @@ export const salariesFor = (years) => (years === 3 ? 2 : years === 5 ? 3 : years
 const REMIND_DAYS = 90; // напоминание на главной — за 90 дней до права и до конца месяца выплаты
 
 const p2 = (n) => String(n).padStart(2, '0');
-const isDateKey = (k) => /^\d{4}-\d{2}-\d{2}$/.test(String(k || ''));
+export const isDateKey = (k) => /^\d{4}-\d{2}-\d{2}$/.test(String(k || ''));
 const keyOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 const msOf = (k) => Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10));
 export const todayKey = () => fmtLocal(nowLocal()).slice(0, 10);
@@ -45,15 +45,16 @@ export function nextLoyalty(hired, today) {
   return loyaltyMilestones(hired).find((x) => monthEnd(x.payMonth) >= today) || null;
 }
 
+// Плюс n месяцев к дате; если такого числа нет (31 → февраль), берётся последний день месяца
+export function addMonths(k, n) {
+  const y = +k.slice(0, 4); const m = +k.slice(5, 7) - 1 + n; const d = +k.slice(8, 10);
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return keyOf(Date.UTC(y, m, Math.min(d, last)));
+}
+
 // Стаж между датами: { y, m, d }
 export function tenure(fromKey, toKey) {
   if (!isDateKey(fromKey) || !isDateKey(toKey) || toKey < fromKey) return null;
-  // плюс n месяцев к дате; если такого числа нет (31 → февраль), берётся последний день месяца
-  const addMonths = (k, n) => {
-    const y = +k.slice(0, 4); const m = +k.slice(5, 7) - 1 + n; const d = +k.slice(8, 10);
-    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    return keyOf(Date.UTC(y, m, Math.min(d, last)));
-  };
   let months = (+toKey.slice(0, 4) - +fromKey.slice(0, 4)) * 12 + (+toKey.slice(5, 7) - +fromKey.slice(5, 7));
   if (addMonths(fromKey, months) > toKey) months -= 1;
   return { y: Math.floor(months / 12), m: months % 12, d: daysBetween(addMonths(fromKey, months), toKey) };
@@ -66,7 +67,7 @@ export function tenureText(t) {
   if (!t.y && !t.m) parts.push(`${t.d} ${plural(t.d, 'день', 'дня', 'дней')}`);
   return parts.join(' ');
 }
-const daysBetween = (a, b) => Math.round((msOf(b) - msOf(a)) / 86400000);
+export const daysBetween = (a, b) => Math.round((msOf(b) - msOf(a)) / 86400000);
 
 // ---------------------------------------------------------------- данные
 export const careerOf = (p = S.profile) => {

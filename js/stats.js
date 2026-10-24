@@ -7,6 +7,8 @@ import { dayInfo } from './calendar.js';
 import { payMonth, payTotal, overRestIntervals, hasRate, fmtRub, fmtH } from './pay.js';
 import { houseOf, dayOffIntervals } from './rest.js';
 import { ABS_TYPES } from './forms.js';
+import { exportSlip } from './slip.js';
+import { slipPdfTour } from './tours.js';
 
 const MONTHS_DAT = ['январю', 'февралю', 'марту', 'апрелю', 'маю', 'июню', 'июлю', 'августу', 'сентябрю', 'октябрю', 'ноябрю', 'декабрю'];
 const ROMAN = ['I', 'II', 'III', 'IV'];
@@ -281,6 +283,7 @@ function payView(R) {
     if (nz.length) html += block('По месяцам', `<div class="rows">${nz.map(([r, [y, m]]) => `<button class="r link" data-act="st-month" data-y="${y}" data-m="${m}"><span class="grow">${MONTHS[m - 1]} ${y}</span><span class="muted">${fmtHours(r.sum.work / 60)}</span><b>${fmtRub(r.net)}</b>${small(I.right, 16)}</button>`).join('')}</div>`);
   }
   html += block(ST.period === 'month' ? 'Квиток' : 'Квиток за период', slipHtml(total, { single: months.length === 1 ? months[0] : null }));
+  if (ST.period === 'month') html += `<button class="btn btn-ghost" data-act="slip-pdf">${I.download} Скачать квиток в PDF</button>`;
   html += `<div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Отпускные, больничные, техучёба и разовые выплаты не учитываются.</div></div>`;
   return html;
 }
@@ -298,10 +301,16 @@ export function renderStats() {
 
 export function statsClick(act, b, ctx) {
   switch (act) {
-    case 'st-kind': ST.kind = b.dataset.v; ctx.rerender(); return true;
+    case 'st-kind': ST.kind = b.dataset.v; ctx.rerender(); if (ST.kind === 'pay') setTimeout(slipPdfTour, 400); return true;
     case 'st-period': ST.period = b.dataset.v; ctx.rerender(); return true;
     case 'st-prev': Object.assign(ST, shifted(ST, -1)); ctx.rerender(); return true;
     case 'st-next': Object.assign(ST, shifted(ST, 1)); ctx.rerender(); return true;
+    case 'slip-pdf': {
+      if (b.disabled) return true;
+      b.disabled = true; b.setAttribute('aria-busy', 'true');
+      exportSlip(ST.y, ST.m).finally(() => { b.disabled = false; b.removeAttribute('aria-busy'); });
+      return true;
+    }
     case 'st-month': ST.period = 'month'; ST.y = +b.dataset.y; ST.m = +b.dataset.m; ctx.rerender(); window.scrollTo(0, 0); return true;
     default: return false;
   }

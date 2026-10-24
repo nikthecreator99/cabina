@@ -772,6 +772,8 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .loyal-banner .txt { display: flex; flex-direction: column; min-width: 0; }
 .loyal-banner .txt b { font-size: 15px; }
 .loyal-banner .txt small { font-size: 13px; color: var(--text-2); }
+.med-banner { background: color-mix(in srgb, var(--medical) 10%, var(--card-solid)); border-color: color-mix(in srgb, var(--medical) 40%, transparent); }
+.med-banner .ico { color: var(--medical); background: color-mix(in srgb, var(--medical) 16%, transparent); }
 .loyal-next { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: var(--r-md); background: color-mix(in srgb, var(--warn) 9%, var(--card-solid)); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
 .loyal-big { display: flex; align-items: baseline; gap: 8px; }
 .loyal-big b { font-family: var(--font-display); font-size: 40px; color: var(--warn); line-height: 1; }
@@ -781,6 +783,9 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .career-tenure { font-size: 20px; font-weight: 800; }
 .loyal-list .row.done .t1 { color: var(--text-2); }
 .wk-head { width: 100%; text-align: left; }
+/* «Настройки работы» — один сплошной блок: разделы междусменного отдыха и выходного внутри той же панели */
+.wk-sec .row:last-child { border-bottom: 1px solid var(--line); }
+.panel > .wk-sec:last-child .row:last-child { border-bottom: 0; }
 .wk-val { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wk-head .chev { color: var(--muted); transition: transform .15s; display: grid; }
 .wk-head[aria-expanded="true"] .chev { transform: rotate(90deg); }
