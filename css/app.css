@@ -842,3 +842,4 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .ava-sm { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 15px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .ava-sm svg { width: 20px; height: 20px; }
 .call-btn { flex: none; color: var(--ok); }
+#pay-mode .t1 { font-weight: 700; }

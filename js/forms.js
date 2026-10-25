@@ -794,13 +794,12 @@ async function offerSickPay() {
 const studyPayable = (cfg) => cfg.avgHour > 0;
 
 async function offerStudyPay() {
-  const avg = myPay().mode === 'avg';
   const ok = await confirmDialog({
     title: 'Посчитать оплату учёбы?',
     text: 'Учёба (сессия) оплачивается по среднему заработку за час × часы дней учёбы по производственному календарю. Укажите средний за час в ☰ → «Тарифные ставки и надбавки» — тогда учёба появится в расчёте заработка.',
     ok: 'Указать', cancel: 'Позже',
   });
-  if (ok) openTariffs(avg ? 'pay-avg' : 'pay-study');
+  if (ok) openTariffs('pay-avg');
 }
 
 // =====================================================================

@@ -134,10 +134,10 @@ test('учёба: вычитается из нормы с расшифровко
   await sheet(page).locator('[data-act=save-abs]').click();
   const dlg = sheet(page);
   await dlg.getByRole('button', { name: 'Указать' }).click();
-  await page.waitForSelector('#pay-study #pf-avgHour');
-  // экран сам прокручивается к «Учёбе»
-  await page.waitForFunction(() => { const r = document.querySelector('#pay-study').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }, null, { timeout: 3000 });
-  assert.match(await text(page, '#pay-study'), /Средний заработок за час[\s\S]*часы дней учёбы по производственному календарю/);
+  await page.waitForSelector('#pay-avg #pf-avgHour');
+  // экран сам прокручивается к среднему заработку
+  await page.waitForFunction(() => { const r = document.querySelector('#pay-avg').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }, null, { timeout: 3000 });
+  assert.match(await text(page, '#pay-avg'), /Средний заработок за час[\s\S]*учёба \(сессия\): часы её дней по календарю/);
   await page.fill('#pf-avgHour', '500');
   await page.locator('#pf-avgHour').blur();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.avgHour === 500);
@@ -150,36 +150,35 @@ test('учёба: вычитается из нормы с расшифровко
   await context.close();
 });
 
-test('«Как считать заработок»: по среднему за час — свои поля, ставки сохраняются, в зарплате одна строка', async () => {
+test('«Считать зарплату по среднему» (2.6): переключатель рядом со средним за час, ставки и удержания сохраняются', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { settings: { pay: PAY }, trips: [{ id: 'a', start: '2026-10-14T08:00', end: '2026-10-14T12:00' }] });
   await workPage(page, 'tariffs');
-  const seg = page.locator('#pay-mode button');
-  assert.deepEqual(await seg.allInnerTexts(), ['По тарифу', 'По среднему']);
-  assert.equal(await seg.first().getAttribute('aria-pressed'), 'true');
-  // мода выше ставок
+  const sw = page.locator('#pay-mode [data-act=pay-mode]');
+  assert.equal(await sw.getAttribute('aria-checked'), 'false', 'по умолчанию — по тарифу');
+  assert.match(await text(page, '#pay-avg'), /Средний заработок за час[\s\S]*учёба[\s\S]*Считать зарплату по среднему/);
+  // переключатель — в одном блоке со средним, выше ставки
   assert.ok((await page.locator('#pay-mode').boundingBox()).y < (await page.locator('#pf-rate').boundingBox()).y);
   assert.equal(await page.locator('#pf-oklad').count(), 0, 'оклад теперь в «Карьере»');
-  await seg.nth(1).click();
-  await page.waitForSelector('#pay-avg');
-  assert.equal(await page.locator('#pf-rate').count(), 0);
-  // 2.6: компактно — только средний за час и оплата дня больничного
-  assert.deepEqual(await page.locator('#pay-avg input').evaluateAll((a) => a.map((x) => x.id)), ['pf-avgHour', 'pf-sickDay']);
-  assert.match(await text(page, '#pay-avg'), /Учёба — тоже по ней/);
-  assert.match(await text(page, '.screen'), /Упрощённо/);
-  assert.equal(await page.locator('#pay-study, #pay-sick').count(), 0);
   await page.fill('#pf-avgHour', '600');
   await page.locator('#pf-avgHour').blur();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.avgHour === 600);
+  await sw.click();
+  await page.waitForFunction(() => document.querySelector('#pay-mode [data-act=pay-mode]')?.getAttribute('aria-checked') === 'true');
+  assert.equal(await page.locator('#pf-rate').count(), 0, 'тарифная ставка скрыта');
+  // больничный и удержания остаются
+  assert.equal(await page.locator('#pf-sickDay').count(), 1);
+  assert.equal(await page.locator('#pf-union').count(), 1);
+  assert.equal(await page.locator('#pf-pension').count(), 1);
   await tab(page, 'home');
   await page.locator('.hero').click();
   await page.locator('#st-kind button').nth(1).click();
   const s = await text(page, '.screen');
   assert.match(s, /Заработок по среднему[\s\S]*2\s400/);
   assert.doesNotMatch(s, /Оплата по тарифу|Премия/);
-  // обратно — ставка на месте
+  // выключили — снова по тарифу, ставка на месте
   await workPage(page, 'tariffs');
-  await page.locator('#pay-mode button').first().click();
+  await page.locator('#pay-mode [data-act=pay-mode]').click();
   await page.waitForSelector('#pf-rate');
   assert.equal(await page.locator('#pf-rate').inputValue(), '300');
   assert.deepEqual(errors, []);

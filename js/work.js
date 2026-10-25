@@ -1,6 +1,6 @@
 // Меню ☰ «Настройки работы»: маршруты, тарифные ставки и надбавки, дома отдыха, междусменный отдых.
 import { I, esc, small, pageHead, stepperHtml, openLayer, closeLayer, sheet, toast, confirmDialog, plural, MONTHS_GEN } from './ui.js';
-import { S, nowLocal, saveSettings, deleteRoute } from './store.js';
+import { S, nowLocal, saveSettings, deleteRoute, myPay } from './store.js';
 import { fmtDur, fmtLocal } from './calc.js';
 import { openRouteForm } from './forms.js';
 import { restHouses, dayOffMin } from './rest.js';
@@ -65,13 +65,8 @@ export function renderRoutes() {
 // ---------------------------------------------------------------- тарифные ставки и надбавки
 // Набор ставок один (с 2.6): если ставка меняется — человек просто вписывает новую. Надбавка за класс — только машинисту.
 const payRole = () => S.profile.role || 'assistant';
-// короткие пояснения в режиме «по среднему»
-const AVG_HINTS = {
-  avgHour: 'Со всеми доплатами, до НДФЛ. Все рабочие часы × эта сумма. Учёба — тоже по ней: часы дней учёбы по календарю × эта сумма.',
-  sickDay: 'Сколько начисляют за один календарный день больничного.',
-};
-// учёба в режиме «по тарифу» — тоже по среднему за час
-const STUDY_HINT = 'Учёба оплачивается по среднему: эта сумма × часы дней учёбы по производственному календарю (обычный день — 8 ч). Средний за час — сумма за техучёбу в квитке, делённая на её часы.';
+// средний за час нужен всем: по нему считается учёба, а переключателем — и весь заработок
+const AVG_HINT = 'Со всеми доплатами, до НДФЛ. Найти в квитке: сумму за техучёбу разделите на её часы. По нему считается учёба (сессия): часы её дней по календарю × эта сумма.';
 export function renderTariffs() {
   const raw = paySet(S.settings.pay, payRole());
   const cfg = payCfg(S.settings.pay, payRole());
@@ -89,25 +84,26 @@ export function renderTariffs() {
   const fields = PAY_FIELDS.filter((f) => !f.role || f.role === payRole());
   const avg = cfg.mode === 'avg';
   return `${pageHead('Тарифные ставки и надбавки', { back: true })}
-    <div class="group-title">Как считать заработок</div>
-    <div class="seg" id="pay-mode">${[['tariff', 'По тарифу'], ['avg', 'По среднему']].map(([k, v]) => `<button data-act="pay-mode" data-mode="${k}" aria-pressed="${cfg.mode === k}">${v}</button>`).join('')}</div>
-    ${avg ? `<div class="panel pay-panel" id="pay-avg">${['avg', 'sick'].map((g) => fields.filter((f) => f.group === g).map((f) => field(f, AVG_HINTS[f.k])).join('')).join('')}</div>
-    <div class="hint">Упрощённо: ночные, праздничные и переработка уже внутри среднего. НДФЛ 13% вычитается.</div>` : `
+    <div class="group-title">Средний заработок</div>
+    <div class="panel pay-panel" id="pay-avg">${fields.filter((f) => f.group === 'avg').map((f) => field(f, AVG_HINT)).join('')}
+      <div class="pay-field"><div class="switch-row" id="pay-mode"><div class="grow"><div class="t1">Считать зарплату по среднему</div>
+        <div class="hint">Все рабочие часы × средний за час. Ночные, праздничные и переработка уже внутри среднего.</div></div>
+        <button class="switch" role="switch" data-act="pay-mode" aria-checked="${avg}" aria-label="Считать зарплату по среднему"></button></div></div>
+    </div>
+    ${avg ? '' : `<div class="group-title">Тарифная ставка и надбавки</div>
     <div class="panel pay-panel">
       <div class="pay-field">
         <label for="pf-rate">Тарифная ставка, ₽ в час</label>
         <div class="input-unit"><input class="input" id="pf-rate" inputmode="decimal" autocomplete="off" value="${cur ? esc(numText(cur)) : ''}" placeholder="Например, 250,00"><span>₽/ч</span></div>
         <div class="hint">В квитке — «Оклад/Тариф» в шапке. Все часы умножаются на неё, от неё считаются все доплаты.</div>
-        ${rates.length > 1 || (rates[0] && rates[0].from) ? `<div class="rate-hist"><div class="mini-label">История ставки</div>${rates.map((r, i) => `<div class="rate-row"><span>${r.from ? `с ${dateText(r.from)}` : rates.length > 1 ? 'раньше' : 'всегда'}</span><b>${fmtRub(r.rate, true)}</b>${rates.length > 1 ? `<button class="icon-btn danger sm" data-act="rate-del" data-i="${cfg.rates.indexOf(r)}" aria-label="Удалить ставку ${fmtRub(r.rate, true)}">${small(I.trash, 16)}</button>` : ''}</div>`).join('')}</div>` : ''}
+        ${rates.length > 1 || (rates[0] && rates[0].from) ? `<div class="rate-hist"><div class="mini-label">История ставки</div>${rates.map((r) => `<div class="rate-row"><span>${r.from ? `с ${dateText(r.from)}` : rates.length > 1 ? 'раньше' : 'всегда'}</span><b>${fmtRub(r.rate, true)}</b>${rates.length > 1 ? `<button class="icon-btn danger sm" data-act="rate-del" data-i="${cfg.rates.indexOf(r)}" aria-label="Удалить ставку ${fmtRub(r.rate, true)}">${small(I.trash, 16)}</button>` : ''}</div>`).join('')}</div>` : ''}
       </div>
       ${fields.filter((f) => !f.deduct && !f.group).map((f) => field(f)).join('')}
     </div>`}
-    ${avg ? '' : `<div class="group-title">Больничный</div>
+    <div class="group-title">Больничный</div>
     <div class="panel pay-panel" id="pay-sick">${fields.filter((f) => f.group === 'sick').map((f) => field(f)).join('')}
       <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Больничный»: число дней больничного в месяце × оплата одного дня. НДФЛ с неё тоже вычитается.</div></div></div>
-    <div class="group-title">Учёба (сессия)</div>
-    <div class="panel pay-panel" id="pay-study">${fields.filter((f) => f.group === 'avg').map((f) => field(f, STUDY_HINT)).join('')}</div>
-    `}<div class="group-title">Удержания (необязательно)</div>
+    <div class="group-title">Удержания (необязательно)</div>
     <div class="panel pay-panel">${fields.filter((f) => f.deduct).map((f) => field(f)).join('')}
       <div class="pay-field"><div class="hint">НДФЛ 13% вычитается всегда.</div></div></div>
     <div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Пустые поля и нули в расчёт не попадают. Ставки хранятся только в этом телефоне.</div></div>`;
@@ -254,7 +250,12 @@ export async function workClick(act, b, ctx) {
       if (r) openRouteForm(null, { from: r.to, to: r.from, distanceKm: r.distanceKm });
       return true;
     }
-    case 'pay-mode': { const m = b.dataset.mode === 'avg' ? 'avg' : 'tariff'; await savePaySet({ mode: m }); toast(m === 'avg' ? 'Заработок считается по среднему' : 'Заработок считается по тарифной ставке'); return true; }
+    case 'pay-mode': {
+      const m = b.getAttribute('aria-checked') === 'true' ? 'tariff' : 'avg';
+      await savePaySet({ mode: m });
+      toast(m === 'avg' ? (myPay().avgHour > 0 ? 'Заработок считается по среднему' : 'Впишите средний заработок за час') : 'Заработок считается по тарифной ставке');
+      return true;
+    }
     case 'rate-del': {
       const cfg = payCfg(S.settings.pay, payRole());
       const r = cfg.rates[+b.dataset.i];
