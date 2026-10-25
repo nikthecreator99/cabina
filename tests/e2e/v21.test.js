@@ -54,7 +54,7 @@ test('«Пойти на выходной»: таймер на главном, д
   // календарь в статистике: 20, 21 и 22 октября — выходные (20-е — день с поездкой)
   await page.locator('.hero').click();
   await page.waitForSelector('#st-kind');
-  const off = await page.locator('.cal-d.dayoff[title]').allInnerTexts();
+  const off = await page.locator('.cal-grid .cal-d.dayoff').allInnerTexts();
   assert.deepEqual(off, ['21', '22']);
   assert.match(await text(page, '.screen'), /выходной/);
   assert.deepEqual(errors, []);
@@ -132,7 +132,7 @@ test('приватность: по умолчанию всё скрыто, пе�
   await tab(page, 'profile');
   await page.locator('[data-page=profile-edit]').click();
   const sw = page.locator('#pr-privacy [data-act=pr-priv]');
-  assert.deepEqual(await sw.evaluateAll((a) => a.map((b) => b.getAttribute('aria-checked'))), ['false', 'false', 'false']);
+  assert.deepEqual(await sw.evaluateAll((a) => a.map((b) => b.getAttribute('aria-checked'))), ['false', 'false', 'false', 'false'], 'статус, депо, фото, номер телефона');
   assert.match(await text(page, '.screen'), /Причину отвлечения[\s\S]*не увидят никогда/);
   await page.locator('[data-act=pr-priv][data-k=depot]').click();
   await page.waitForFunction(() => document.querySelector('[data-k=depot]')?.getAttribute('aria-checked') === 'true');

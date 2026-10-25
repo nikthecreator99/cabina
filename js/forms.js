@@ -133,14 +133,21 @@ export const TRIP_KINDS = {
   freight: { label: 'Грузовой', hint: 'Грузовое движение' },
   passenger: { label: 'Пассажирский', hint: 'Пассажирское движение' },
   reserve: { label: 'Резерв', hint: 'Следование локомотива резервом' },
+  shunt: { label: 'Манёвры', hint: 'Маневровая работа' },
 };
 export const kindOf = (t) => (TRIP_KINDS[t?.kind] ? t.kind : 'freight');
-// вид движения из последней по времени поездки — чтобы не выбирать каждый раз
-function lastKind() {
-  let best = null;
-  for (const t of S.trips) if (!best || String(t.start) > String(best.start)) best = t;
-  return kindOf(best);
+// вид движения по умолчанию — самый частый в последних 20 поездках (при равенстве — из более поздней)
+export function usualKind(trips = S.trips) {
+  const last = [...trips].sort((a, b) => String(b.start).localeCompare(String(a.start))).slice(0, 20);
+  const n = {};
+  for (const t of last) n[kindOf(t)] = (n[kindOf(t)] || 0) + 1;
+  let best = 'freight';
+  for (const t of [...last].reverse()) if ((n[kindOf(t)] || 0) >= (n[best] || 0)) best = kindOf(t);
+  return last.length ? best : 'freight';
 }
+// вес, оси и условная длина — для грузового (и если уже были введены)
+const hasTrain = (t) => t.weight || t.axles || t.length;
+const posInt = (v, max) => { const n = Math.round(Number(String(v ?? '').replace(',', '.').replace(/\s/g, ''))); return Number.isFinite(n) && n > 0 && n <= max ? n : null; };
 
 export function openTripForm(tripId) {
   const existing = tripId ? S.trips.find((t) => t.id === tripId) : null;
@@ -148,7 +155,7 @@ export function openTripForm(tripId) {
   const today = fmtLocal(now).slice(0, 10);
   const base = existing ? JSON.parse(JSON.stringify({ ...existing, _stats: undefined, _statsAt: undefined })) : {
     id: uid(), routeId: null, routeLabel: '', start: '', end: '', passenger: [], waiting: [], locoType: '', locoNumber: '',
-    restType: 'turnaround', homeRest: null, homeChoice: null, kind: lastKind(), createdAt: Date.now(),
+    restType: 'turnaround', homeRest: null, homeChoice: null, kind: usualKind(), createdAt: Date.now(),
   };
   const wasLive = existing ? isLive(existing) : false;
   const linkedNote = existing ? S.notes.find((n) => n.tripId === existing.id) : null;
@@ -162,9 +169,13 @@ export function openTripForm(tripId) {
     endTouched: !!existing && !wasLive,
     locoType: base.locoType || '', locoNumber: base.locoNumber || '',
     kind: kindOf(base), kindOpen: false,
+    weight: base.weight ? String(base.weight) : '', axles: base.axles ? String(base.axles) : '', length: base.length ? String(base.length) : '',
+    trainOpen: !!hasTrain(base),
+    routeNo: base.routeNo || '', routeNoOpen: !!base.routeNo,
     passenger: (base.passenger || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     waiting: (base.waiting || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     note: linkedNote?.text || '',
+    noteOpen: !!linkedNote?.text,
     restType: base.restType || 'turnaround',
     homeSel: base.homeRest?.ids ? [...base.homeRest.ids] : [],
     homeOpen: !!base.homeRest?.ids,
@@ -186,6 +197,8 @@ export function openTripForm(tripId) {
       passenger: F.passenger.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
       waiting: F.waiting.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
       kind: F.kind,
+      weight: posInt(F.weight, 20000), axles: posInt(F.axles, 2000), length: posInt(F.length, 1000),
+      routeNo: F.routeNo.trim().slice(0, 20),
       locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber),
       restType: F.restType, homeRest, homeChoice,
     };
@@ -207,50 +220,58 @@ export function openTripForm(tripId) {
   const body = `
     ${existing ? '<div class="summary-top" id="tf-summary"></div>' : ''}
     <div class="field">
-      <div class="label"><span class="step-n">1</span>Маршрут <span class="opt">· необязательно</span></div>
+      <div class="label">Маршрут <span class="opt">· необязательно</span></div>
       <button class="pick" type="button" data-act="pick-route">${I.route}<span class="grow" id="tf-route-label"></span>${I.right}</button>
       <div class="quick" id="tf-route-quick"></div>
     </div>
     <div class="field">
-      <label for="tf-sd"><span class="step-n">2</span>Начало поездки</label>
+      <label for="tf-sd">Начало поездки</label>
       <div class="dt"><input type="date" id="tf-sd" class="input" aria-label="Дата начала"><input type="time" id="tf-st" class="input" aria-label="Время начала"></div>
     </div>
     <div class="field">
-      <label for="tf-ed"><span class="step-n">3</span>Окончание поездки</label>
+      <label for="tf-ed">Окончание поездки</label>
       <div class="dt"><input type="date" id="tf-ed" class="input" aria-label="Дата окончания"><input type="time" id="tf-et" class="input" aria-label="Время окончания"></div>
       <div class="hint" id="tf-end-hint"></div>
-      ${wasLive && !isPending(existing) ? `<button type="button" class="btn btn-ghost btn-sm" data-act="finish-now">${I.check} Завершить поездку</button>` : ''}
     </div>
     <div class="field">
-      <div class="label"><span class="step-n">4</span>Вид движения</div>
+      <div class="label">Вид движения</div>
       <button class="pick" type="button" data-act="pick-kind" id="tf-kind" aria-expanded="false">${I.train}<span class="grow" id="tf-kind-label"></span>${I.right}</button>
       <div class="kind-list" id="tf-kind-list" hidden>${Object.entries(TRIP_KINDS).map(([k, v]) => `<button type="button" class="choice" data-kind="${k}"><span>${v.label}<small>${v.hint}</small></span></button>`).join('')}</div>
+      <div id="tf-train"></div>
     </div>
     <div class="field">
-      <label for="tf-lt"><span class="step-n">5</span>Тип локомотива</label>
+      <label for="tf-lt">Тип локомотива</label>
       <input id="tf-lt" class="input" list="tf-types" placeholder="Например, 2ЭС5К" autocomplete="off" autocapitalize="characters" maxlength="30">
       <datalist id="tf-types">${types.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
       ${types.length ? `<div class="quick" id="tf-type-quick">${types.slice(0, 10).map((t) => `<button type="button" class="qchip" data-type="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}
     </div>
     <div class="field">
-      <label for="tf-ln"><span class="step-n">6</span>Номер локомотива</label>
+      <label for="tf-ln">Номер локомотива</label>
       <input id="tf-ln" class="input" inputmode="numeric" placeholder="Например, 355" autocomplete="off" maxlength="12">
       <div id="tf-loco-notes"></div>
+      <div id="tf-note-box" hidden>
+        <button type="button" class="add-btn" data-act="add-note" id="tf-add-note">${I.note} Заметка о локомотиве</button>
+        <div class="hint" id="tf-note-why">Увидите её, когда снова попадёте на этот локомотив.</div>
+        <div id="tf-note-field" hidden>
+          <label for="tf-note" class="mini-label">Заметка о локомотиве</label>
+          <textarea id="tf-note" class="input" placeholder="Например: не работает обогрев" maxlength="1000"></textarea>
+          <div class="hint">Увидите её, когда снова попадёте на этот локомотив.</div>
+        </div>
+      </div>
     </div>
     <div class="field">
-      <label for="tf-note"><span class="step-n">7</span>Заметка о локомотиве <span class="opt">· необязательно</span></label>
-      <textarea id="tf-note" class="input" placeholder="Например: часто ломается" maxlength="1000"></textarea>
-      <div class="hint">Заметка привяжется к локомотиву и будет видна в следующих поездках на нём.</div>
-    </div>
-    <div class="field">
-      <div class="label"><span class="step-n">8</span>Следование пассажиром <span class="opt">· необязательно</span></div>
       <div class="list" id="tf-wait"></div>
-      <button type="button" class="add-btn" data-act="add-wait" id="tf-add-wait" hidden>${I.plus} Добавить ожидание следования пассажиром</button>
+      <button type="button" class="add-btn" data-act="add-wait" id="tf-add-wait" hidden>${I.clock} Ожидание следования пассажиром</button>
       <div class="list" id="tf-pass"></div>
-      <button type="button" class="add-btn" data-act="add-pass">${I.plus} Добавить следование пассажиром</button>
+      <button type="button" class="add-btn" data-act="add-pass">${I.passenger} Следование пассажиром</button>
+      <button type="button" class="add-btn" data-act="add-routeno" id="tf-add-routeno">${I.file} Номер маршрута</button>
+      <div id="tf-routeno-field" hidden>
+        <label for="tf-rn" class="mini-label">Номер маршрута</label>
+        <input id="tf-rn" class="input" inputmode="numeric" placeholder="Например, 123456" autocomplete="off" maxlength="20">
+      </div>
     </div>
     <div class="field">
-      <div class="label"><span class="step-n">9</span>Вид отдыха после поездки</div>
+      <div class="label">Вид отдыха после поездки</div>
       <div class="seg accent" id="tf-rest">
         <button type="button" data-rest="turnaround">${I.bed2}<span>Отдых в пункте оборота</span></button>
         <button type="button" data-rest="home">${I.home2}<span>Домашний отдых</span></button>
@@ -271,6 +292,7 @@ export function openTripForm(tripId) {
   $(el, '#tf-ed').value = F.ed; $(el, '#tf-et').value = F.et;
   $(el, '#tf-lt').value = F.locoType; $(el, '#tf-ln').value = F.locoNumber;
   $(el, '#tf-note').value = F.note;
+  $(el, '#tf-rn').value = F.routeNo;
 
   function renderRoute() {
     const r = F.routeId && S.routes.find((x) => x.id === F.routeId);
@@ -290,7 +312,29 @@ export function openTripForm(tripId) {
   function renderTypeChips() {
     el.querySelectorAll('[data-type]').forEach((b) => b.setAttribute('aria-pressed', String(locoKey(b.dataset.type, '') === locoKey(F.locoType, ''))));
   }
+  // заметка — только когда введён номер локомотива: кнопка «+», по нажатию — поле
+  function renderNoteBox() {
+    const show = !!normNum(F.locoNumber) || !!F.note.trim();
+    $(el, '#tf-note-box').hidden = !show;
+    $(el, '#tf-add-note').hidden = F.noteOpen;
+    $(el, '#tf-note-why').hidden = F.noteOpen;
+    $(el, '#tf-note-field').hidden = !F.noteOpen;
+  }
+  function renderRouteNo() {
+    $(el, '#tf-add-routeno').hidden = F.routeNoOpen;
+    $(el, '#tf-routeno-field').hidden = !F.routeNoOpen;
+  }
+  // вес, оси, условная длина — кнопкой «+» у грузового
+  function renderTrain() {
+    const box = $(el, '#tf-train');
+    const can = F.kind === 'freight' || F.weight || F.axles || F.length;
+    if (!can) { setHTML(box, ''); return; }
+    if (!F.trainOpen) { setHTML(box, `<button type="button" class="add-btn" data-act="add-train">${I.train} Вес, оси, длина</button>`); return; }
+    const f = (k, label, ph, max) => `<div><label for="tf-${k}" class="mini-label">${label}</label><input class="input" id="tf-${k}" data-tf="${k}" inputmode="numeric" maxlength="${max}" autocomplete="off" placeholder="${ph}" value="${esc(F[k])}"></div>`;
+    if (!box.querySelector('#tf-weight')) setHTML(box, `<div class="train-row">${f('weight', 'Вес, т', '6000', 6)}${f('axles', 'Оси', '280', 4)}${f('length', 'Длина, усл. ваг.', '71', 4)}</div>`);
+  }
   function renderLocoNotes() {
+    renderNoteBox();
     const box = $(el, '#tf-loco-notes');
     if (!F.locoType.trim() || !normNum(F.locoNumber)) { setHTML(box, ''); return; }
     const notes = notesFor(F.locoType, F.locoNumber).filter((n) => n.tripId !== base.id);
@@ -437,7 +481,7 @@ export function openTripForm(tripId) {
   }
   function refreshAll() { renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
 
-  renderRoute(); renderKind(); renderPass(); refreshAll();
+  renderRoute(); renderKind(); renderTrain(); renderRouteNo(); renderPass(); refreshAll();
   setTimeout(() => tripFormTour(el), 450);
 
   // автодата окончания
@@ -450,13 +494,13 @@ export function openTripForm(tripId) {
 
   const onTripField = (e) => {
     const t = e.target;
-    const map = { 'tf-sd': 'sd', 'tf-st': 'st', 'tf-ed': 'ed', 'tf-et': 'et', 'tf-lt': 'locoType', 'tf-ln': 'locoNumber', 'tf-note': 'note' };
+    const map = { 'tf-sd': 'sd', 'tf-st': 'st', 'tf-ed': 'ed', 'tf-et': 'et', 'tf-lt': 'locoType', 'tf-ln': 'locoNumber', 'tf-note': 'note', 'tf-rn': 'routeNo' };
     let obj = F;
-    let key = map[t.id];
+    let key = map[t.id] || t.dataset.tf;
     if (!key && t.dataset.pf) { const pid = t.closest('[data-pid]')?.dataset.pid; obj = [...F.passenger, ...F.waiting].find((x) => x.id === pid); key = t.dataset.pf; }
     if (!key || !obj || obj[key] === t.value) return; // значение не изменилось — ничего не перерисовываем
     obj[key] = t.value;
-    if (key === 'note') return;
+    if (key === 'note' || key === 'routeNo' || t.dataset.tf) return;
     if (obj === F && key === 'ed') F.endTouched = true;
     if (obj === F && (key === 'sd' || key === 'st' || key === 'et')) autoEnd();
     $(el, '[data-error]').innerHTML = '';
@@ -472,7 +516,7 @@ export function openTripForm(tripId) {
     if (b.dataset.route) { F.routeId = b.dataset.route; renderRoute(); refreshAll(); return; }
     if (b.dataset.type) { F.locoType = b.dataset.type; $(el, '#tf-lt').value = b.dataset.type; refreshAll(); return; }
     if (b.dataset.rest) { F.restType = b.dataset.rest; refreshAll(); return; }
-    if (b.dataset.kind) { F.kind = b.dataset.kind; F.kindOpen = false; renderKind(); refreshAll(); return; }
+    if (b.dataset.kind) { F.kind = b.dataset.kind; F.kindOpen = false; renderKind(); renderTrain(); refreshAll(); return; }
     if (b.dataset.choice) { F.homeChoice = F.homeChoice === b.dataset.choice ? null : b.dataset.choice; refreshAll(); return; }
     if (b.dataset.cand) {
       const id = b.dataset.cand;
@@ -485,13 +529,12 @@ export function openTripForm(tripId) {
     if (act === 'pick-route') {
       const res = await pickRoute(F.routeId);
       if (res !== undefined) { F.routeId = res; if (!res) F.routeLabel = ''; renderRoute(); refreshAll(); }
-    } else if (act === 'finish-now') {
-      const n = fmtLocal(nowLocal());
-      F.ed = n.slice(0, 10); F.et = n.slice(11, 16); F.endTouched = true;
-      $(el, '#tf-ed').value = F.ed; $(el, '#tf-et').value = F.et;
-      $(el, '[data-error]').innerHTML = '';
-      refreshAll();
-      toast('Подставлено текущее время — проверьте и нажмите «Сохранить»', { ms: 3500 });
+    } else if (act === 'add-note') {
+      F.noteOpen = true; renderNoteBox(); $(el, '#tf-note').focus();
+    } else if (act === 'add-routeno') {
+      F.routeNoOpen = true; renderRouteNo(); $(el, '#tf-rn').focus();
+    } else if (act === 'add-train') {
+      F.trainOpen = true; renderTrain(); $(el, '#tf-weight')?.focus();
     } else if (act === 'home-calc') {
       F.homeOpen = true;
       if (!F.homeSel.length) F.homeSel = suggestChain(draft()).chain.map((c) => c.id); // сразу вся поездка (или одна эта)
@@ -733,7 +776,7 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
       // больничный без оплаты дня в настройках — подсказать, что его можно посчитать
       if (obj.type === 'sick' && existing?.type !== 'sick' && !myPay().sickDay) setTimeout(offerSickPay, 350);
       // учёба без среднего за день — подсказать, где его указать
-      if (obj.type === 'study' && existing?.type !== 'study' && !myPay().studyDay) setTimeout(offerStudyPay, 350);
+      if (obj.type === 'study' && existing?.type !== 'study' && !studyPayable(myPay())) setTimeout(offerStudyPay, 350);
     }
   });
 }
@@ -747,13 +790,17 @@ async function offerSickPay() {
   if (ok) openTariffs('pay-sick');
 }
 
+// Учёба считается по среднему заработку за час (в обоих режимах)
+const studyPayable = (cfg) => cfg.avgHour > 0;
+
 async function offerStudyPay() {
+  const avg = myPay().mode === 'avg';
   const ok = await confirmDialog({
     title: 'Посчитать оплату учёбы?',
-    text: 'Учёбу (сессию) квиток оплачивает по среднему заработку за день. Укажите его в ☰ → «Тарифные ставки и надбавки» → «Учёба» — тогда она появится в расчёте заработка.',
+    text: 'Учёба (сессия) оплачивается по среднему заработку за час × часы дней учёбы по производственному календарю. Укажите средний за час в ☰ → «Тарифные ставки и надбавки» — тогда учёба появится в расчёте заработка.',
     ok: 'Указать', cancel: 'Позже',
   });
-  if (ok) openTariffs('pay-study');
+  if (ok) openTariffs(avg ? 'pay-avg' : 'pay-study');
 }
 
 // =====================================================================

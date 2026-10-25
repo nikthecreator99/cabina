@@ -1,6 +1,6 @@
 // Статистика: поездная и заработная плата за месяц, квартал, год или всё время.
 // Показываются только блоки, где есть данные.
-import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, plural } from './ui.js';
+import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, plural } from './ui.js';
 import { S, statsOf, nowLocal, routeOf, locoLabel, locoKey, myPay, refreshLive, isPending } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN } from './calc.js';
 import { dayInfo } from './calendar.js';
@@ -9,6 +9,7 @@ import { houseOf, dayOffIntervals } from './rest.js';
 import { ABS_TYPES } from './forms.js';
 import { exportSlip } from './slip.js';
 import { slipPdfTour } from './tours.js';
+import { openDay } from './day.js';
 
 const MONTHS_DAT = ['январю', 'февралю', 'марту', 'апрелю', 'маю', 'июню', 'июлю', 'августу', 'сентябрю', 'октябрю', 'ноябрю', 'декабрю'];
 const ROMAN = ['I', 'II', 'III', 'IV'];
@@ -97,9 +98,11 @@ function collect(p) {
   R.passenger = 0;
   // следование резервом: число поездок периода и их часы по месяцам периода (без ожидания — как в заработке)
   R.reserve = { n: trips.filter((t) => t.kind === 'reserve').length, min: 0 };
+  R.shunt = { n: trips.filter((t) => t.kind === 'shunt').length, min: 0 }; // манёвры — так же
   for (const t of S.trips) {
-    if (t.kind !== 'reserve') continue;
-    for (const [mk, b] of Object.entries(statsOf(t).byMonth || {})) if (keys.has(mk)) R.reserve.min += b.work - (b.wait || 0);
+    const x = t.kind === 'reserve' ? R.reserve : t.kind === 'shunt' ? R.shunt : null;
+    if (!x) continue;
+    for (const [mk, b] of Object.entries(statsOf(t).byMonth || {})) if (keys.has(mk)) x.min += b.work - (b.wait || 0);
   }
   for (const t of trips) {
     const r = t.routeId && S.routes.find((x) => x.id === t.routeId);
@@ -173,6 +176,7 @@ function monthCalendar(y, m) {
   for (const x of dayOffIntervals()) {
     for (let d = Math.floor(x.s / DAY) * DAY; d < x.e; d += DAY) off.add(dateKeyOf(d));
   }
+  for (const k of S.daysOff) off.add(k); // отмеченные в календаре вручную
   const used = new Set();
   let cells = '<span></span>'.repeat(firstDow);
   for (let d = 1; d <= n; d++) {
@@ -180,11 +184,12 @@ function monthCalendar(y, m) {
     const kind = dayInfo(k).kind;
     const cls = abs.has(k) ? `abs-${abs.get(k)}` : work.has(k) ? 'work' : off.has(k) ? 'dayoff' : 'free';
     used.add(cls);
-    cells += `<span class="cal-d ${cls} ${kind === 'holiday' ? 'hol' : ''} ${kind === 'weekend' || kind === 'off' || kind === 'holiday' ? 'we' : ''}" title="${d} ${MONTHS_SHORT[m - 1]}">${d}</span>`;
+    const what = { work: 'работа', dayoff: 'выходной', free: 'пусто' }[cls] || ABS_TYPES[abs.get(k)]?.label.toLowerCase() || '';
+    cells += `<button class="cal-d ${cls} ${kind === 'holiday' ? 'hol' : ''} ${kind === 'weekend' || kind === 'off' || kind === 'holiday' ? 'we' : ''}" data-act="cal-day" data-d="${k}" aria-label="${d} ${MONTHS_GEN[m - 1]}: ${what}">${d}</button>`;
   }
   const lg = [['work', 'работа'], ['dayoff', 'выходной'], ['free', 'отдых'], ['abs-sick', 'больничный'], ['abs-vacation', 'отпуск'], ['abs-medical', 'медкомиссия'], ['abs-study', 'учёба']]
     .filter(([c]) => used.has(c)).map(([c, l]) => `<span><i class="cal-d ${c}"></i>${l}</span>`).join('');
-  return `<div class="cal"><div class="cal-wd">${['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((w) => `<span>${w}</span>`).join('')}</div><div class="cal-grid">${cells}</div><div class="cal-lg">${lg}</div></div>`;
+  return `<div class="cal"><div class="hint cal-tip">Нажмите на день: у рабочего — сводка по поездке, у пустого — отвлечение или выходной.</div><div class="cal-wd">${['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((w) => `<span>${w}</span>`).join('')}</div><div class="cal-grid">${cells}</div><div class="cal-lg">${lg}</div></div>`;
 }
 
 // ---------------------------------------------------------------- блоки
@@ -224,6 +229,7 @@ function tripsView(R) {
       ${R.km > 0 ? kv('Пройдено', `${Math.round(R.km).toLocaleString('ru-RU')} км`) : ''}
       ${R.passenger > 0 ? kv('Пассажиром', fmtDur(R.passenger, { short: true })) : ''}
       ${R.wait > 0 ? kv('Ожидание следования', fmtDur(R.wait, { short: true })) : ''}
+      ${R.shunt.n || R.shunt.min > 0 ? kv('Манёвры', `${R.shunt.n} ${plural(R.shunt.n, 'смена', 'смены', 'смен')}`, fmtDur(R.shunt.min, { short: true })) : ''}
       ${R.reserve.n || R.reserve.min > 0 ? kv('Резервом', `${R.reserve.n} ${plural(R.reserve.n, 'поездка', 'поездки', 'поездок')}`, fmtDur(R.reserve.min, { short: true })) : ''}
     </div>`);
   }
@@ -319,6 +325,7 @@ export function statsClick(act, b, ctx) {
       exportSlip(ST.y, ST.m).finally(() => { b.disabled = false; b.removeAttribute('aria-busy'); });
       return true;
     }
+    case 'cal-day': openDay(b.dataset.d); return true;
     case 'st-month': ST.period = 'month'; ST.y = +b.dataset.y; ST.m = +b.dataset.m; ctx.rerender(); window.scrollTo(0, 0); return true;
     default: return false;
   }

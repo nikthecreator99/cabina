@@ -4,7 +4,7 @@ import { S, nowLocal, saveSettings, deleteRoute } from './store.js';
 import { fmtDur, fmtLocal } from './calc.js';
 import { openRouteForm } from './forms.js';
 import { restHouses, dayOffMin } from './rest.js';
-import { PAY_FIELDS, ROLES, payCfg, currentRate, hasRate, fmtRub } from './pay.js';
+import { PAY_FIELDS, ROLES, payCfg, paySet, currentRate, hasRate, fmtRub } from './pay.js';
 
 export const fmtKm = (v) => `${String(Math.round(v * 10) / 10).replace('.', ',')} км`;
 const todayKey = () => fmtLocal(nowLocal()).slice(0, 10);
@@ -63,30 +63,36 @@ export function renderRoutes() {
 }
 
 // ---------------------------------------------------------------- тарифные ставки и надбавки
-let payRole = null; // какой набор открыт на экране
+// Набор ставок один (с 2.6): если ставка меняется — человек просто вписывает новую. Надбавка за класс — только машинисту.
+const payRole = () => S.profile.role || 'assistant';
+// короткие пояснения в режиме «по среднему»
+const AVG_HINTS = {
+  avgHour: 'Со всеми доплатами, до НДФЛ. Все рабочие часы × эта сумма. Учёба — тоже по ней: часы дней учёбы по календарю × эта сумма.',
+  sickDay: 'Сколько начисляют за один календарный день больничного.',
+};
+// учёба в режиме «по тарифу» — тоже по среднему за час
+const STUDY_HINT = 'Учёба оплачивается по среднему: эта сумма × часы дней учёбы по производственному календарю (обычный день — 8 ч). Средний за час — сумма за техучёбу в квитке, делённая на её часы.';
 export function renderTariffs() {
-  if (!payRole) payRole = S.profile.role || 'assistant';
-  const raw = S.settings.pay?.[payRole] || {};
-  const cfg = payCfg(S.settings.pay, payRole);
+  const raw = paySet(S.settings.pay, payRole());
+  const cfg = payCfg(S.settings.pay, payRole());
   const today = todayKey();
   const rates = [...cfg.rates].sort((a, b) => String(b.from || '').localeCompare(String(a.from || '')));
   const cur = currentRate(cfg, today);
-  const field = (f) => {
+  const field = (f, hint = f.hint) => {
     const v = raw[f.k];
     const shown = v === undefined || v === null ? (f.def ?? '') : v;
     return `<div class="pay-field">
       <label for="pf-${f.k}">${esc(f.label)}</label>
       <div class="input-unit"><input class="input" id="pf-${f.k}" data-pf="${f.k}" inputmode="decimal" autocomplete="off" value="${esc(numText(shown))}" placeholder="${f.ph || '0'}"><span>${f.unit}</span></div>
-      <div class="hint">${esc(f.hint)}</div></div>`;
+      <div class="hint">${esc(hint)}</div></div>`;
   };
-  const fields = PAY_FIELDS.filter((f) => !f.role || f.role === payRole);
+  const fields = PAY_FIELDS.filter((f) => !f.role || f.role === payRole());
+  const avg = cfg.mode === 'avg';
   return `${pageHead('Тарифные ставки и надбавки', { back: true })}
-    <div class="seg" id="pay-role">${Object.entries(ROLES).map(([k, v]) => `<button data-act="pay-role" data-role="${k}" aria-pressed="${payRole === k}">${v}</button>`).join('')}</div>
-    <div class="hint">${payRole === S.profile.role ? 'Этот набор используется в расчёте — он соответствует должности в профиле.' : `В расчёте сейчас используется набор «${ROLES[S.profile.role]}» — по должности в профиле.`}</div>
     <div class="group-title">Как считать заработок</div>
-    <div class="seg" id="pay-mode">${[['tariff', 'По тарифной ставке'], ['avg', 'По среднему за час']].map(([k, v]) => `<button data-act="pay-mode" data-mode="${k}" aria-pressed="${cfg.mode === k}">${v}</button>`).join('')}</div>
-    ${cfg.mode === 'avg' ? `<div class="panel pay-panel" id="pay-avg">${fields.filter((f) => f.group === 'avg').map(field).join('')}
-      <div class="pay-field"><div class="hint">Все рабочие часы × средний за час, затем минус НДФЛ. Упрощённо: ночные, праздничные и переработка отдельно не учитываются — они уже внутри среднего.</div></div></div>` : `
+    <div class="seg" id="pay-mode">${[['tariff', 'По тарифу'], ['avg', 'По среднему']].map(([k, v]) => `<button data-act="pay-mode" data-mode="${k}" aria-pressed="${cfg.mode === k}">${v}</button>`).join('')}</div>
+    ${avg ? `<div class="panel pay-panel" id="pay-avg">${['avg', 'sick'].map((g) => fields.filter((f) => f.group === g).map((f) => field(f, AVG_HINTS[f.k])).join('')).join('')}</div>
+    <div class="hint">Упрощённо: ночные, праздничные и переработка уже внутри среднего. НДФЛ 13% вычитается.</div>` : `
     <div class="panel pay-panel">
       <div class="pay-field">
         <label for="pf-rate">Тарифная ставка, ₽ в час</label>
@@ -94,23 +100,23 @@ export function renderTariffs() {
         <div class="hint">В квитке — «Оклад/Тариф» в шапке. Все часы умножаются на неё, от неё считаются все доплаты.</div>
         ${rates.length > 1 || (rates[0] && rates[0].from) ? `<div class="rate-hist"><div class="mini-label">История ставки</div>${rates.map((r, i) => `<div class="rate-row"><span>${r.from ? `с ${dateText(r.from)}` : rates.length > 1 ? 'раньше' : 'всегда'}</span><b>${fmtRub(r.rate, true)}</b>${rates.length > 1 ? `<button class="icon-btn danger sm" data-act="rate-del" data-i="${cfg.rates.indexOf(r)}" aria-label="Удалить ставку ${fmtRub(r.rate, true)}">${small(I.trash, 16)}</button>` : ''}</div>`).join('')}</div>` : ''}
       </div>
-      ${fields.filter((f) => !f.deduct && !f.group).map(field).join('')}
+      ${fields.filter((f) => !f.deduct && !f.group).map((f) => field(f)).join('')}
     </div>`}
-    <div class="group-title">Больничный</div>
-    <div class="panel pay-panel" id="pay-sick">${fields.filter((f) => f.group === 'sick').map(field).join('')}
+    ${avg ? '' : `<div class="group-title">Больничный</div>
+    <div class="panel pay-panel" id="pay-sick">${fields.filter((f) => f.group === 'sick').map((f) => field(f)).join('')}
       <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Больничный»: число дней больничного в месяце × оплата одного дня. НДФЛ с неё тоже вычитается.</div></div></div>
     <div class="group-title">Учёба (сессия)</div>
-    <div class="panel pay-panel" id="pay-study">${fields.filter((f) => f.group === 'study').map(field).join('')}
-      <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Учёба (сессия)»: календарные дни отвлечения «Учёба» в месяце × эта сумма.</div></div></div>
-    <div class="group-title">Удержания (необязательно)</div>
-    <div class="panel pay-panel">${fields.filter((f) => f.deduct).map(field).join('')}
+    <div class="panel pay-panel" id="pay-study">${fields.filter((f) => f.group === 'avg').map((f) => field(f, STUDY_HINT)).join('')}</div>
+    `}<div class="group-title">Удержания (необязательно)</div>
+    <div class="panel pay-panel">${fields.filter((f) => f.deduct).map((f) => field(f)).join('')}
       <div class="pay-field"><div class="hint">НДФЛ 13% вычитается всегда.</div></div></div>
     <div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Пустые поля и нули в расчёт не попадают. Ставки хранятся только в этом телефоне.</div></div>`;
 }
 
-function savePaySet(role, patch) {
+// всё пишется в один набор main; прежние наборы по должностям не трогаем
+function savePaySet(patch) {
   const pay = { ...(S.settings.pay || {}) };
-  pay[role] = { ...(pay[role] || {}), ...patch };
+  pay.main = { ...paySet(pay, payRole()), ...patch };
   return saveSettings({ pay });
 }
 
@@ -140,7 +146,7 @@ function askRateDate(rate, current) {
 }
 
 async function changeRate(input) {
-  const cfg = payCfg(S.settings.pay, payRole);
+  const cfg = payCfg(S.settings.pay, payRole());
   const v = parseNum(input.value);
   const cur = currentRate(cfg, todayKey());
   if (v === '' || Number.isNaN(v) || v === 0) {
@@ -169,7 +175,7 @@ async function changeRate(input) {
       rates.push({ from: ans.from, rate });
     }
   }
-  await savePaySet(payRole, { rates });
+  await savePaySet({ rates });
   toast('Ставка сохранена');
 }
 
@@ -248,10 +254,9 @@ export async function workClick(act, b, ctx) {
       if (r) openRouteForm(null, { from: r.to, to: r.from, distanceKm: r.distanceKm });
       return true;
     }
-    case 'pay-role': payRole = b.dataset.role; ctx.rerender(); return true;
-    case 'pay-mode': { const m = b.dataset.mode === 'avg' ? 'avg' : 'tariff'; await savePaySet(payRole, { mode: m }); toast(m === 'avg' ? 'Заработок считается по среднему за час' : 'Заработок считается по тарифной ставке'); return true; }
+    case 'pay-mode': { const m = b.dataset.mode === 'avg' ? 'avg' : 'tariff'; await savePaySet({ mode: m }); toast(m === 'avg' ? 'Заработок считается по среднему' : 'Заработок считается по тарифной ставке'); return true; }
     case 'rate-del': {
-      const cfg = payCfg(S.settings.pay, payRole);
+      const cfg = payCfg(S.settings.pay, payRole());
       const r = cfg.rates[+b.dataset.i];
       if (!r) return true;
       const ok = await confirmDialog({ title: 'Удалить ставку из истории?', text: `${fmtRub(r.rate, true)}${r.from ? ` с ${dateText(r.from)}` : ''}. Эти месяцы будут посчитаны по соседней ставке.` });
@@ -262,7 +267,7 @@ export async function workClick(act, b, ctx) {
           const first = [...rates].sort((a, c) => a.from.localeCompare(c.from))[0];
           first.from = null;
         }
-        await savePaySet(payRole, { rates });
+        await savePaySet({ rates });
         toast('Ставка удалена');
       }
       return true;
@@ -289,10 +294,10 @@ export async function workChange(e) {
     const v = parseNum(t.value);
     if (Number.isNaN(v)) { toast('Введите число, например 12 или 12,5', { error: true }); return true; }
     if (v !== '' && v > (PAY_FIELDS.find((f) => f.k === t.dataset.pf)?.unit === '%' ? 300 : 100000)) { toast('Проверьте значение — слишком большое', { error: true }); return true; }
-    await savePaySet(payRole, { [t.dataset.pf]: v === '' ? '' : v });
+    await savePaySet({ [t.dataset.pf]: v === '' ? '' : v });
     return true;
   }
   return false;
 }
 
-export const resetPayRole = () => { payRole = null; };
+

@@ -12,7 +12,8 @@
 //  • НДФЛ 13%, необязательные удержания (профсоюз, корпоративная пенсия);
 //  • ком. расходы за поездку — компенсация, налогом не облагается;
 //  • следование резервом (вид движения «Резерв») — по тарифу отдельной строкой («ОплЗаРабНаОдиночСледЛоком»);
-//  • учёба (сессия) — календарные дни × средний заработок за день, как в квитке («ОплатаУчебногоОтпуска»);
+//  • учёба (сессия) — средний заработок за час × часы дней учёбы по производственному календарю
+//    (средний за день люди не знают, а средний за час легко посчитать по квитку);
 //  • режим «по среднему»: все рабочие часы × средний заработок за час, без отдельных доплат и надбавок.
 // Все суммы — в рублях, время на входе — в минутах.
 import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal } from './calc.js';
@@ -33,8 +34,7 @@ export const PAY_FIELDS = [
   { k: 'bam', label: 'Бамовская надбавка', unit: '%', def: null, hint: 'Только для работающих на БАМе. Если в квитке её нет — оставьте пустым.' },
   { k: 'trip', label: 'Ком. расходы за поездку', unit: '₽', def: null, hint: 'Фиксированная выплата за каждую поездку, если она у вас есть. Налогом не облагается.' },
   { k: 'sickDay', label: 'Оплата одного дня больничного', unit: '₽', def: null, hint: 'Сколько вам начисляют за один календарный день больничного. Найти можно в расчётном листке: сумму по больничному разделите на число дней болезни. Если оставить пустым, больничный не считается.', group: 'sick', ph: 'Например, 2 500' },
-  { k: 'studyDay', label: 'Средний заработок за день', unit: '₽', def: null, hint: 'По нему считается учёба (сессия): календарные дни учёбы × эта сумма. Найти можно в квитке: сумму отпускных или учебных разделите на число дней.', group: 'study', ph: 'Например, 3 500' },
-  { k: 'avgHour', label: 'Средний заработок за час', unit: '₽/ч', def: null, hint: 'Сколько вы в среднем получаете за час со всеми доплатами, до вычета НДФЛ. Найти можно в квитке: сумму за техучёбу разделите на её часы.', group: 'avg', ph: 'Например, 600' },
+  { k: 'avgHour', label: 'Средний заработок за час', unit: '₽/ч', def: null, hint: 'Сколько вы в среднем получаете за час со всеми доплатами, до вычета НДФЛ. Найти можно в квитке: сумму за техучёбу разделите на её часы. По нему считается учёба (сессия).', group: 'avg', ph: 'Например, 600' },
   { k: 'union', label: 'Профсоюзный взнос', unit: '%', def: null, hint: 'Удержание, если вы в профсоюзе. В квитке — «Профсоюз…», обычно 1%.', deduct: true },
   { k: 'pension', label: 'Корпоративная пенсия', unit: '%', def: null, hint: 'Добровольный взнос, если вы его платите. В квитке — «Удержание взнос КорпПенсия».', deduct: true },
 ];
@@ -42,9 +42,19 @@ export const PAY_FIELDS = [
 const num = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : 0; };
 const round2 = (v) => Math.round(v * 100) / 100;
 
-// Набор ставок с подставленными значениями по умолчанию
+// Один набор ставок на человека (с 2.6, ключ main). Раньше наборы были по должностям: пока main нет,
+// берём набор должности из профиля, а если в нём нет ставки — тот, где она есть. Старые наборы не удаляются.
+const hasData = (x) => !!x && typeof x === 'object' && ((Array.isArray(x.rates) && x.rates.some((r) => num(r.rate))) || num(x.avgHour) > 0);
+export function paySet(sets, role = 'assistant') {
+  if (!sets || typeof sets !== 'object') return {};
+  if (sets.main && typeof sets.main === 'object') return sets.main;
+  if (hasData(sets[role])) return sets[role];
+  return Object.keys(ROLES).map((k) => sets[k]).find(hasData) || sets[role] || {};
+}
+
+// Набор ставок с подставленными значениями по умолчанию. role — должность из профиля (надбавка за класс — только машинисту)
 export function payCfg(sets, role = 'assistant') {
-  const raw = (sets && sets[role]) || {};
+  const raw = paySet(sets, role);
   const cfg = { role, mode: raw.mode === 'avg' ? 'avg' : 'tariff', rates: Array.isArray(raw.rates) ? raw.rates.filter((r) => num(r.rate)) : [] };
   for (const f of PAY_FIELDS) {
     if (f.role && f.role !== role) { cfg[f.k] = 0; continue; }
@@ -100,7 +110,8 @@ function minutesInMonth(ivs, mk) {
 
 // Начисление за часы поездки (или её часть в месяце) без переработки:
 // ставка, ожидание, ночные, вредность, класс, праздничные. part — { work, night, holiday, wait } в минутах.
-// kind — вид движения поездки: у резерва часы (кроме ожидания) идут своей строкой, тоже по тарифу
+// kind — вид движения поездки: у резерва часы (кроме ожидания) идут своей строкой, тоже по тарифу.
+// Пассажирский и манёвры пока оплачиваются как грузовой (будущие доплаты за тяжёлый поезд манёврам не положены).
 function hoursPay(part, rate, cfg, kind) {
   const h = part.work / 60;
   const w = (part.wait || 0) / 60;
@@ -200,10 +211,12 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const sickDays = sickDaysInMonth(absences, y, m);
   const sickPay = sickDays * cfg.sickDay;
   L('sick', 'Больничный', sickPay, { days: sickDays });
-  // учёба (сессия): календарные дни в этом месяце × средний заработок за день
+  // учёба (сессия): средний заработок за час × часы дней учёбы по производственному календарю
+  // (те же часы, что вычтены из нормы; 8 ч в обычный день, 7 — в предпраздничный, 0 — в выходной)
   const studyDays = absDaysInMonth(absences, y, m, 'study');
-  const studyPay = studyDays * cfg.studyDay;
-  L('study', 'Учёба (сессия)', studyPay, { days: studyDays });
+  const studyHours = sum.absByType?.study || 0;
+  const studyPay = studyHours * cfg.avgHour;
+  L('study', 'Учёба (сессия)', studyPay, { hours: studyHours });
   res.sickDays = sickDays;
   res.studyDays = studyDays;
   res.rate = avg ? 0 : rateEnd;

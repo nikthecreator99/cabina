@@ -88,6 +88,10 @@ test('ошибки в форме поездки показываются и не
   await f.locator('[data-act=save-trip]').click();
   assert.match(await f.locator('[data-error]').innerText(), /0 минут/);
   await f.locator('#tf-et').fill('12:00');
+  // 2.6: заметка предлагается только после номера локомотива
+  assert.equal(await f.locator('#tf-note-box').isHidden(), true);
+  await f.locator('#tf-ln').fill('355');
+  await f.locator('#tf-add-note').click();
   await f.locator('#tf-note').fill('Течёт кран');
   await f.locator('[data-act=save-trip]').click();
   assert.match(await f.locator('[data-error]').innerText(), /укажите тип и номер локомотива/);
@@ -245,11 +249,12 @@ test('переключение месяцев и возврат к текуще�
   const { context, page } = await openApp(env);
   assert.equal(await page.locator('[data-act=today]').count(), 0);
   await page.locator('[data-act=next]').click();
-  assert.equal(await text(page, '.month-title'), 'Ноябрь');
+  // 2.6: не текущий месяц — название становится кнопкой «к сегодня»
+  assert.match(await text(page, '.month-title'), /^Ноябрь\s+к сегодня$/);
   assert.match(await text(page, '.hero'), /Норма: 159 ч/);
   await page.locator('[data-act=next]').click();
   await page.locator('[data-act=next]').click();
-  assert.equal(await text(page, '.month-title'), 'Январь 2027');
+  assert.match(await text(page, '.month-title'), /^Январь 2027\s+к сегодня$/);
   await page.locator('[data-act=today]').click();
   assert.equal(await text(page, '.month-title'), 'Октябрь');
   await context.close();

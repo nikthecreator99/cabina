@@ -58,7 +58,7 @@ test('явка заранее: «Ждёт явки», «До явки остал
   await context.close();
 });
 
-test('вид движения: список из трёх, запоминается последний, резерв — отдельной строкой в зарплате и в статистике', async () => {
+test('вид движения: список из четырёх, по умолчанию самый частый, резерв — отдельной строкой в зарплате и в статистике', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { settings: { pay: PAY } });
   await page.locator('[data-act=add-trip]').click();
@@ -70,7 +70,7 @@ test('вид движения: список из трёх, запоминает�
   const lb = await f.locator('#tf-lt').boundingBox();
   assert.ok(kb.y < lb.y, '«Вид движения» выше типа локомотива');
   await f.locator('#tf-kind').click();
-  assert.deepEqual((await f.locator('#tf-kind-list [data-kind]').allInnerTexts()).map((s) => s.split('\n')[0].trim()), ['Грузовой', 'Пассажирский', 'Резерв']);
+  assert.deepEqual((await f.locator('#tf-kind-list [data-kind]').allInnerTexts()).map((s) => s.split('\n')[0].trim()), ['Грузовой', 'Пассажирский', 'Резерв', 'Манёвры']);
   await f.locator('#tf-kind-list [data-kind=reserve]').click();
   assert.equal(await f.locator('#tf-kind-list').isHidden(), true);
   assert.match(await text(f, '#tf-kind'), /Резерв/);
@@ -81,7 +81,7 @@ test('вид движения: список из трёх, запоминает�
   await waitNoLayers(page);
   const t = await store(page, async () => (await import('./js/store.js')).S.trips[0]);
   assert.equal(t.kind, 'reserve');
-  // следующая поездка — сразу «Резерв»
+  // следующая поездка — сразу «Резерв»: он самый частый (единственный) в последних поездках
   await page.locator('[data-act=add-trip]').click();
   assert.match(await text(sheet(page), '#tf-kind'), /Резерв/);
   await sheet(page).locator('button[data-close]').first().click();
@@ -121,7 +121,7 @@ test('ожидание следования: блок выше следован�
   await context.close();
 });
 
-test('учёба: вычитается из нормы с расшифровкой, предлагает указать средний за день, строка в зарплате', async () => {
+test('учёба: вычитается из нормы с расшифровкой, предлагает указать средний за час, строка в зарплате', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { settings: { pay: PAY } });
   await page.locator('[data-act=absences]').click();
@@ -134,17 +134,18 @@ test('учёба: вычитается из нормы с расшифровко
   await sheet(page).locator('[data-act=save-abs]').click();
   const dlg = sheet(page);
   await dlg.getByRole('button', { name: 'Указать' }).click();
-  await page.waitForSelector('#pf-studyDay');
+  await page.waitForSelector('#pay-study #pf-avgHour');
   // экран сам прокручивается к «Учёбе»
   await page.waitForFunction(() => { const r = document.querySelector('#pay-study').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }, null, { timeout: 3000 });
-  await page.fill('#pf-studyDay', '3500');
-  await page.locator('#pf-studyDay').blur();
-  await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.assistant?.studyDay === 3500);
+  assert.match(await text(page, '#pay-study'), /Средний заработок за час[\s\S]*часы дней учёбы по производственному календарю/);
+  await page.fill('#pf-avgHour', '500');
+  await page.locator('#pf-avgHour').blur();
+  await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.avgHour === 500);
   await tab(page, 'home');
   assert.match(await text(page, '.hero'), /Норма: 168 ч/, 'в октябре из 31 ч только 30-е, 8 ч: 176 − 8');
   await page.locator('.hero').click();
   await page.locator('#st-kind button').nth(1).click();
-  assert.match(await text(page, '.screen'), /Учёба \(сессия\)[\s\S]*7\s000/, '2 дня октября × 3 500');
+  assert.match(await text(page, '.screen'), /Учёба \(сессия\)[\s\S]*8\s*ч[\s\S]*4\s000/, '30 октября, 8 ч × 500 (31-е — суббота)');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -154,7 +155,7 @@ test('«Как считать заработок»: по среднему за �
   await seed(page, { settings: { pay: PAY }, trips: [{ id: 'a', start: '2026-10-14T08:00', end: '2026-10-14T12:00' }] });
   await workPage(page, 'tariffs');
   const seg = page.locator('#pay-mode button');
-  assert.deepEqual(await seg.allInnerTexts(), ['По тарифной ставке', 'По среднему за час']);
+  assert.deepEqual(await seg.allInnerTexts(), ['По тарифу', 'По среднему']);
   assert.equal(await seg.first().getAttribute('aria-pressed'), 'true');
   // мода выше ставок
   assert.ok((await page.locator('#pay-mode').boundingBox()).y < (await page.locator('#pf-rate').boundingBox()).y);
@@ -162,10 +163,14 @@ test('«Как считать заработок»: по среднему за �
   await seg.nth(1).click();
   await page.waitForSelector('#pay-avg');
   assert.equal(await page.locator('#pf-rate').count(), 0);
-  assert.match(await text(page, '#pay-avg'), /техучёбу[\s\S]*Упрощённо/);
+  // 2.6: компактно — только средний за час и оплата дня больничного
+  assert.deepEqual(await page.locator('#pay-avg input').evaluateAll((a) => a.map((x) => x.id)), ['pf-avgHour', 'pf-sickDay']);
+  assert.match(await text(page, '#pay-avg'), /Учёба — тоже по ней/);
+  assert.match(await text(page, '.screen'), /Упрощённо/);
+  assert.equal(await page.locator('#pay-study, #pay-sick').count(), 0);
   await page.fill('#pf-avgHour', '600');
   await page.locator('#pf-avgHour').blur();
-  await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.assistant?.avgHour === 600);
+  await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.avgHour === 600);
   await tab(page, 'home');
   await page.locator('.hero').click();
   await page.locator('#st-kind button').nth(1).click();
@@ -218,6 +223,9 @@ test('подсказки: «Пропустить» слева закрывает
   assert.equal(await page.locator('.tour').count(), 0, 'после «Пропустить» на этом экране подсказок больше нет');
   // меню из трёх разделов — новая подсказка в один шаг (без «Пропустить»)
   await page.reload();
+  // 2.6: сначала (сверху) — поиск поездок, потом нижнее меню
+  await page.waitForFunction(() => document.querySelector('.tour-title')?.textContent === 'Поиск поездок');
+  await next.click();
   await page.waitForFunction(() => document.querySelector('.tour-title')?.textContent === 'Разделы внизу');
   assert.match(await text(page, '.tour-card'), /Разделы внизу[\s\S]*Главная[\s\S]*Ещё[\s\S]*Профиль/);
   assert.doesNotMatch(await text(page, '.tour-card'), /Обучение|Чаты/);

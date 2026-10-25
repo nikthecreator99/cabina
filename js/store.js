@@ -7,7 +7,7 @@ import { payCfg, overRestIntervals } from './pay.js';
 // houses — свой минимум для домов отдыха: { [ключ станции]: { name, minRest } }.
 // pay — наборы тарифных ставок: { assistant: {...}, driver: {...} } (см. pay.js).
 export const DEFAULT_SETTINGS = { id: 'settings', theme: 'dark', minRest: 240, minShiftRest: 16 * 60, dayOffMin: 60 * 60, tz: 'Europe/Moscow', houses: {}, pay: {} };
-export const DEFAULT_PROFILE = { id: 'profile', name: '', role: 'assistant', depot: '', klass: '', photo: '' };
+export const DEFAULT_PROFILE = { id: 'profile', name: '', role: 'assistant', depot: '', klass: '', photo: '', phone: '' };
 
 export const S = {
   trips: [], absences: [], routes: [], notes: [], files: [],
@@ -15,6 +15,8 @@ export const S = {
   profile: { ...DEFAULT_PROFILE },
   backup: { id: 'backup', lastAt: 0, since: 0, snoozeUntil: 0 },
   locoTypes: [],
+  daysOff: [], // дни, отмеченные в календаре как «Выходной» ('YYYY-MM-DD'): только отметка, на норму и заработок не влияет
+  contacts: [], // записная книжка «Телефоны»: [{ id, name, who, phone, note, createdAt, updatedAt }], только в этом телефоне
   onboarded: false,
 };
 
@@ -38,6 +40,8 @@ export async function loadAll() {
   S.profile = { ...DEFAULT_PROFILE, ...(m.profile || {}) };
   S.backup = { id: 'backup', lastAt: 0, since: 0, snoozeUntil: 0, ...(m.backup || {}) };
   S.locoTypes = m.locoTypes?.list || [];
+  S.daysOff = Array.isArray(m.daysOff?.list) ? m.daysOff.list.filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)) : [];
+  S.contacts = Array.isArray(m.contacts?.list) ? m.contacts.list.filter((c) => c && typeof c === 'object' && c.id) : [];
   S.onboarded = !!m.onboarded;
   S.trips.forEach(normalizeTrip);
   S.trips.forEach((t) => { t._stats = null; statsOf(t); });
@@ -140,6 +144,31 @@ export async function saveProfile(patch) {
 export async function saveBackupInfo(patch) {
   S.backup = { ...S.backup, ...patch, id: 'backup' };
   await db.put('meta', S.backup);
+}
+
+// Отметка «Выходной» на дне календаря (одна запись в meta)
+export async function setDayOff(key, on) {
+  const list = S.daysOff.filter((k) => k !== key);
+  if (on) list.push(key);
+  list.sort();
+  await db.put('meta', { id: 'daysOff', list });
+  S.daysOff = list;
+  emit();
+}
+
+// Записная книжка хранится одной записью в meta (как типы локомотивов): попадает в резервную копию без смены схемы базы
+export async function saveContact(c) {
+  const list = S.contacts.filter((x) => x.id !== c.id);
+  list.push(c);
+  await db.put('meta', { id: 'contacts', list });
+  S.contacts = list;
+  emit();
+}
+export async function deleteContact(id) {
+  const list = S.contacts.filter((x) => x.id !== id);
+  await db.put('meta', { id: 'contacts', list });
+  S.contacts = list;
+  emit();
 }
 
 export async function setOnboarded() {

@@ -23,9 +23,8 @@ test('нижнее меню (2.5): Главная · Ещё · Профиль, �
   assert.ok(Math.max(...xs) - Math.min(...xs) <= 1 && xs[0] >= 100, `ширины вкладок: ${xs}`);
   await tab(page, 'extra');
   assert.match(await text(page, '.page-head'), /^Ещё$/);
-  // три пункта одним списком
-  assert.equal(await page.locator('.extra-list > .row').count(), 3);
-  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.act)), ['extra-notes', 'extra-docs', 'extra-fix']);
+  // пункты одним списком (2.6: + «Телефоны»)
+  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.act)), ['extra-notes', 'extra-docs', 'extra-phones', 'extra-fix']);
   await tab(page, 'profile');
   await page.locator('.screen [data-page=profile-edit]').click();
   assert.match(await text(page, '.page-head'), /Редактировать профиль/);

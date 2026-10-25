@@ -6,7 +6,7 @@
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, uid, MONTHS, MONTHS_GEN, MONTHS_PREP } from './ui.js';
 import { S, saveProfile, saveSettings, nowLocal } from './store.js';
 import { fmtLocal } from './calc.js';
-import { ROLES, NDFL, fmtRub } from './pay.js';
+import { ROLES, NDFL, fmtRub, paySet } from './pay.js';
 
 export const LOYALTY_STEPS = [3, 5, 10, 15];
 export const salariesFor = (years) => (years === 3 ? 2 : years === 5 ? 3 : years === 10 ? 4 : years >= 15 && years % 5 === 0 ? 5 : 0);
@@ -77,7 +77,7 @@ export const careerOf = (p = S.profile) => {
 export const jobTitle = (j) => (ROLES[j.role] || String(j.title || '').trim() || 'Должность');
 const sortedJobs = (c) => [...c.jobs].sort((a, b) => b.from.localeCompare(a.from));
 // Оклад из набора ставок по должности в профиле
-export const myOklad = () => { const v = Number(S.settings.pay?.[S.profile.role]?.oklad); return Number.isFinite(v) && v > 0 ? v : 0; };
+export const myOklad = () => { const v = Number(paySet(S.settings.pay, S.profile.role).oklad); return Number.isFinite(v) && v > 0 ? v : 0; };
 
 // Напоминание для главной: ближайшая выплата за 90 дней до права и до конца месяца выплаты
 export function loyaltyReminder(today = todayKey()) {
@@ -236,13 +236,12 @@ const okladText = (v) => String(v).replace('.', ',');
 export async function careerChange(e) {
   const t = e.target;
   if (t.id === 'cr-oklad') {
-    // оклад хранится в наборе ставок должности из профиля (как и раньше — в «Тарифных ставках»)
+    // оклад хранится в наборе ставок (один на человека, как и тарифная ставка)
     const raw = t.value.replace(/\s/g, '').replace(',', '.');
     const v = raw === '' ? '' : Number(raw);
     if (v !== '' && (!Number.isFinite(v) || v < 0 || v > 1000000)) { toast('Оклад — число в рублях, например 48000', { error: true }); return true; }
-    const role = S.profile.role || 'assistant';
     const pay = { ...(S.settings.pay || {}) };
-    pay[role] = { ...(pay[role] || {}), oklad: v === '' ? '' : Math.round(v * 100) / 100 };
+    pay.main = { ...paySet(pay, S.profile.role || 'assistant'), oklad: v === '' ? '' : Math.round(v * 100) / 100 };
     await saveSettings({ pay });
     toast(v === '' || v === 0 ? 'Оклад удалён' : 'Оклад сохранён');
     return true;

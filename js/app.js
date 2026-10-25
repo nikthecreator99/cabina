@@ -7,22 +7,24 @@ import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
+import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour, slipPdfTour, sickPayTour, payModeTour, pendingTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, profileSettingsTour, slipPdfTour, sickPayTour, payModeTour, pendingTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
-import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange, resetPayRole } from './work.js';
+import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange } from './work.js';
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
+import { renderPhones, phonesListHtml, openPhoneForm } from './phones.js';
 import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
 
-export const VERSION = '2.5.1';
+export const VERSION = '2.6.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
-const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
+const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '' };
 const page = () => V.pages[V.pages.length - 1] || null;
 
 const p2 = (n) => String(n).padStart(2, '0');
@@ -208,12 +210,13 @@ function renderHome() {
     <div class="home-top ${phase !== 'night' ? 'on-sky' : ''}">
       <div class="home-head">
         <button class="round-btn" data-act="go" data-page="work" aria-label="Меню: настройки работы">${I.menu}</button>
-        <div class="grow">${isCurrent ? '' : `<button class="chip-btn" data-act="today">${small(I.calendar, 15)} Сегодня</button>`}</div>
         <div class="month-switch">
           <button data-act="prev" aria-label="Предыдущий месяц">${small(I.left, 18)}</button>
-          <div class="month-title" aria-live="polite">${MONTHS[V.m - 1]}${V.y !== nd.getUTCFullYear() ? ` ${V.y}` : ''}</div>
+          ${isCurrent ? `<div class="month-title" aria-live="polite">${MONTHS[V.m - 1]}</div>`
+            : `<button class="month-title back-today" data-act="today" aria-live="polite" aria-label="${MONTHS[V.m - 1]} ${V.y}. Вернуться к текущему месяцу">${MONTHS[V.m - 1]}${V.y !== nd.getUTCFullYear() ? ` ${V.y}` : ''}<small>к сегодня</small></button>`}
           <button data-act="next" aria-label="Следующий месяц">${small(I.right, 18)}</button>
         </div>
+        <button class="round-btn" data-act="go" data-page="search" aria-label="Поиск по поездкам">${I.search}</button>
       </div>
       <section class="glass hero" data-act="stats" role="button" tabindex="0" aria-label="Итоги месяца — открыть статистику">
         <div class="hero-top"><div class="eyebrow">Отработано в ${MONTHS_PREP[V.m - 1]}</div><span class="hero-link">Статистика ›</span></div>
@@ -286,6 +289,7 @@ function renderExtra() {
   if (V.extra === 'notes') html = renderNotes();
   else if (V.extra === 'docs') html = renderDocs();
   else if (V.extra === 'fix') html = renderFix();
+  else if (V.extra === 'phones') html = renderPhones(V.phonesQ);
   else {
     const locos = new Set(S.notes.map((n) => locoKey(n.type, n.number))).size;
     const docs = docsCount();
@@ -295,6 +299,8 @@ function renderExtra() {
           <div class="grow"><div class="t1">Заметки о локомотивах</div><div class="t2">${S.notes.length ? `${S.notes.length} ${plural(S.notes.length, 'заметка', 'заметки', 'заметок')} · ${locos} ${plural(locos, 'локомотив', 'локомотива', 'локомотивов')}` : 'Пока пусто'}</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="extra-docs"><span class="ico" style="--c:var(--warn)">${I.folder}</span>
           <div class="grow"><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="extra-phones"><span class="ico" style="--c:var(--ok)">${I.book}</span>
+          <div class="grow"><div class="t1">Телефоны</div><div class="t2">${S.contacts.length ? `${S.contacts.length} ${plural(S.contacts.length, 'номер', 'номера', 'номеров')} · только в этом телефоне` : 'Нарядчик, дежурный, коллеги'}</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="extra-fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
           <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>
       </div>`;
@@ -403,7 +409,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, 'profile-settings': renderProfileSettings, career: renderCareer };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, 'profile-settings': renderProfileSettings, career: renderCareer };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
 }
@@ -441,8 +447,8 @@ function rerender() {
 }
 
 function go(name) {
-  if (name === 'tariffs') resetPayRole();
   if (name === 'stats') statsAt(V.y, V.m);
+  if (name === 'search') { V.tripQ = ''; setTimeout(() => app.querySelector('#trip-q')?.focus(), 50); }
   if (name === 'settings') refreshStorage().then(() => page() === 'settings' && rerender());
   V.pages.push(name);
   render();
@@ -462,14 +468,14 @@ function scheduleTours() {
     else if (p === 'routes') routesTour();
     else if (p === 'tariffs') { tariffsTour(); payModeTour(); sickPayTour(); }
     else if (p === 'houses') housesTour();
-    else if (p === 'stats') { statsTour(); slipPdfTour(); }
+    else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); }
     else if (p === 'settings') settingsTour();
     else if (p === 'profile-edit') profileEditTour();
     else if (p === 'profile-settings') profileSettingsTour();
     else if (p === 'career') careerTour();
     else if (p) return;
-    else if (V.tab === 'home') { homeTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); }
-    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), fixTileTour()));
+    else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); }
+    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
     else if (V.tab === 'profile') profileTour();
   }, 500);
 }
@@ -477,8 +483,8 @@ export { scheduleTours };
 // Изменения данных: поле поиска не перерисовываем, чтобы не сбивать набор текста
 onChange(() => rerender());
 
-function openTariffsPage() { go('work'); V.pages.push('tariffs'); resetPayRole(); render(); }
-setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
+function openTariffsPage() { go('work'); V.pages.push('tariffs'); render(); }
+setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => (document.getElementById(id) || document.getElementById('pay-avg'))?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
 setNavigator((startStr) => {
   const ms = parseLocal(startStr);
   if (!Number.isFinite(ms)) return;
@@ -574,9 +580,14 @@ app.addEventListener('click', async (e) => {
     case 'extra-notes': V.extra = 'notes'; V.notesQ = ''; render(); window.scrollTo(0, 0); break;
     case 'extra-docs': V.extra = 'docs'; render(); window.scrollTo(0, 0); break;
     case 'extra-fix': V.extra = 'fix'; render(); window.scrollTo(0, 0); break;
+    case 'extra-phones': V.extra = 'phones'; V.phonesQ = ''; render(); window.scrollTo(0, 0); break;
+    case 'phone-add': openPhoneForm(null); break;
+    case 'phone-edit': openPhoneForm(id); break;
+    case 'phones-clear': V.phonesQ = ''; render({ still: true }); app.querySelector('#phones-q')?.focus(); break;
     case 'fix-slope': fixSlope(b); break;
     case 'extra-back': V.extra = null; render(); break;
     case 'notes-clear': V.notesQ = ''; render(); app.querySelector('#notes-q')?.focus(); break;
+    case 'trip-q-clear': V.tripQ = ''; render({ still: true }); app.querySelector('#trip-q')?.focus(); break;
     case 'note-add': openNoteForm(null, { type: b.dataset.type, number: b.dataset.number }); break;
     case 'note-edit': openNoteForm(id); break;
     case 'note-del': {
@@ -612,6 +623,24 @@ app.addEventListener('keydown', (e) => {
 
 app.addEventListener('input', (e) => {
   if (fixInput(e.target)) return;
+  if (e.target.id === 'trip-q') {
+    V.tripQ = e.target.value;
+    app.querySelector('#search-list').innerHTML = searchResultsHtml(V.tripQ);
+    const head = e.target.parentElement;
+    const x = head.querySelector('.search-x');
+    if (V.tripQ && !x) head.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="trip-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);
+    else if (!V.tripQ && x) x.remove();
+    return;
+  }
+  if (e.target.id === 'phones-q') {
+    V.phonesQ = e.target.value;
+    app.querySelector('#phones-list').innerHTML = phonesListHtml(V.phonesQ);
+    const head = e.target.parentElement;
+    const x = head.querySelector('.search-x');
+    if (V.phonesQ && !x) head.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="phones-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);
+    else if (!V.phonesQ && x) x.remove();
+    return;
+  }
   if (e.target.id === 'notes-q') {
     V.notesQ = e.target.value;
     app.querySelector('#notes-list').innerHTML = notesListHtml();

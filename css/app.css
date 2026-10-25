@@ -111,8 +111,17 @@ svg { flex: none; }
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); color: #fff; font-size: 13px; font-weight: 600;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.home-head { display: flex; align-items: center; gap: 8px; min-height: 48px; }
-.home-head .grow { flex: 1; min-width: 0; display: flex; justify-content: flex-end; }
+.home-head { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; gap: 8px; min-height: 48px; }
+.home-head .month-switch { justify-self: center; }
+.month-title.back-today { display: flex; flex-direction: column; align-items: center; justify-content: center; width: auto; height: 40px; border-radius: 12px; padding: 0 4px; line-height: 1.1; }
+.month-title.back-today small { font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0; opacity: .8; }
+.found-list .row { align-items: flex-start; text-align: left; }
+.found-list .t2 { display: block; margin-top: 2px; }
+.found-list .t2 svg { vertical-align: -2px; }
+.found-dur { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-2); align-self: center; }
+.found-note { color: var(--text-2); }
+.nw { white-space: nowrap; }
+.search-tip { margin-top: 4px; }
 .month-switch {
   display: flex; align-items: center; gap: 0; height: 44px; border-radius: 999px; padding: 0 2px;
   background: rgba(14, 18, 30, .45); border: 1px solid rgba(255,255,255,.16); color: #fff;
@@ -433,7 +442,16 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .interval-head .icon-btn { width: 36px; height: 36px; border-radius: 10px; }
 .mini-label { font-size: 12px; color: var(--muted); }
 .link-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 12px; color: var(--night); font-weight: 700; background: color-mix(in srgb, var(--night) 10%, transparent); border: 1px solid color-mix(in srgb, var(--night) 25%, transparent); align-self: flex-start; }
-.add-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 14px; border: 1px dashed var(--line-2); color: var(--text-2); font-weight: 700; width: 100%; }
+.add-btn { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); color: var(--text); font-weight: 700; width: 100%; text-align: left; }
+.add-btn > svg:first-child { color: var(--accent); flex: none; }
+.add-btn::after { content: "+"; margin-left: auto; font-size: 22px; font-weight: 600; line-height: 1; color: var(--muted); }
+.add-btn:active { background: var(--card-2); }
+.add-btn + .add-btn, .add-btn + .hint, .list:not(:empty) + .add-btn, [hidden] + .add-btn { margin-top: 8px; }
+#tf-wait:empty, #tf-pass:empty, #tf-loco-notes:empty { display: none; }
+.train-row { display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 8px; margin-top: 10px; }
+.train-row .mini-label { display: block; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tf-train .add-btn, #tf-note-box .add-btn, #tf-note-field, #tf-routeno-field { margin-top: 10px; }
+#tf-note-field .mini-label, #tf-routeno-field .mini-label { display: block; margin-bottom: 4px; }
 .switch-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); }
 .switch-row .grow { flex: 1; min-width: 0; }
 .row-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding: 0 4px; }
@@ -698,6 +716,9 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .cal-wd, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-wd span { text-align: center; font-size: 11px; color: var(--muted); text-transform: uppercase; }
 .cal-d { aspect-ratio: 1; border-radius: 9px; display: grid; place-items: center; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; background: var(--card-2); color: var(--text-2); }
+.cal-grid .cal-d { border: 0; padding: 0; font-family: inherit; cursor: pointer; transition: transform .12s; }
+.cal-grid .cal-d:active { transform: scale(.92); }
+.cal-tip { margin: 0 0 10px; }
 .cal-d.we { color: var(--muted); }
 .cal-d.hol { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--holiday) 60%, transparent); }
 .cal-d.work { background: var(--accent); color: #fff; }
@@ -802,3 +823,22 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .wk-val { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wk-head .chev { color: var(--muted); transition: transform .15s; display: grid; }
 .wk-head[aria-expanded="true"] .chev { transform: rotate(90deg); }
+
+/* сводка дня из календаря */
+.day-trip { display: grid; gap: 12px; padding: 14px; border-radius: 16px; background: var(--card-2); margin-bottom: 12px; }
+.day-trip-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.day-trip-head svg { color: var(--accent); flex: none; }
+.day-trip-head b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.day-trip .btn { justify-self: start; }
+.day-pick { margin-top: 12px; }
+.day-trip .kv-grid { grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.day-trip .kv b { font-size: 17px; overflow-wrap: anywhere; }
+/* «Телефоны» */
+.phone-row { gap: 8px; padding-right: 12px; }
+.phone-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.phone-open .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.phone-open .t2 { overflow-wrap: anywhere; }
+.phone-note { font-style: italic; }
+.ava-sm { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 15px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.ava-sm svg { width: 20px; height: 20px; }
+.call-btn { flex: none; color: var(--ok); }

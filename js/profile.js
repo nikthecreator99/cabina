@@ -6,6 +6,7 @@ import { dateKeyOf, monthSummary, fmtDur, parseLocal } from './calc.js';
 import { ROLES } from './pay.js';
 import { currentRest, dayOffIntervals } from './rest.js';
 import { careerOf, tenure, tenureText, todayKey } from './career.js';
+import { normPhone } from './phones.js';
 
 const CLASSES = ['3', '2', '1'];
 const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -17,8 +18,9 @@ export const PRIVACY = [
   { k: 'status', label: 'Статус', hint: 'В пути, на выходном, между поездками или на отвлечении.' },
   { k: 'depot', label: 'Депо', hint: 'Чтобы вас могли найти коллеги из вашего депо.' },
   { k: 'photo', label: 'Фото', hint: 'Без этого коллеги увидят только первые буквы имени.' },
+  { k: 'phone', label: 'Номер телефона', hint: 'Только тем коллегам, кого вы сами добавите. Без этого номер не увидит никто.' },
 ];
-export const privacyOf = (p = S.profile) => ({ status: false, depot: false, photo: false, ...(p.privacy || {}) });
+export const privacyOf = (p = S.profile) => ({ status: false, depot: false, photo: false, phone: false, ...(p.privacy || {}) });
 
 export function avatarHtml(p = S.profile, size = 96) {
   return safePhoto(p.photo) ? `<img src="${esc(p.photo)}" alt="" width="${size}" height="${size}">`
@@ -65,6 +67,7 @@ export function renderProfile() {
       <div class="avatar view">${avatarHtml(p)}</div>
       <div class="profile-name">${p.name ? esc(p.name) : '<span class="ph">Имя не указано</span>'}</div>
       <div class="profile-sub">${esc(subLine(p))}</div>
+      ${p.phone ? `<div class="profile-sub">${small(I.call, 14)} <span class="nw">${esc(p.phone)}</span></div>` : ''}
       ${(() => { const c = careerOf(p); const t = c.hired ? tenure(c.hired, todayKey()) : null; return t ? `<div class="profile-sub">${small(I.briefcase, 14)} Стаж ${tenureText(t)}</div>` : ''; })()}
       ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
       <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.edit, 16)} Редактировать профиль</button>
@@ -87,10 +90,12 @@ export function renderProfileEdit() {
       <div class="pay-field"><label for="pr-name">Имя</label><input class="input" id="pr-name" maxlength="60" autocomplete="name" placeholder="Например, Иван" value="${esc(p.name)}"></div>
       <div class="pay-field"><div class="label">Должность</div>
         <div class="seg" id="pr-role">${Object.entries(ROLES).map(([k, v]) => `<button data-act="pr-role" data-role="${k}" aria-pressed="${p.role === k}">${v}</button>`).join('')}</div>
-        <div class="hint">По должности выбирается набор тарифных ставок для расчёта заработка.</div></div>
+        <div class="hint">Машинисту можно указать класс — от него считается надбавка за класс.</div></div>
       ${p.role === 'driver' ? `<div class="pay-field"><div class="label">Класс</div>
         <div class="seg" id="pr-klass">${CLASSES.map((k) => `<button data-act="pr-klass" data-klass="${k}" aria-pressed="${p.klass === k}">${k} класс</button>`).join('')}</div></div>` : ''}
       <div class="pay-field"><label for="pr-depot">Депо</label><input class="input" id="pr-depot" maxlength="60" autocomplete="off" placeholder="Название вашего депо" value="${esc(p.depot)}"></div>
+      <div class="pay-field"><label for="pr-phone">Номер телефона</label><input class="input" id="pr-phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" placeholder="+7 900 000-00-00" value="${esc(p.phone)}">
+        <div class="hint">Хранится только в этом телефоне. Коллеги увидят его, только если вы разрешите ниже.</div></div>
     </div>
     <div class="group-title">Приватность: что увидят коллеги</div>
     <div class="panel" id="pr-privacy">
@@ -134,6 +139,7 @@ export async function profileChange(e) {
   const t = e.target;
   if (t.id === 'pr-name') { await saveProfile({ name: t.value.trim().slice(0, 60) }); return true; }
   if (t.id === 'pr-depot') { await saveProfile({ depot: t.value.trim().slice(0, 60) }); return true; }
+  if (t.id === 'pr-phone') { await saveProfile({ phone: normPhone(t.value) }); return true; }
   if (t.id === 'pr-photo' && t.files?.[0]) {
     const f = t.files[0];
     t.value = '';

@@ -49,7 +49,7 @@ test('резерв: отдельная строка «Следование ре�
   assert.equal(tripPay(trips[1], st, cfg).gross, tripPay({ ...trips[1], kind: 'freight' }, st, cfg).gross);
 });
 
-test('учёба (сессия): календарные дни × средний за день, без премии и надбавок, с НДФЛ', () => {
+test('учёба (сессия, 2.6): средний за час × часы дней учёбы по календарю, без премии и надбавок, с НДФЛ', () => {
   const abs = [
     { id: 'u', type: 'study', start: '2026-10-26', end: '2026-11-04' }, // 6 дней в октябре, 4 в ноябре
     { id: 's', type: 'sick', start: '2026-10-01', end: '2026-10-02' },
@@ -58,22 +58,28 @@ test('учёба (сессия): календарные дни × средний
   assert.equal(absDaysInMonth(abs, 2026, 11, 'study'), 4);
   assert.equal(absDaysInMonth(abs, 2026, 10, 'sick'), 2);
   assert.equal(absDaysInMonth(abs, 2026, 9, 'study'), 0);
-  const cfg = payCfg({ assistant: { rates: [{ from: null, rate: 300 }], bonus: 12, rk: 20, studyDay: 4000 } });
+  // режим «по тарифу»: учёба всё равно по среднему за час; старое поле «средний за день» больше не используется
+  const cfg = payCfg({ main: { rates: [{ from: null, rate: 300 }], bonus: 12, rk: 20, avgHour: 500, studyDay: 4000 } });
   const r = payMonth(2026, 10, [], [abs[0]], cfg, () => ({}));
-  assert.deepEqual({ amount: line(r, 'study').amount, days: line(r, 'study').days }, { amount: 24000, days: 6 });
+  assert.deepEqual({ amount: line(r, 'study').amount, hours: line(r, 'study').hours }, { amount: 20000, hours: 40 }, '26–30 октября — 5 рабочих дней по 8 ч');
   assert.equal(r.lines.length, 1, 'премия и районный на учёбу не начисляются');
-  assert.equal(r.gross, 24000);
-  assert.equal(r.ndfl, 3120);
-  // учёба уменьшает норму месяца, как другие отвлечения
+  assert.equal(r.gross, 20000);
+  assert.equal(r.ndfl, 2600);
+  // учёба уменьшает норму месяца на те же часы
   const sum = monthSummary(2026, 10, [], [abs[0]]);
-  assert.equal(sum.normMin, (176 - 40) * 60, '26–30 октября — 5 рабочих дней по 8 ч (31-е — суббота)');
+  assert.equal(sum.normMin, (176 - 40) * 60, '31-е — суббота');
   assert.equal(sum.absByType.study, 40);
-  // без среднего за день строки нет
-  const r0 = payMonth(2026, 10, [], [abs[0]], payCfg({ assistant: { rates: [{ from: null, rate: 300 }] } }), () => ({}));
+  // без среднего за час строки нет
+  const r0 = payMonth(2026, 10, [], [abs[0]], payCfg({ main: { rates: [{ from: null, rate: 300 }], studyDay: 4000 } }), () => ({}));
   assert.equal(line(r0, 'study'), undefined);
   assert.equal(r0.studyDays, 6);
+  // ноябрь: 2-е — 8 ч, 3-е предпраздничное — 7 ч, 1-е воскресенье и 4-е праздник — 0
   const r2 = payMonth(2026, 11, [], abs, cfg, () => ({}));
-  assert.equal(payTotal([r, r2]).lines.find((l) => l.key === 'study').days, 10);
+  assert.equal(line(r2, 'study').hours, 15);
+  assert.equal(payTotal([r, r2]).lines.find((l) => l.key === 'study').hours, 55);
+  // учёба, вписанная вручную по месяцам, оплачивается по вписанным часам
+  const manual = payMonth(2026, 10, [], [{ ...abs[0], auto: false, monthHours: { '2026-10': 24, '2026-11': 8 } }], cfg, () => ({}));
+  assert.equal(line(manual, 'study').amount, 12000);
 });
 
 test('по среднему за час: все часы × средний, без доплат, премии и коэффициентов; больничный и учёба как обычно', () => {
@@ -90,8 +96,9 @@ test('по среднему за час: все часы × средний, бе
   const r = payMonth(2026, 10, trips, abs, cfg, (t) => tripStats(t));
   assert.deepEqual(r.lines.map((l) => l.key), ['avg', 'sick', 'study']);
   assert.deepEqual({ amount: line(r, 'avg').amount, hours: line(r, 'avg').hours }, { amount: 6000, hours: 10 });
-  assert.equal(r.gross, 6000 + 2000 + 3000);
-  assert.equal(r.ndfl, 1430);
+  assert.equal(line(r, 'study').amount, 8 * 600, 'учёба: 8 ч по календарю × средний за час');
+  assert.equal(r.gross, 6000 + 2000 + 4800);
+  assert.equal(r.ndfl, 1664);
   assert.equal(r.rate, 0);
   // заработок за поездку тоже по среднему
   assert.equal(tripPay(trips[0], tripStats(trips[0]), cfg).gross, 4800);

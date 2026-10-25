@@ -57,7 +57,7 @@ test('тарифная ставка: заработок на главном и �
   await context.close();
 });
 
-test('поездка «в пути»: только начало, идёт время, «Завершить поездку»', async () => {
+test('поездка «в пути»: только начало, идёт время, завершение — временем окончания', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { settings: { pay: PAY } });
   await page.locator('[data-act=add-trip]').click();
@@ -81,11 +81,11 @@ test('поездка «в пути»: только начало, идёт вре
   assert.match(await f.locator('[data-error]').innerText(), /в пути/i);
   await f.locator('button[data-close]').first().click();
   await waitNoLayers(page);
-  // завершить: подставится текущее время
+  // 2.6: кнопки «Завершить» нет — человек вписывает время окончания
   await page.locator('.trip').first().click();
   f = sheet(page);
-  await f.locator('[data-act=finish-now]').click();
-  assert.equal(await f.locator('#tf-et').inputValue(), '12:00');
+  assert.equal(await f.locator('[data-act=finish-now]').count(), 0);
+  await f.locator('#tf-et').fill('12:00');
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.match(await text(page, '.trip'), /10:00 — 12:00/);
@@ -187,9 +187,9 @@ test('профиль: имя, должность, класс, фото — со�
   const src = await page.locator('.avatar.view img').getAttribute('src');
   assert.match(src, /^data:image\/jpeg;base64,/);
   assert.match(await text(page, '.notice.ok'), /только в этом телефоне/);
-  // тарифы машиниста — свой набор, с надбавкой за класс
+  // 2.6: набор ставок один, без выбора должности; машинисту видна надбавка за класс
   await workPage(page, 'tariffs');
-  assert.equal(await page.locator('[data-act=pay-role][data-role=driver]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('[data-act=pay-role]').count(), 0);
   assert.equal(await page.locator('#pf-klass').count(), 1);
   assert.deepEqual(errors, []);
   await context.close();

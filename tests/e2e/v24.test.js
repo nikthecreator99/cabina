@@ -27,7 +27,7 @@ test('больничный: после добавления подсказыва
   assert.match(await box.innerText(), /Оплата одного дня больничного[\s\S]*календарный день/);
   await page.fill('#pf-sickDay', '2500');
   await page.locator('#pf-sickDay').blur();
-  await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.assistant.sickDay === 2500);
+  await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.sickDay === 2500);
   // квиток за октябрь: 8 ч × 300 = 2 400 и больничный 10 дней × 2 500 = 25 000
   await page.locator('[data-act=back]').first().click();
   await page.locator('[data-act=back]').first().click();
