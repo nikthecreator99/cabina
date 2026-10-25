@@ -49,14 +49,14 @@ export function renderRoutes() {
     ${list.length ? `<div class="list">${list.map((r) => {
       const n = use.get(r.id) || 0;
       const hasReverse = S.routes.some((x) => x.from.toLowerCase() === r.to.toLowerCase() && x.to.toLowerCase() === r.from.toLowerCase());
-      return `<div class="swipe" data-swipe="${r.id}">
-      <button class="swipe-del" data-act="route-del" data-id="${r.id}" aria-label="Удалить маршрут" tabindex="-1">${I.trash}<span>Удалить</span></button>
+      return `<div class="swipe" data-swipe="${esc(r.id)}">
+      <button class="swipe-del" data-act="route-del" data-id="${esc(r.id)}" aria-label="Удалить маршрут" tabindex="-1">${I.trash}<span>Удалить</span></button>
       <div class="route-card swipe-row">
-        <button class="route-pts" data-act="route" data-id="${r.id}" aria-label="Изменить маршрут ${esc(r.from)} — ${esc(r.to)}">
+        <button class="route-pts" data-act="route" data-id="${esc(r.id)}" aria-label="Изменить маршрут ${esc(r.from)} — ${esc(r.to)}">
           <div class="pt"><span>${esc(r.from)}</span><i aria-hidden="true">→</i><span>${esc(r.to)}</span></div>
           <div class="route-meta">${r.distanceKm ? `<span class="km">${fmtKm(r.distanceKm)}</span> · ` : ''}${n ? `${n} ${plural(n, 'поездка', 'поездки', 'поездок')}` : 'Поездок пока нет'}</div>
         </button>
-        ${hasReverse ? '' : `<button class="icon-btn" data-act="route-reverse" data-id="${r.id}" aria-label="Создать обратный маршрут" title="Обратный маршрут">${I.swap}</button>`}
+        ${hasReverse ? '' : `<button class="icon-btn" data-act="route-reverse" data-id="${esc(r.id)}" aria-label="Создать обратный маршрут" title="Обратный маршрут">${I.swap}</button>`}
       </div></div>`;
     }).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.route}</div><b>Маршрутов пока нет</b><p>Например: Малошуйка → Сумский Посад. Маршрут можно выбрать первым полем при добавлении поездки.</p></div>`}`;

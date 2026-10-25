@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>CABINA</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="CABINA — личный учёт поездок, рабочего времени, ночных и праздничных часов, отдыха, заработка и рабочих документов.">
@@ -19,12 +20,7 @@
 <link rel="preload" href="fonts/onest.woff" as="font" type="font/woff" crossorigin>
 <link rel="preload" href="fonts/unbounded.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="css/app.css">
-<script>
-  try {
-    var t = localStorage.getItem('cabina-theme');
-    document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
-  } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
-</script>
+<script src="js/boot.js"></script>
 </head>
 <body>
 <main id="app" aria-live="off"></main>

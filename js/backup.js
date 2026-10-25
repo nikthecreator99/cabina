@@ -13,6 +13,20 @@ const toB64 = (buf) => {
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   return btoa(s);
 };
+// Копию могли изменить или прислать чужую. Ссылки (id) в ней — только из безопасных символов: они попадают
+// в разметку. Тип файла документа — из простого списка: иначе файл мог бы открыться как страница внутри CABINA.
+const SAFE_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
+const isRef = (k) => k === 'id' || /Id$/.test(k);
+function idsSafe(v, key = '') {
+  if (Array.isArray(v)) return v.every((x) => (key === 'ids' ? SAFE_ID.test(String(x)) : idsSafe(x)));
+  if (v && typeof v === 'object') return Object.entries(v).every(([k, x]) => (isRef(k) && x != null && x !== '' ? (typeof x === 'string' || typeof x === 'number') && SAFE_ID.test(String(x)) : idsSafe(x, k)));
+  return true;
+}
+export function backupSafe(d) {
+  return ['trips', 'absences', 'routes', 'notes', 'meta', 'files', 'blobs'].every((k) => d[k] == null || (Array.isArray(d[k]) && d[k].every((r) => r && typeof r === 'object' && (typeof r.id === 'string' || typeof r.id === 'number') && SAFE_ID.test(String(r.id)) && idsSafe(r))));
+}
+export const safeMime = (m) => (/^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf|text\/plain)$/.test(m || '') ? m : 'application/octet-stream');
+
 const fromB64 = (b64) => {
   const s = atob(b64);
   const out = new Uint8Array(s.length);
@@ -51,6 +65,7 @@ export async function importBackup(file) {
   if (!payload || payload.app !== 'CABINA' || !payload.data) { toast('Это не файл резервной копии CABINA', { error: true }); return false; }
   if (Number(payload.format) > FORMAT) { toast('Копия сделана в более новой версии CABINA. Сначала обновите приложение.', { error: true, ms: 6000 }); return false; }
   const d = payload.data;
+  if (!backupSafe(d)) { toast('Файл копии повреждён или изменён вручную. Восстановление отменено, текущие данные не изменены.', { error: true, ms: 6000 }); return false; }
   const n = (k) => (Array.isArray(d[k]) ? d[k].length : 0);
   const docs = (d.files || []).filter((f) => f.kind === 'file').length;
   const hasProfile = (d.meta || []).some((m) => m.id === 'profile' && (m.name || m.photo || m.depot));
@@ -66,7 +81,7 @@ export async function importBackup(file) {
       trips: d.trips || [], absences: d.absences || [], routes: d.routes || [], notes: d.notes || [], meta: d.meta || [],
     };
     if (payload.withDocs) {
-      next.files = d.files || [];
+      next.files = (d.files || []).map((f) => (f.kind === 'file' ? { ...f, mime: safeMime(f.mime) } : f));
       next.blobs = (d.blobs || []).map((b) => ({ id: b.id, data: fromB64(b.b64) }));
     } else {
       next.files = await db.getAll('files');

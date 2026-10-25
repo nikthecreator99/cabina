@@ -36,7 +36,7 @@ export function docsCount() { return S.files.filter((f) => f.kind === 'file').le
 
 function iconFor(f) {
   if (f.kind === 'folder') return `<span class="thumb" style="--c:var(--warn)">${I.folder}</span>`;
-  if (isImage(f)) return `<span class="thumb" data-thumb="${f.id}">${thumbs.has(f.id) ? `<img src="${thumbs.get(f.id)}" alt="">` : I.image}</span>`;
+  if (isImage(f)) return `<span class="thumb" data-thumb="${esc(f.id)}">${thumbs.has(f.id) ? `<img src="${thumbs.get(f.id)}" alt="">` : I.image}</span>`;
   if (isPdf(f)) return `<span class="thumb" style="--c:var(--holiday)">${I.pdf}</span>`;
   return `<span class="thumb">${I.file}</span>`;
 }
@@ -48,15 +48,15 @@ export function renderDocs() {
   const items = children(docState.folder).sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name, 'ru') : a.kind === 'folder' ? -1 : 1));
   const crumbs = `<nav class="crumbs" aria-label="Путь">
     ${path.length ? `<button data-act="doc-go" data-id="">Документы</button>` : '<span class="cur">Документы</span>'}
-    ${path.map((p, i) => `<span>/</span>${i === path.length - 1 ? `<span class="cur">${esc(p.name)}</span>` : `<button data-act="doc-go" data-id="${p.id}">${esc(p.name)}</button>`}`).join('')}
+    ${path.map((p, i) => `<span>/</span>${i === path.length - 1 ? `<span class="cur">${esc(p.name)}</span>` : `<button data-act="doc-go" data-id="${esc(p.id)}">${esc(p.name)}</button>`}`).join('')}
   </nav>`;
   const list = items.length ? `<div class="list">${items.map((f) => {
     const info = f.kind === 'folder'
       ? (() => { const n = children(f.id).length; return n ? `${n} ${plural(n, 'объект', 'объекта', 'объектов')}` : 'Пустая папка'; })()
       : `${fmtSize(f.size || 0)} · ${fmtDate(f.createdAt)}`;
     return `<div class="doc">
-      <button class="open" data-act="doc-open" data-id="${f.id}">${iconFor(f)}<div><div class="name">${esc(f.name)}</div><div class="info">${info}</div></div></button>
-      <button class="icon-btn" data-act="doc-menu" data-id="${f.id}" aria-label="Действия: ${esc(f.name)}">${I.more}</button></div>`;
+      <button class="open" data-act="doc-open" data-id="${esc(f.id)}">${iconFor(f)}<div><div class="name">${esc(f.name)}</div><div class="info">${info}</div></div></button>
+      <button class="icon-btn" data-act="doc-menu" data-id="${esc(f.id)}" aria-label="Действия: ${esc(f.name)}">${I.more}</button></div>`;
   }).join('')}</div>`
     : `<div class="empty"><div class="em-ico" style="--accent:var(--warn)">${I.folder}</div><b>${docState.folder ? 'Папка пуста' : 'Документов пока нет'}</b><p>Загрузите фото, схемы, перемычки или PDF — они будут доступны без интернета.</p></div>`;
   return `
@@ -128,9 +128,17 @@ async function shareFile(f) {
     try { await navigator.share({ files: [file], title: f.name }); } catch {}
   } else downloadFile(f);
 }
+// В новой вкладке открываем только PDF, простой текст и обычные картинки, причём с этим типом принудительно.
+// Остальное (например, файл-страницу .html или картинку .svg) — скачиваем: открытый внутри CABINA, такой файл
+// получил бы доступ к записям в этом телефоне.
+const openType = (f) => (isPdf(f) ? 'application/pdf' : f.mime === 'text/plain' ? 'text/plain;charset=utf-8'
+  : /^image\/(jpeg|png|webp|gif)$/.test(f.mime || '') ? f.mime : null);
 async function openExternal(f) {
-  const blob = await fileBlob(f);
-  const url = URL.createObjectURL(blob);
+  const type = openType(f);
+  if (!type) { await downloadFile(f); return; }
+  const b = await getBlob(f.id);
+  if (!b) throw new Error('нет данных');
+  const url = URL.createObjectURL(new Blob([b.data], { type }));
   const w = window.open(url, '_blank');
   if (!w) { downloadFile(f); }
   setTimeout(() => URL.revokeObjectURL(url), 120000);
@@ -265,7 +273,7 @@ function moveDialog(f) {
     title: `Переместить «${f.name}»`, back: true,
     body: `<div class="list">
       <button class="radio-row" data-target="" aria-pressed="${!target}"><span class="dot"></span><span class="grow">${I.folder} Документы (корень)</span><span></span></button>
-      ${rows.map((r) => `<button class="radio-row tree-row" style="--lvl:${r.lvl}" data-target="${r.id}" aria-pressed="${r.id === target}"><span class="dot"></span><span class="grow">${esc(r.name)}</span><span></span></button>`).join('')}
+      ${rows.map((r) => `<button class="radio-row tree-row" style="--lvl:${r.lvl}" data-target="${esc(r.id)}" aria-pressed="${r.id === target}"><span class="dot"></span><span class="grow">${esc(r.name)}</span><span></span></button>`).join('')}
     </div>`,
     foot: `<button class="btn btn-primary" data-act="do-move">Переместить сюда</button>`,
   }));

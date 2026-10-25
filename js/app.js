@@ -19,7 +19,7 @@ import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
 
-export const VERSION = '2.5.0';
+export const VERSION = '2.5.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
@@ -126,9 +126,9 @@ function tripRow(t, mk, payCtx) {
     st.holiday ? `<span class="chip" style="--c:var(--holiday)">${small(I.calStar, 13)} ${fmtDur(st.holiday, { short: true })}</span>` : '',
     (t.passenger || []).length ? `<span class="chip" style="--c:var(--medical)">${small(I.passenger, 13)} пасс.</span>` : '',
   ].join('');
-  return `<div class="swipe" data-swipe="${t.id}">
-  <button class="swipe-del" data-act="trip-del" data-id="${t.id}" aria-label="Удалить поездку" tabindex="-1">${I.trash}<span>Удалить</span></button>
-  <button class="trip swipe-row ${live ? 'is-live' : ''}" data-act="trip" data-id="${t.id}">
+  return `<div class="swipe" data-swipe="${esc(t.id)}">
+  <button class="swipe-del" data-act="trip-del" data-id="${esc(t.id)}" aria-label="Удалить поездку" tabindex="-1">${I.trash}<span>Удалить</span></button>
+  <button class="trip swipe-row ${live ? 'is-live' : ''}" data-act="trip" data-id="${esc(t.id)}">
     <div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
       <div class="trip-time">${pending ? `Явка в ${hm(st.start)}` : `${hm(st.start)} — ${live ? 'сейчас' : hm(st.end)}`}</div>
@@ -227,8 +227,8 @@ function renderHome() {
     </div>
     <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
-    ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${pend.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
-    ${rest ? `<button class="rest-banner" data-act="trip" data-id="${rest.trip.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${rest ? `<button class="rest-banner" data-act="trip" data-id="${esc(rest.trip.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() : ''}
     ${backupNag(now)}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
@@ -269,7 +269,7 @@ function notesListHtml() {
         <div class="name">${highlight(locoLabel(g.type, g.number), words)}<small>Тип ${highlight(g.type, words)} · номер ${highlight(g.number, words)}${trips ? ` · поездок: ${trips}` : ''}</small></div>
         <button class="icon-btn" data-act="note-add" data-type="${esc(g.type)}" data-number="${esc(g.number)}" aria-label="Добавить заметку">${I.plus}</button></div>
       ${g.notes.map((n) => `<div class="note"><div><div class="txt">${highlight(n.text, words)}</div><div class="when">${fmtDate(n.createdAt)}${n.updatedAt && n.updatedAt - n.createdAt > 60000 ? ' · изменена' : ''}</div></div>
-        <div class="acts"><button class="icon-btn" data-act="note-edit" data-id="${n.id}" aria-label="Изменить заметку">${I.edit}</button><button class="icon-btn danger" data-act="note-del" data-id="${n.id}" aria-label="Удалить заметку">${I.trash}</button></div></div>`).join('')}
+        <div class="acts"><button class="icon-btn" data-act="note-edit" data-id="${esc(n.id)}" aria-label="Изменить заметку">${I.edit}</button><button class="icon-btn danger" data-act="note-del" data-id="${esc(n.id)}" aria-label="Удалить заметку">${I.trash}</button></div></div>`).join('')}
     </section>`;
   }).join('');
 }

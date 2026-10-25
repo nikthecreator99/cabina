@@ -277,7 +277,7 @@ export function openTripForm(tripId) {
     const label = r ? routeText(r) : F.routeLabel;
     $(el, '#tf-route-label').innerHTML = label ? esc(label) : '<span class="ph">Выберите маршрут</span>';
     const recent = recentRoutes(5);
-    $(el, '#tf-route-quick').innerHTML = recent.map((x) => `<button type="button" class="qchip" data-route="${x.id}" aria-pressed="${x.id === F.routeId}">${esc(routeText(x))}</button>`).join('');
+    $(el, '#tf-route-quick').innerHTML = recent.map((x) => `<button type="button" class="qchip" data-route="${esc(x.id)}" aria-pressed="${x.id === F.routeId}">${esc(routeText(x))}</button>`).join('');
     $(el, '#tf-route-quick').hidden = !recent.length;
   }
   function renderEndHint() {
@@ -302,9 +302,9 @@ export function openTripForm(tripId) {
   }
   // интервал «пассажиром» (kind = 'pass') или «ожидание следования пассажиром» (kind = 'wait')
   const intervalHtml = (p, i, kind) => `
-      <div class="interval${kind === 'wait' ? ' wait' : ''}" data-pid="${p.id}" data-kind="${kind}">
+      <div class="interval${kind === 'wait' ? ' wait' : ''}" data-pid="${esc(p.id)}" data-kind="${kind}">
         <div class="interval-head"><span>${kind === 'wait' ? `${I.clock} Ожидание №${i + 1}` : `${I.passenger} Пассажиром №${i + 1}`}</span>
-          <button type="button" class="icon-btn danger" data-act="del-pass" data-pid="${p.id}" aria-label="Удалить интервал">${I.trash}</button></div>
+          <button type="button" class="icon-btn danger" data-act="del-pass" data-pid="${esc(p.id)}" aria-label="Удалить интервал">${I.trash}</button></div>
         <div class="mini-label">Начало</div>
         <div class="dt"><input type="date" class="input" data-pf="sd" value="${p.sd}" aria-label="Дата начала"><input type="time" class="input" data-pf="st" value="${p.st}" aria-label="Время начала"></div>
         <div class="mini-label">Окончание</div>
@@ -409,7 +409,7 @@ export function openTripForm(tripId) {
       h += `<div class="hint" style="font-weight:700;color:var(--text)">Выберите поездки для расчёта полного отдыха</div>`;
       h += cands.map((c) => {
         const on = F.homeSel.includes(c.id);
-        return `<button type="button" class="cand" data-cand="${c.id}" aria-pressed="${on}">
+        return `<button type="button" class="cand" data-cand="${esc(c.id)}" aria-pressed="${on}">
           <span class="box">${on ? '✓' : ''}</span>
           <span style="min-width:0"><div class="t1">${esc(tripLabelShort({ ...c.trip, _stats: c.stats }))}</div>
           <div class="t2">${c.self ? '<span class="tag">эта поездка</span>' : ''}${esc(routeOf(c.trip) || 'Маршрут не указан')}</div></span>
@@ -565,7 +565,7 @@ function pickRoute(current) {
     const el = openLayer(sheet({
       title: 'Маршрут', back: true,
       body: `
-        ${routes.length ? `<div class="list">${routes.map((r) => `<button class="radio-row" data-rid="${r.id}" aria-pressed="${r.id === current}"><span class="dot"></span><span class="grow">${esc(routeText(r))}</span><span class="hint">${r.distanceKm ? `${String(r.distanceKm).replace('.', ',')} км` : ''}</span></button>`).join('')}
+        ${routes.length ? `<div class="list">${routes.map((r) => `<button class="radio-row" data-rid="${esc(r.id)}" aria-pressed="${r.id === current}"><span class="dot"></span><span class="grow">${esc(routeText(r))}</span><span class="hint">${r.distanceKm ? `${esc(String(r.distanceKm).replace('.', ','))} км` : ''}</span></button>`).join('')}
           <button class="radio-row" data-rid="" aria-pressed="${!current}"><span class="dot"></span><span class="grow" style="color:var(--text-2)">Без маршрута</span><span></span></button></div>`
         : '<div class="hint">Сохранённых маршрутов пока нет. Создайте первый ниже — он сохранится в разделе «Маршруты».</div>'}
         <div class="field"><div class="label">${I.plus} Новый маршрут</div>
@@ -876,9 +876,9 @@ export function openAbsenceList(y, m) {
     if (!list.length) { closeLayer(el); return; }
     $(el, '#al-list').innerHTML = list.map(({ a, hours }) => {
       const T = ABS_TYPES[a.type] || ABS_TYPES.sick;
-      return `<div class="swipe" data-swipe="${a.id}">
-        <button class="swipe-del" data-act="al-del" data-id="${a.id}" aria-label="Удалить отвлечение" tabindex="-1">${I.trash}<span>Удалить</span></button>
-        <button class="abs-row swipe-row" data-act="al-open" data-id="${a.id}" style="--c:${T.color}">
+      return `<div class="swipe" data-swipe="${esc(a.id)}">
+        <button class="swipe-del" data-act="al-del" data-id="${esc(a.id)}" aria-label="Удалить отвлечение" tabindex="-1">${I.trash}<span>Удалить</span></button>
+        <button class="abs-row swipe-row" data-act="al-open" data-id="${esc(a.id)}" style="--c:${T.color}">
           <span class="tile">${T.icon}</span>
           <span style="min-width:0"><div class="t1">${T.label}</div><div class="t2">${dateRange(a.start, a.end)}</div></span>
           <span class="h">${hours > 0 ? `−${fmtHours(hours)}` : '0 ч'}</span></button></div>`;
