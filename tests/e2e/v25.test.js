@@ -212,6 +212,10 @@ test('подсказки: «Пропустить» слева закрывает
   await page.waitForFunction(() => !document.querySelector('.tour'));
   const done = await page.evaluate(async () => (await (await import('./js/db.js')).get('meta', 'tours'))?.done || []);
   assert.ok(done.includes('home2'));
+  // перерисовка того же экрана (сохранение настроек) не показывает новую подсказку сразу после «Пропустить»
+  await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveSettings({ minRest: 240 }); });
+  await page.waitForTimeout(1500);
+  assert.equal(await page.locator('.tour').count(), 0, 'после «Пропустить» на этом экране подсказок больше нет');
   // меню из трёх разделов — новая подсказка в один шаг (без «Пропустить»)
   await page.reload();
   await page.waitForFunction(() => document.querySelector('.tour-title')?.textContent === 'Разделы внизу');

@@ -7,7 +7,7 @@ import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
-import { loadTours, resetTours, tourActive } from './tour.js';
+import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
 import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour, slipPdfTour, sickPayTour, payModeTour, pendingTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
@@ -452,6 +452,7 @@ function back() { V.pages.pop(); render(); window.scrollTo(0, 0); }
 
 // Подсказки первого запуска для экранов (не поверх открытых окон)
 let tourTimer = null;
+setTourScreen(() => `${page() || `${V.tab}:${V.extra || ''}`}|${layerCount()}`);
 function scheduleTours() {
   clearTimeout(tourTimer);
   tourTimer = setTimeout(() => {

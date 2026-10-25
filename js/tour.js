@@ -5,6 +5,11 @@ import { esc } from './ui.js';
 let done = new Set();
 let active = null;
 const queue = [];
+// «Пропустить» закрывает подсказки этого экрана: до перехода на другой экран (или перезапуска) новых не показываем,
+// даже если экран перерисуется. screenKey задаёт app.js: вкладка или экран + число открытых окон.
+let screenKey = () => '';
+let skippedOn = null;
+export const setTourScreen = (fn) => { screenKey = fn; };
 
 const disabled = () => { try { return localStorage.getItem('cabina-tours-off') === '1'; } catch { return false; } };
 
@@ -21,6 +26,7 @@ async function markDone(id) {
 export const markTourDone = (id) => (done.has(id) ? null : markDone(id));
 export async function resetTours() {
   done = new Set();
+  skippedOn = null;
   try { await db.put('meta', { id: 'tours', done: [] }); } catch {}
 }
 
@@ -37,6 +43,7 @@ const visible = (el) => { if (!el) return false; const r = el.getBoundingClientR
  */
 export function runTour(id, steps) {
   if (tourDone(id)) return;
+  if (skippedOn !== null && skippedOn === screenKey()) return;
   if (active) { if (active.id !== id && !queue.some((q) => q.id === id)) queue.push({ id, steps }); return; }
   start(id, steps);
 }
@@ -128,7 +135,7 @@ function start(id, allSteps) {
     setTimeout(() => ov.remove(), 200);
     markDone(id);
     active = null;
-    if (skipped === true) { queue.length = 0; return; } // «Пропустить» — без цепочки следующих подсказок
+    if (skipped === true) { queue.length = 0; skippedOn = screenKey(); return; } // «Пропустить» — без цепочки следующих подсказок
     const nxt = queue.shift();
     if (nxt) setTimeout(() => runTour(nxt.id, nxt.steps), 300);
   }
