@@ -33,6 +33,7 @@ export const I = {
   check: sv('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
   note: sv('<path d="M5 4.5h14v10l-5 5H5z"/><path d="M14 19.5v-5h5M8.5 9h7M8.5 12.5h4"/>'),
   info: sv('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/>'),
+  excl: sv('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V13M12 16.2v.2"/>'),
   shield: sv('<path d="M12 3.5 5 6v5.5c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>'),
   alert: sv('<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17v.2"/>'),
   sun: sv('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>'),
@@ -213,6 +214,18 @@ export function confirmDialog({ title, text, ok = 'Удалить', cancel = 'О
     { kind: 'dialog', onClose: () => resolve(result) });
     el.querySelector('[data-act="no"]').onclick = () => closeLayer(el);
     el.querySelector('[data-act="yes"]').onclick = () => { result = true; closeLayer(el); };
+    el.querySelector('[data-act="yes"]').focus();
+  });
+}
+
+// Пояснение по кнопке «!»: заголовок, текст и одна кнопка «Понятно»
+export function infoDialog({ title, text }) {
+  return new Promise((resolve) => {
+    const el = openLayer(`<div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <h3>${esc(title)}</h3><p>${esc(text)}</p>
+      <div class="btns"><button class="btn btn-primary btn-sm" data-act="yes">Понятно</button></div></div>`,
+    { kind: 'dialog', onClose: () => resolve() });
+    el.querySelector('[data-act="yes"]').onclick = () => closeLayer(el);
     el.querySelector('[data-act="yes"]').focus();
   });
 }

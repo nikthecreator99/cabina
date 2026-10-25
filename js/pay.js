@@ -1,7 +1,9 @@
 // Ориентировочный расчёт заработной платы локомотивной бригады.
 // Схема сверена с расчётными листками (см. ТЗ 2.0, п. 5.4):
-//  • все отработанные часы × тарифная ставка; ожидание следования пассажиром — тоже по тарифу
-//    и тоже входит в отработанные часы (в квитке — «ОплЗаОжидСлед», отдельной строкой);
+//  • все отработанные часы × тарифная ставка; следование пассажиром и ожидание следования — тоже по тарифу,
+//    тоже входят в отработанные часы и идут отдельными строками (в квитке — «ОплЗаСледПасс» и «ОплЗаОжидСлед»);
+//  • тяжёлый или длинносоставный поезд (вес или длина больше нормы маршрута) — +15% ставки за часы на локомотиве
+//    («ДоплРабЛокомБрТяжДлинПоез»); у резерва и манёвров, следования и ожидания этой доплаты нет;
 //  • ночные (22:00–06:00) +40% ставки, «вредность» +4% на все часы, надбавка за класс — на все часы;
 //  • праздничные часы +100%;
 //  • переработка в том же месяце: часы сверх нормы (с учётом отвлечений) — ещё +50%,
@@ -32,9 +34,10 @@ export const PAY_FIELDS = [
   { k: 'sn', label: 'Северная надбавка', unit: '%', def: null, hint: 'В квитке — «Северная надбавка». Например, 50%. Начисляется на заработок вместе с премией.' },
   { k: 'zone', label: 'Зональная надбавка', unit: '%', def: null, hint: 'Есть не во всех регионах. Если в квитке её нет — оставьте пустым.' },
   { k: 'bam', label: 'Бамовская надбавка', unit: '%', def: null, hint: 'Только для работающих на БАМе. Если в квитке её нет — оставьте пустым.' },
+  { k: 'heavy', label: 'Тяжёлый и длинносоставный поезд', unit: '%', def: 15, hint: 'В квитке — «Допл…ТяжДлинПоез», обычно 15%. Нормы веса и длины — в маршруте.' },
   { k: 'trip', label: 'Ком. расходы за поездку', unit: '₽', def: null, hint: 'Фиксированная выплата за каждую поездку, если она у вас есть. Налогом не облагается.' },
   { k: 'sickDay', label: 'Оплата одного дня больничного', unit: '₽', def: null, hint: 'Сколько вам начисляют за один календарный день больничного. Найти можно в расчётном листке: сумму по больничному разделите на число дней болезни. Если оставить пустым, больничный не считается.', group: 'sick', ph: 'Например, 2 500' },
-  { k: 'avgHour', label: 'Средний заработок за час', unit: '₽/ч', def: null, hint: 'Сколько вы в среднем получаете за час со всеми доплатами, до вычета НДФЛ. Найти можно в квитке: сумму за техучёбу разделите на её часы. По нему считается учёба (сессия).', group: 'avg', ph: 'Например, 600' },
+  { k: 'avgHour', label: 'Средний заработок за час', unit: '₽/ч', def: null, hint: '', group: 'avg', ph: 'Например, 600' },
   { k: 'union', label: 'Профсоюзный взнос', unit: '%', def: null, hint: 'Удержание, если вы в профсоюзе. В квитке — «Профсоюз…», обычно 1%.', deduct: true },
   { k: 'pension', label: 'Корпоративная пенсия', unit: '%', def: null, hint: 'Добровольный взнос, если вы его платите. В квитке — «Удержание взнос КорпПенсия».', deduct: true },
 ];
@@ -108,22 +111,36 @@ function minutesInMonth(ivs, mk) {
   return total;
 }
 
+// Тяжёлый или длинносоставный поезд: вес или условная длина больше нормы маршрута (норма 5199 т — с 5200 т уже тяжёлый).
+// cfg.norms — нормы маршрутов { [routeId]: { weight, length } }. У резерва и манёвров поезда нет.
+export function isHeavy(trip, cfg) {
+  if (!trip || trip.kind === 'reserve' || trip.kind === 'shunt') return false;
+  const n = cfg?.norms?.[trip.routeId];
+  if (!n) return false;
+  return (num(n.weight) > 0 && num(trip.weight) > num(n.weight)) || (num(n.length) > 0 && num(trip.length) > num(n.length));
+}
+
 // Начисление за часы поездки (или её часть в месяце) без переработки:
-// ставка, ожидание, ночные, вредность, класс, праздничные. part — { work, night, holiday, wait } в минутах.
-// kind — вид движения поездки: у резерва часы (кроме ожидания) идут своей строкой, тоже по тарифу.
-// Пассажирский и манёвры пока оплачиваются как грузовой (будущие доплаты за тяжёлый поезд манёврам не положены).
-function hoursPay(part, rate, cfg, kind) {
+// ставка, следование, ожидание, ночные, вредность, класс, праздничные, тяжёлый поезд.
+// part — { work, night, holiday, wait, pass } в минутах. Работа на локомотиве = work − wait − pass.
+// У резерва часы на локомотиве идут своей строкой, тоже по тарифу.
+// Пассажирский и манёвры пока оплачиваются как грузовой (доплаты за тяжёлый поезд манёврам не положены).
+function hoursPay(part, rate, cfg, trip) {
   const h = part.work / 60;
   const w = (part.wait || 0) / 60;
-  const reserve = kind === 'reserve';
+  const p = (part.pass || 0) / 60;
+  const drive = Math.max(0, h - w - p);
+  const reserve = trip?.kind === 'reserve';
   return {
-    base: reserve ? 0 : (h - w) * rate,
-    reserve: reserve ? (h - w) * rate : 0,
+    base: reserve ? 0 : drive * rate,
+    pass: p * rate,
     wait: w * rate,
+    reserve: reserve ? drive * rate : 0,
     night: (part.night / 60) * rate * cfg.night / 100,
     harm: h * rate * cfg.harm / 100,
     klass: h * rate * cfg.klass / 100,
     holiday: (part.holiday / 60) * rate,
+    heavy: isHeavy(trip, cfg) ? drive * rate * cfg.heavy / 100 : 0,
   };
 }
 const sumObj = (o) => Object.values(o).reduce((s, v) => s + v, 0);
@@ -137,7 +154,7 @@ export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
   if (isAvg(cfg)) gross = (st.work / 60) * cfg.avgHour;
   else {
     const rate = rateOn(cfg, dateKeyOf(st.start));
-    const p = hoursPay(st, rate, cfg, trip.kind);
+    const p = hoursPay(st, rate, cfg, trip);
     const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3;
     gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
   }
@@ -151,16 +168,19 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const sum = monthSummary(y, m, trips, absences);
   const res = { mk, sum, lines: [], deductions: [], gross: 0, ndfl: 0, net: 0, hasRate: hasRate(cfg), empty: true };
   if (!res.hasRate) return res;
-  const acc = { base: 0, reserve: 0, wait: 0, night: 0, harm: 0, klass: 0, holiday: 0 };
+  const acc = { base: 0, pass: 0, wait: 0, reserve: 0, night: 0, harm: 0, klass: 0, holiday: 0, heavy: 0 };
   let comp = 0;
   let reserveMin = 0;
+  let heavyMin = 0;
   for (const t of sum.monthTrips) {
     const st = statsOf(t);
     const part = st.byMonth[mk];
     if (!part) continue;
-    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t.kind);
+    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t);
     for (const k of Object.keys(acc)) acc[k] += p[k];
-    if (t.kind === 'reserve') reserveMin += part.work - (part.wait || 0);
+    const drive = Math.max(0, part.work - (part.wait || 0) - (part.pass || 0));
+    if (t.kind === 'reserve') reserveMin += drive;
+    if (isHeavy(t, cfg)) heavyMin += drive;
     if (!st.live && monthKeyOf(st.start) === mk) comp += cfg.trip;
   }
   const lastDay = `${mk}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
@@ -180,23 +200,33 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const L = (key, label, amount, { pct, hours, days } = {}) => { if (amount > 0.004) res.lines.push({ key, label, pct, hours, days, amount: round2(amount) }); };
   const avg = isAvg(cfg);
   const avgPay = avg ? (sum.work / 60) * cfg.avgHour : 0;
+  const passMin = sum.pass || 0;
+  const waitMin = sum.wait || 0;
+  const baseMin = Math.max(0, sum.work - waitMin - passMin - reserveMin);
   if (avg) {
-    // по среднему: все часы × средний за час; доплаты, премия и коэффициенты уже внутри среднего
-    L('avg', 'Заработок по среднему', avgPay, { hours: h(sum.work) });
+    // по среднему: все часы × средний за час (доплаты, премия и коэффициенты уже внутри среднего);
+    // следование, ожидание и резерв — отдельными строками, как в квитке
+    const ah = (min) => (min / 60) * cfg.avgHour;
+    L('avg', 'Работа по среднему', ah(baseMin), { hours: h(baseMin) });
+    L('pass', 'Следование пассажиром', ah(passMin), { hours: h(passMin) });
+    L('wait', 'Ожидание следования пассажиром', ah(waitMin), { hours: h(waitMin) });
+    L('reserve', 'Следование резервом', ah(reserveMin), { hours: h(reserveMin) });
     for (const k of Object.keys(acc)) acc[k] = 0;
   }
   const noAvg = (v) => (avg ? 0 : v);
-  L('base', 'Оплата по тарифу', acc.base, { hours: h(sum.work - (sum.wait || 0) - reserveMin) });
+  L('base', 'Оплата по тарифу', acc.base, { hours: h(baseMin) });
+  L('pass', 'Следование пассажиром', acc.pass, { hours: h(passMin) });
+  L('wait', 'Ожидание следования пассажиром', acc.wait, { hours: h(waitMin) });
   L('reserve', 'Следование резервом', acc.reserve, { hours: h(reserveMin) });
-  L('wait', 'Ожидание следования пассажиром', acc.wait, { hours: h(sum.wait || 0) });
   L('night', 'Ночные', acc.night, { pct: cfg.night, hours: h(sum.night) });
   L('harm', 'Вредность', acc.harm, { pct: cfg.harm, hours: h(sum.work) });
   L('klass', 'Надбавка за класс', acc.klass, { pct: cfg.klass, hours: h(sum.work) });
   L('holiday', 'Праздничные', acc.holiday, { pct: 100, hours: h(sum.holiday) });
+  L('heavy', 'Тяжёлые и длинносоставные поезда', acc.heavy, { pct: cfg.heavy, hours: h(heavyMin) });
   L('overOther', 'Переработка', noAvg(overOther), { pct: 50, hours: O - Ow });
   L('overWeekend', 'Переработка в выходные', noAvg(overWeekend), { pct: 100, hours: Ow - hOw });
   L('overRest', 'Отдых сверх нормы в пункте оборота', noAvg(orPay), { hours: h(orMin) });
-  const workPay = avg ? avgPay : acc.base + acc.reserve + acc.wait + acc.night + acc.harm + acc.klass + acc.holiday + overOther + overWeekend + orPay;
+  const workPay = avg ? avgPay : sumObj(acc) + overOther + overWeekend + orPay;
   const bonus = avg ? 0 : workPay * cfg.bonus / 100;
   L('bonus', 'Премия', bonus, { pct: cfg.bonus });
   const withBonus = workPay + bonus;
@@ -270,7 +300,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['avg', 'base', 'reserve', 'wait', 'night', 'harm', 'klass', 'holiday', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension'];
+  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));

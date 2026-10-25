@@ -94,8 +94,10 @@ test('по среднему за час: все часы × средний, бе
   ];
   const abs = [{ id: 's', type: 'sick', start: '2026-10-12', end: '2026-10-12' }, { id: 'u', type: 'study', start: '2026-10-13', end: '2026-10-13' }];
   const r = payMonth(2026, 10, trips, abs, cfg, (t) => tripStats(t));
-  assert.deepEqual(r.lines.map((l) => l.key), ['avg', 'sick', 'study']);
-  assert.deepEqual({ amount: line(r, 'avg').amount, hours: line(r, 'avg').hours }, { amount: 6000, hours: 10 });
+  // 2.7: резерв (и следование, ожидание) — своей строкой, тоже по среднему
+  assert.deepEqual(r.lines.map((l) => l.key), ['avg', 'reserve', 'sick', 'study']);
+  assert.deepEqual({ amount: line(r, 'avg').amount, hours: line(r, 'avg').hours }, { amount: 4800, hours: 8 });
+  assert.deepEqual({ amount: line(r, 'reserve').amount, hours: line(r, 'reserve').hours }, { amount: 1200, hours: 2 });
   assert.equal(line(r, 'study').amount, 8 * 600, 'учёба: 8 ч по календарю × средний за час');
   assert.equal(r.gross, 6000 + 2000 + 4800);
   assert.equal(r.ndfl, 1664);

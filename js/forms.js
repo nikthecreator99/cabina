@@ -12,7 +12,7 @@ import { dayInfo } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
-import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, studyTour } from './tours.js';
+import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, studyTour, routeNormsTour } from './tours.js';
 
 export { computeHomeRest };
 
@@ -357,8 +357,8 @@ export function openTripForm(tripId) {
   function renderPass() {
     $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => intervalHtml(p, i, 'pass')).join('');
     $(el, '#tf-wait').innerHTML = F.waiting.map((p, i) => intervalHtml(p, i, 'wait')).join('');
-    // ожидание следования появляется, когда добавлено следование пассажиром
-    $(el, '#tf-add-wait').hidden = !F.passenger.length && !F.waiting.length;
+    // ожидание следования — по одному на каждое следование пассажиром
+    $(el, '#tf-add-wait').hidden = F.waiting.length >= F.passenger.length;
     if (F.passenger.length && !F.waiting.length) setTimeout(() => waitTour(el), 400);
   }
   function renderKind() {
@@ -547,6 +547,7 @@ export function openTripForm(tripId) {
       renderPass(); refreshAll();
       const last = el.querySelectorAll('#tf-pass .interval'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else if (act === 'add-wait') {
+      if (F.waiting.length >= F.passenger.length) return;
       // сначала ждали, потом поехали: окончание ожидания = начало следования пассажиром (можно поправить)
       const ref = F.passenger[Math.min(F.waiting.length, F.passenger.length - 1)];
       const day = ref?.sd || F.ed || F.sd || today;
@@ -817,6 +818,12 @@ export function openRouteForm(id, preset) {
       <div class="field"><label for="rf-km">Расстояние <span class="opt">· км, необязательно</span></label>
         <div class="input-unit"><input class="input" id="rf-km" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Например, 198"><span>км</span></div>
         <div class="hint">Длина плеча между точками А и Б.</div></div>
+      <div class="field" id="rf-norms"><div class="label">Для расчёта зарплаты <span class="opt">· необязательно</span></div>
+        <div class="two">
+          <div><label for="rf-wn" class="mini-label">Норма веса</label><div class="input-unit"><input class="input" id="rf-wn" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="5199"><span>т</span></div></div>
+          <div><label for="rf-ln" class="mini-label">Норма длины</label><div class="input-unit"><input class="input" id="rf-ln" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="59"><span>ваг.</span></div></div>
+        </div>
+        <div class="hint">Поезд тяжелее или длиннее нормы — доплата за тяжёлый поезд.</div></div>
       ${existing ? `<div class="hint">Используется в ${used} ${used % 10 === 1 && used % 100 !== 11 ? 'поездке' : 'поездках'}. Изменение названия обновит все эти поездки.</div>` : ''}
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="save-route">${I.check} Сохранить</button>`,
@@ -825,7 +832,10 @@ export function openRouteForm(id, preset) {
   $(el, '#rf-to').value = existing?.to || preset?.to || '';
   const km0 = existing?.distanceKm ?? preset?.distanceKm;
   $(el, '#rf-km').value = km0 != null && km0 !== '' ? String(km0) : '';
+  $(el, '#rf-wn').value = existing?.weightNorm ? String(existing.weightNorm) : '';
+  $(el, '#rf-ln').value = existing?.lengthNorm ? String(existing.lengthNorm) : '';
   if (!existing) setTimeout(() => $(el, '#rf-from').focus(), 250);
+  else setTimeout(() => routeNormsTour(el), 450);
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -845,7 +855,18 @@ export function openRouteForm(id, preset) {
         if (distanceKm > 20000) { showError(el, 'Проверьте расстояние — слишком большое значение.'); return; }
         distanceKm = Math.round(distanceKm * 10) / 10;
       }
-      await saveRoute({ ...(existing || { id: uid(), createdAt: Date.now() }), from, to, distanceKm, updatedAt: Date.now() });
+      // нормы веса и длины участка: целые, пусто — доплаты за тяжёлый поезд нет
+      const norm = (sel, max) => {
+        const v = $(el, sel).value.trim().replace(/\s/g, '');
+        if (v === '') return null;
+        const n = Number(v);
+        return Number.isInteger(n) && n > 0 && n <= max ? n : NaN;
+      };
+      const weightNorm = norm('#rf-wn', 20000);
+      const lengthNorm = norm('#rf-ln', 1000);
+      if (Number.isNaN(weightNorm)) { showError(el, 'Норма веса — целое число тонн, например 5199.'); return; }
+      if (Number.isNaN(lengthNorm)) { showError(el, 'Норма длины — целое число условных вагонов, например 59.'); return; }
+      await saveRoute({ ...(existing || { id: uid(), createdAt: Date.now() }), from, to, distanceKm, weightNorm, lengthNorm, updatedAt: Date.now() });
       closeLayer(el); toast(existing ? 'Маршрут изменён' : 'Маршрут сохранён');
     } else if (b.dataset.act === 'del-route') {
       const ok = await confirmDialog({ title: 'Удалить маршрут?', text: used ? 'Поездки с этим маршрутом сохранят его название.' : 'Маршрут будет удалён из списка.' });

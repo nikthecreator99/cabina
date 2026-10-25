@@ -21,7 +21,7 @@ import { renderPhones, phonesListHtml, openPhoneForm } from './phones.js';
 import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
 
-export const VERSION = '2.6.0';
+export const VERSION = '2.7.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '' };

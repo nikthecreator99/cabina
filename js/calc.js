@@ -83,14 +83,15 @@ function nextMonthStart(ms) {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
 }
 
-// Возвращает минуты: { work, night, holiday, restDay, wait, start, end, byMonth: { 'YYYY-MM': {work, night, holiday, restDay, wait} } }
+// Возвращает минуты: { work, night, holiday, restDay, wait, pass, start, end, byMonth: { 'YYYY-MM': {work, night, holiday, restDay, wait, pass} } }
 // restDay — время в выходные и праздничные дни по производственному календарю.
 // wait — ожидание следования пассажиром, не совпавшее с поездкой и следованием (входит в work).
+// pass — следование пассажиром, не совпавшее с самой поездкой (входит в work). Остальное — работа на локомотиве.
 // Поездка «в пути» (без окончания) считается до момента liveEnd, если он передан.
 export function tripStats(trip, liveEnd) {
   const t = !trip.end && Number.isFinite(liveEnd) && liveEnd > parseLocal(trip.start) ? { ...trip, end: fmtLocal(liveEnd) } : trip;
   const iv = tripIntervals(t);
-  const res = { work: 0, night: 0, holiday: 0, restDay: 0, wait: 0, byMonth: {}, start: NaN, end: NaN, intervals: iv, live: !trip.end };
+  const res = { work: 0, night: 0, holiday: 0, restDay: 0, wait: 0, pass: 0, byMonth: {}, start: NaN, end: NaN, intervals: iv, live: !trip.end };
   if (!iv.length) { res.start = parseLocal(trip.start); return res; }
   res.start = iv[0][0];
   res.end = iv[iv.length - 1][1];
@@ -99,7 +100,7 @@ export function tripStats(trip, liveEnd) {
     while (cur < e) {
       const stop = Math.min(e, nextMonthStart(cur));
       const mk = monthKeyOf(cur);
-      const b = res.byMonth[mk] || (res.byMonth[mk] = { work: 0, night: 0, holiday: 0, restDay: 0, wait: 0 });
+      const b = res.byMonth[mk] || (res.byMonth[mk] = { work: 0, night: 0, holiday: 0, restDay: 0, wait: 0, pass: 0 });
       const w = (stop - cur) / MIN;
       const n = nightIn(cur, stop) / MIN;
       const h = holidayIn(cur, stop) / MIN;
@@ -121,6 +122,16 @@ export function tripStats(trip, liveEnd) {
       }
     }
     for (const b of Object.values(res.byMonth)) { b.wait += b.work; res.wait += b.wait; }
+  }
+  if ((t.passenger || []).length) {
+    // следование = рабочее время без ожидания минус сама поездка (по месяцам)
+    const drive = {};
+    const ds = parseLocal(t.start); const de = parseLocal(t.end);
+    if (Number.isFinite(ds) && Number.isFinite(de)) {
+      let cur = ds;
+      while (cur < de) { const stop = Math.min(de, nextMonthStart(cur)); const mk = monthKeyOf(cur); drive[mk] = (drive[mk] || 0) + (stop - cur) / MIN; cur = stop; }
+    }
+    for (const [mk, b] of Object.entries(res.byMonth)) { b.pass = Math.max(0, b.work - b.wait - (drive[mk] || 0)); res.pass += b.pass; }
   }
   return res;
 }
@@ -227,13 +238,13 @@ export function validateAbsence(a, others) {
 export function monthSummary(y, m, trips, absences) {
   const mk = `${y}-${p2(m)}`;
   const base = monthNorm(y, m).hours;
-  let work = 0, night = 0, holiday = 0, restDay = 0, wait = 0;
+  let work = 0, night = 0, holiday = 0, restDay = 0, wait = 0, pass = 0;
   const monthTrips = [];
   for (const t of trips) {
     const st = t._stats || tripStats(t);
     const b = st.byMonth[mk];
     if (b && b.work > 0) {
-      work += b.work; night += b.night; holiday += b.holiday; restDay += b.restDay || 0; wait += b.wait || 0;
+      work += b.work; night += b.night; holiday += b.holiday; restDay += b.restDay || 0; wait += b.wait || 0; pass += b.pass || 0;
       monthTrips.push(t);
     } else if (st.live && monthKeyOf(st.start) === mk) monthTrips.push(t); // только что начатая поездка «в пути»
   }
@@ -250,7 +261,7 @@ export function monthSummary(y, m, trips, absences) {
   const normMin = Math.round(norm * 60);
   const pct = normMin > 0 ? work / normMin : null;
   const overtime = normMin > 0 || work > 0 ? Math.max(0, work - normMin) : 0;
-  return { mk, base, absTotal, norm, normMin, work, night, holiday, restDay, wait, overtime, absByType, pct, monthTrips, monthAbs };
+  return { mk, base, absTotal, norm, normMin, work, night, holiday, restDay, wait, pass, overtime, absByType, pct, monthTrips, monthAbs };
 }
 
 // ---- Отдых ----

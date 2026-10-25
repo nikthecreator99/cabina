@@ -1,5 +1,5 @@
 // Меню ☰ «Настройки работы»: маршруты, тарифные ставки и надбавки, дома отдыха, междусменный отдых.
-import { I, esc, small, pageHead, stepperHtml, openLayer, closeLayer, sheet, toast, confirmDialog, plural, MONTHS_GEN } from './ui.js';
+import { I, esc, small, pageHead, stepperHtml, openLayer, closeLayer, sheet, toast, confirmDialog, infoDialog, plural, MONTHS_GEN } from './ui.js';
 import { S, nowLocal, saveSettings, deleteRoute, myPay } from './store.js';
 import { fmtDur, fmtLocal } from './calc.js';
 import { openRouteForm } from './forms.js';
@@ -65,8 +65,8 @@ export function renderRoutes() {
 // ---------------------------------------------------------------- тарифные ставки и надбавки
 // Набор ставок один (с 2.6): если ставка меняется — человек просто вписывает новую. Надбавка за класс — только машинисту.
 const payRole = () => S.profile.role || 'assistant';
-// средний за час нужен всем: по нему считается учёба, а переключателем — и весь заработок
-const AVG_HINT = 'Со всеми доплатами, до НДФЛ. Найти в квитке: сумму за техучёбу разделите на её часы. По нему считается учёба (сессия): часы её дней по календарю × эта сумма.';
+// средний за час: поле и переключатель, пояснение — по кнопке «!»
+const AVG_INFO = 'Это примерно вся ваша зарплата до вычета НДФЛ, делённая на отработанные часы. Если включить «Считать зарплату по среднему», все рабочие часы умножаются на эту сумму — без отдельных доплат и надбавок. Позже CABINA поможет посчитать ваш средний.';
 export function renderTariffs() {
   const raw = paySet(S.settings.pay, payRole());
   const cfg = payCfg(S.settings.pay, payRole());
@@ -79,15 +79,15 @@ export function renderTariffs() {
     return `<div class="pay-field">
       <label for="pf-${f.k}">${esc(f.label)}</label>
       <div class="input-unit"><input class="input" id="pf-${f.k}" data-pf="${f.k}" inputmode="decimal" autocomplete="off" value="${esc(numText(shown))}" placeholder="${f.ph || '0'}"><span>${f.unit}</span></div>
-      <div class="hint">${esc(hint)}</div></div>`;
+      ${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</div>`;
   };
   const fields = PAY_FIELDS.filter((f) => !f.role || f.role === payRole());
   const avg = cfg.mode === 'avg';
   return `${pageHead('Тарифные ставки и надбавки', { back: true })}
     <div class="group-title">Средний заработок</div>
-    <div class="panel pay-panel" id="pay-avg">${fields.filter((f) => f.group === 'avg').map((f) => field(f, AVG_HINT)).join('')}
-      <div class="pay-field"><div class="switch-row" id="pay-mode"><div class="grow"><div class="t1">Считать зарплату по среднему</div>
-        <div class="hint">Все рабочие часы × средний за час. Ночные, праздничные и переработка уже внутри среднего.</div></div>
+    <div class="panel pay-panel" id="pay-avg">${fields.filter((f) => f.group === 'avg').map((f) => field(f, '')).join('')}
+      <div class="pay-field"><div class="switch-row" id="pay-mode"><div class="grow t1">Считать зарплату по среднему</div>
+        <button class="info-btn" data-act="avg-info" aria-label="Что такое средний заработок">${I.excl}</button>
         <button class="switch" role="switch" data-act="pay-mode" aria-checked="${avg}" aria-label="Считать зарплату по среднему"></button></div></div>
     </div>
     ${avg ? '' : `<div class="group-title">Тарифная ставка и надбавки</div>
@@ -250,6 +250,7 @@ export async function workClick(act, b, ctx) {
       if (r) openRouteForm(null, { from: r.to, to: r.from, distanceKm: r.distanceKm });
       return true;
     }
+    case 'avg-info': infoDialog({ title: 'Средний заработок за час', text: AVG_INFO }); return true;
     case 'pay-mode': {
       const m = b.getAttribute('aria-checked') === 'true' ? 'tariff' : 'avg';
       await savePaySet({ mode: m });

@@ -3,8 +3,8 @@
 import { I, esc, small, pageHead, toast, confirmDialog, plural, whenShort, dayMonth, MONTHS_PREP } from './ui.js';
 import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf } from './store.js';
 import { dateKeyOf, monthSummary, fmtDur, parseLocal } from './calc.js';
-import { ROLES } from './pay.js';
-import { currentRest, dayOffIntervals } from './rest.js';
+import { ROLES, OVERREST_MAX } from './pay.js';
+import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
 import { careerOf, tenure, tenureText, todayKey } from './career.js';
 import { normPhone } from './phones.js';
 
@@ -15,7 +15,7 @@ const safePhoto = (v) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.
 
 // Что коллеги смогут увидеть, когда в CABINA появится общение. По умолчанию — ничего.
 export const PRIVACY = [
-  { k: 'status', label: 'Статус', hint: 'В пути, на выходном, между поездками или на отвлечении.' },
+  { k: 'status', label: 'Статус', hint: 'В пути, на отдыхе, на выходном или на отвлечении.' },
   { k: 'depot', label: 'Депо', hint: 'Чтобы вас могли найти коллеги из вашего депо.' },
   { k: 'photo', label: 'Фото', hint: 'Без этого коллеги увидят только первые буквы имени.' },
   { k: 'phone', label: 'Номер телефона', hint: 'Только тем коллегам, кого вы сами добавите. Без этого номер не увидит никто.' },
@@ -29,23 +29,34 @@ export function avatarHtml(p = S.profile, size = 96) {
 
 const subLine = (p) => [ROLES[p.role] + (p.role === 'driver' && p.klass ? `, ${p.klass} класс` : ''), p.depot ? `депо ${p.depot}` : ''].filter(Boolean).join(' · ');
 
-// Статус: в пути → на отвлечении → на выходном → между поездками. null — пока нечего показать.
-// Причину отвлечения статус не называет: больничный — это сведения о здоровье.
+// Статус: в пути → на отвлечении → на выходном → на отдыхе в пункте оборота / жду явку → между поездками.
+// null — пока нечего показать. Причину отвлечения статус не называет: больничный — это сведения о здоровье.
+// Станцию пишем как есть, без склонения («На отдыхе · Сумский Посад»): склонять названия станций надёжно нельзя.
+// «до 15:00», а не «до сегодня, 15:00»
+const when = (ms, now) => whenShort(ms, now).replace(/^сегодня, /, '');
 export function profileStatus(now = nowLocal()) {
   const live = liveTrip();
   if (live && isPending(live, now)) return { kind: 'soon', label: 'Скоро явка', sub: whenShort(statsOf(live).start, now) };
   if (live) {
-    const r = routeOf(live);
-    return { kind: 'trip', label: 'В пути', sub: `с ${whenShort(statsOf(live).start, now)}${r ? ` · ${r}` : ''}` };
+    const to = routeEnds(live)?.to;
+    return { kind: 'trip', label: 'В пути', sub: `${to ? `→ ${to} · ` : ''}с ${when(statsOf(live).start, now)}` };
   }
   const today = dateKeyOf(now);
   const abs = S.absences.find((a) => a.start <= today && a.end >= today);
   if (abs) return { kind: 'abs', label: 'На отвлечении', sub: `до ${dayMonth(parseLocal(`${abs.end}T00:00`))} включительно` };
   const off = dayOffIntervals().find((x) => x.s <= now && now < x.e);
-  if (off) return { kind: 'dayoff', label: 'На выходном', sub: `до ${whenShort(off.e, now)}` };
+  if (off) return { kind: 'dayoff', label: 'На выходном', sub: `до ${when(off.e, now)}` };
   if (!S.trips.length) return null;
+  // после поездки с отдыхом в пункте оборота: «На отдыхе», а когда отдых вышел — «Жду явку» (до 48 ч)
+  let last = null;
+  for (const t of S.trips) { const st = statsOf(t); if (st.end <= now && (!last || st.end > statsOf(last).end)) last = t; }
+  if (last?.restType === 'turnaround') {
+    const r = chosenRest(last);
+    if (r && now < r.until) return { kind: 'rest', label: 'На отдыхе', sub: [r.house, `до ${when(r.until, now)}`].filter(Boolean).join(' · ') };
+    if (r && now - statsOf(last).end <= OVERREST_MAX) return { kind: 'wait', label: 'Жду явку', sub: r.house || '' };
+  }
   const rest = currentRest(now);
-  return { kind: 'between', label: 'Между поездками', sub: rest ? `${rest.label.toLowerCase()} · до ${whenShort(rest.until, now)}` : '' };
+  return { kind: 'between', label: 'Между поездками', sub: rest ? `${rest.label.toLowerCase()} · до ${when(rest.until, now)}` : '' };
 }
 
 export function renderProfile() {

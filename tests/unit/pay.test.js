@@ -142,11 +142,13 @@ test('ожидание следования пассажиром — по тар
   });
   const r = payMonth(2026, 10, [t], [], cfgOf({ bonus: 0, harm: 0, night: 0 }), st);
   assert.equal(r.sum.work, 480);
-  assert.equal(line(r, 'base').hours, 5.5);
-  assert.equal(line(r, 'base').amount, 1650);
+  // 2.7: как в квитке — работа на локомотиве, следование пассажиром и ожидание отдельными строками
+  assert.equal(line(r, 'base').hours, 4);
+  assert.equal(line(r, 'base').amount, 1200);
+  assert.equal(line(r, 'pass').hours, 1.5);
+  assert.equal(line(r, 'pass').amount, 450);
   assert.equal(line(r, 'wait').hours, 2.5);
   assert.equal(line(r, 'wait').amount, 750);
   assert.equal(r.gross, 2400);
-  // строка идёт сразу после оплаты по тарифу
-  assert.deepEqual(r.lines.map((l) => l.key).slice(0, 2), ['base', 'wait']);
+  assert.deepEqual(r.lines.map((l) => l.key).slice(0, 3), ['base', 'pass', 'wait']);
 });

@@ -59,7 +59,8 @@ export const isLive = (t) => !!t && !t.end;
 export const refreshLive = () => S.trips.forEach((t) => { if (isLive(t)) statsOf(t); });
 
 // Набор ставок для должности из профиля и отдых сверх нормы по поездкам (минуты)
-export const myPay = () => payCfg(S.settings.pay, S.profile.role);
+// norms — нормы веса и длины маршрутов: по ним видно тяжёлый и длинносоставный поезд
+export const myPay = () => ({ ...payCfg(S.settings.pay, S.profile.role), norms: Object.fromEntries(S.routes.filter((r) => r.weightNorm || r.lengthNorm).map((r) => [r.id, { weight: r.weightNorm, length: r.lengthNorm }])) });
 export function overRestByTrip() {
   const m = new Map();
   for (const x of overRestIntervals(S.trips, statsOf)) m.set(x.trip.id, (m.get(x.trip.id) || 0) + (x.e - x.s) / MIN);

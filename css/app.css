@@ -454,6 +454,9 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 #tf-note-field .mini-label, #tf-routeno-field .mini-label { display: block; margin-bottom: 4px; }
 .switch-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); }
 .switch-row .grow { flex: 1; min-width: 0; }
+.info-btn { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+.info-btn:active { background: var(--card-2); }
+.switch-row .t1 { font-weight: 700; }
 .row-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding: 0 4px; }
 .row-field .input { min-width: 0; max-width: 60%; }
 .switch { position: relative; width: 52px; height: 32px; border-radius: 99px; background: var(--line-2); transition: .2s; flex: none; }
@@ -756,6 +759,8 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .pr-status.st-dayoff { --c: var(--night); }
 .pr-status.st-abs { --c: var(--medical); }
 .pr-status.st-soon { --c: var(--warn); }
+.pr-status.st-rest { --c: var(--night); }
+.pr-status.st-wait { --c: var(--warn); }
 .profile-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .profile-tiles .pt { display: flex; flex-direction: column; gap: 2px; padding: 12px 10px; border-radius: var(--r-md, 14px); background: var(--card-solid); border: 1px solid var(--line); min-width: 0; }
 .profile-tiles b { font-size: 18px; font-weight: 800; }

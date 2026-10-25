@@ -112,7 +112,8 @@ test('ожидание следования: блок выше следован�
   const wy = (await w.boundingBox()).y;
   const py = (await f.locator('#tf-pass').boundingBox()).y;
   assert.ok(wy < py, 'ожидание выше следования пассажиром');
-  assert.ok((await f.locator('#tf-add-wait').boundingBox()).y < py, 'кнопка ожидания тоже выше');
+  // 2.7: на одно следование — одно ожидание, кнопка больше не показывается
+  assert.equal(await f.locator('#tf-add-wait').isHidden(), true, 'второе ожидание к одному следованию не добавить');
   await w.locator('[data-pf=st]').fill('12:00');
   assert.match(await text(f, '#tf-calc'), /В том числе ожидание следования\s+2 ч 30 мин/);
   await f.locator('[data-act=save-trip]').click();
@@ -137,7 +138,7 @@ test('учёба: вычитается из нормы с расшифровко
   await page.waitForSelector('#pay-avg #pf-avgHour');
   // экран сам прокручивается к среднему заработку
   await page.waitForFunction(() => { const r = document.querySelector('#pay-avg').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }, null, { timeout: 3000 });
-  assert.match(await text(page, '#pay-avg'), /Средний заработок за час[\s\S]*учёба \(сессия\): часы её дней по календарю/);
+  assert.match(await text(page, '#pay-avg'), /Средний заработок за час/);
   await page.fill('#pf-avgHour', '500');
   await page.locator('#pf-avgHour').blur();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.avgHour === 500);
@@ -156,7 +157,10 @@ test('«Считать зарплату по среднему» (2.6): пере�
   await workPage(page, 'tariffs');
   const sw = page.locator('#pay-mode [data-act=pay-mode]');
   assert.equal(await sw.getAttribute('aria-checked'), 'false', 'по умолчанию — по тарифу');
-  assert.match(await text(page, '#pay-avg'), /Средний заработок за час[\s\S]*учёба[\s\S]*Считать зарплату по среднему/);
+  // 2.7: только поле и переключатель, без пояснений про учёбу и техучёбу
+  const avgText = await text(page, '#pay-avg');
+  assert.match(avgText, /Средний заработок за час[\s\S]*Считать зарплату по среднему/);
+  assert.doesNotMatch(avgText, /учёб|сесси/i);
   // переключатель — в одном блоке со средним, выше ставки
   assert.ok((await page.locator('#pay-mode').boundingBox()).y < (await page.locator('#pf-rate').boundingBox()).y);
   assert.equal(await page.locator('#pf-oklad').count(), 0, 'оклад теперь в «Карьере»');
@@ -174,7 +178,7 @@ test('«Считать зарплату по среднему» (2.6): пере�
   await page.locator('.hero').click();
   await page.locator('#st-kind button').nth(1).click();
   const s = await text(page, '.screen');
-  assert.match(s, /Заработок по среднему[\s\S]*2\s400/);
+  assert.match(s, /Работа по среднему[\s\S]*2\s400/);
   assert.doesNotMatch(s, /Оплата по тарифу|Премия/);
   // выключили — снова по тарифу, ставка на месте
   await workPage(page, 'tariffs');
