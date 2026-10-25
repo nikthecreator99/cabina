@@ -265,9 +265,9 @@ test('документы: фото в папке листаются', async () =
   ]);
   await page.waitForFunction(() => document.querySelectorAll('[data-act=doc-open]').length === 2);
   await page.locator('[data-act=doc-open]').first().click();
-  await page.waitForSelector('.viewer-count');
-  assert.equal(await text(page, '.viewer-count'), '1 из 2');
+  // номер фото появляется, когда файл прочитан из хранилища, — ждём его, а не читаем сразу
   const count = (v) => page.waitForFunction((v) => document.querySelector('.viewer-count')?.textContent === v, v);
+  await count('1 из 2');
   await page.locator('[data-v=next]').click();
   await count('2 из 2');
   assert.equal(await page.locator('[data-v=next]').isHidden(), true);

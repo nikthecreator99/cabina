@@ -1,6 +1,6 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
-import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
+import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
 import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
@@ -8,7 +8,7 @@ import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docSta
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { loadTours, resetTours, tourActive } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour, slipPdfTour, medSettingsTour, sickPayTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, profileSettingsTour, slipPdfTour, sickPayTour, payModeTour, pendingTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -17,9 +17,9 @@ import { renderProfile, renderProfileEdit, profileClick, profileChange } from '.
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
-import { medReminder, medBannerHtml, medClick, medChange, medSettingsHtml } from './med.js';
+import { medReminder, medBannerHtml, medClick } from './med.js';
 
-export const VERSION = '2.4.0';
+export const VERSION = '2.5.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '' };
@@ -112,6 +112,7 @@ function bigDur(min) {
 function tripRow(t, mk, payCtx) {
   const st = statsOf(t);
   const live = isLive(t);
+  const pending = live && isPending(t);
   const s = new Date(st.start);
   const loco = locoLabel(t.locoType, t.locoNumber);
   const route = routeOf(t);
@@ -119,7 +120,7 @@ function tripRow(t, mk, payCtx) {
   const partial = !live && part && Math.round(part.work) !== Math.round(st.work);
   const pay = payCtx ? tripPay(t, st, payCtx.cfg, { overRestMin: payCtx.or.get(t.id) || 0 }) : null;
   const chips = [
-    live ? '<span class="chip live"><span class="live-dot"></span> В пути</span>' : '',
+    pending ? `<span class="chip pending">${small(I.clock, 13)} Ждёт явки</span>` : live ? '<span class="chip live"><span class="live-dot"></span> В пути</span>' : '',
     loco ? `<span class="chip loco">${small(I.train, 13)} ${esc(loco)}</span>` : '',
     st.night ? `<span class="chip" style="--c:var(--night)">${small(I.moon, 13)} ${fmtDur(st.night, { short: true })}</span>` : '',
     st.holiday ? `<span class="chip" style="--c:var(--holiday)">${small(I.calStar, 13)} ${fmtDur(st.holiday, { short: true })}</span>` : '',
@@ -130,11 +131,11 @@ function tripRow(t, mk, payCtx) {
   <button class="trip swipe-row ${live ? 'is-live' : ''}" data-act="trip" data-id="${t.id}">
     <div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
-      <div class="trip-time">${hm(st.start)} — ${live ? 'сейчас' : hm(st.end)}</div>
+      <div class="trip-time">${pending ? `Явка в ${hm(st.start)}` : `${hm(st.start)} — ${live ? 'сейчас' : hm(st.end)}`}</div>
       <div class="trip-route">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ''}
     </div>
-    <div class="trip-right"><div class="dur">${fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}${pay ? `<small class="earn">≈ ${fmtRub(pay.net)}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
+    <div class="trip-right"><div class="dur">${pending ? '' : fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}${pay ? `<small class="earn">≈ ${fmtRub(pay.net)}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
   </button></div>`;
 }
 
@@ -195,6 +196,8 @@ function renderHome() {
 
   const absCount = sum.monthAbs.length;
   const rest = isCurrent ? currentRest(now) : null;
+  const lt = isCurrent ? liveTrip() : null;
+  const pend = lt && isPending(lt, now) ? lt : null;
   const trips = [...sum.monthTrips].sort((a, b) => (isLive(b) - isLive(a)) || statsOf(b).start - statsOf(a).start);
   const mk = sum.mk;
 
@@ -224,6 +227,7 @@ function renderHome() {
     </div>
     <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
+    ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${pend.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${rest ? `<button class="rest-banner" data-act="trip" data-id="${rest.trip.id}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() : ''}
     ${backupNag(now)}
@@ -286,31 +290,16 @@ function renderExtra() {
     const locos = new Set(S.notes.map((n) => locoKey(n.type, n.number))).size;
     const docs = docsCount();
     html = `<div class="page-head"><h1>Ещё</h1></div>
-      <button class="tile-link" data-act="extra-notes"><span class="big-ico" style="--c:var(--accent)">${I.note}</span>
-        <div><div class="t1">Заметки о локомотивах</div><div class="t2">${S.notes.length ? `${S.notes.length} ${plural(S.notes.length, 'заметка', 'заметки', 'заметок')} · ${locos} ${plural(locos, 'локомотив', 'локомотива', 'локомотивов')}` : 'Пока пусто'}</div></div><span class="chev">${I.right}</span></button>
-      <button class="tile-link" data-act="extra-docs"><span class="big-ico" style="--c:var(--warn)">${I.folder}</span>
-        <div><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div><span class="chev">${I.right}</span></button>
-      <button class="tile-link" data-act="extra-fix"><span class="big-ico" style="--c:var(--night)">${I.shoe}</span>
-        <div><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div><span class="chev">${I.right}</span></button>`;
+      <div class="panel extra-list">
+        <button class="row" data-act="extra-notes"><span class="ico" style="--c:var(--accent)">${I.note}</span>
+          <div class="grow"><div class="t1">Заметки о локомотивах</div><div class="t2">${S.notes.length ? `${S.notes.length} ${plural(S.notes.length, 'заметка', 'заметки', 'заметок')} · ${locos} ${plural(locos, 'локомотив', 'локомотива', 'локомотивов')}` : 'Пока пусто'}</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="extra-docs"><span class="ico" style="--c:var(--warn)">${I.folder}</span>
+          <div class="grow"><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="extra-fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
+          <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>
+      </div>`;
   }
   return html;
-}
-
-// ---------------------------------------------------------------- обучение и чаты (скоро)
-function renderLearn() {
-  return `<div class="page-head"><h1>Обучение</h1></div>
-    <section class="soon"><div class="em-ico">${I.learn}</div><span class="soon-badge">Скоро</span>
-      <b>Подготовка к испытаниям и техзанятиям</b>
-      <p>Короткие уроки по 3–5 минут: сигнализация, ПТЭ, ИДП, регламент переговоров. Серия дней, повторение ошибок и режим «как на испытаниях».</p>
-      <p class="hint">Вопросы составляем сами по открытым документам, и каждый проверяет опытный машинист. Ошибка в учебнике по безопасности движения хуже, чем его отсутствие, поэтому раздел откроется, когда первая тема будет проверена.</p></section>`;
-}
-function renderChats() {
-  return `<div class="page-head"><h1>Чаты</h1></div>
-    <section class="soon"><div class="em-ico">${I.chat}</div><span class="soon-badge">Скоро</span>
-      <b>Общение с коллегами</b>
-      <p>Переписка, группы своего депо, отзывы об оборотных депо и домах отдыха.</p>
-      <p class="hint">Чаты появятся вместе с аккаунтами и сервером CABINA в России. Ваши поездки, отвлечения и заработок останутся в телефоне. Что видят коллеги, вы решите сами в профиле, а сейчас там скрыто всё.</p>
-      <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.shield, 16)} Настроить приватность</button></section>`;
 }
 
 // ---------------------------------------------------------------- настройки (из профиля, шестерёнка)
@@ -334,31 +323,51 @@ async function refreshStorage() {
   } catch { storageInfo = null; }
 }
 
+const tzLabel = (v) => (TZ.find(([k]) => k === v) || TZ[1])[1];
+
+// Производственный календарь: пояснения в отдельном окне, в Настройках — одна строка
+function openCalendarInfo() {
+  const y = new Date(nowLocal()).getUTCFullYear();
+  const yi = yearInfo(y);
+  const nextYi = yearInfo(y + 1);
+  openLayer(sheet({
+    title: 'Производственный календарь',
+    body: `<div class="panel">
+        <div class="row"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">${y} год: ${yi.hours} ч</div><div class="t2">${yi.official ? esc(yi.source) : 'Предварительный расчёт по ТК РФ'}</div></div></div>
+        <div class="row"><span class="ico">${I.calendar}</span><div class="grow"><div class="t1">${y + 1} год: ${nextYi.hours} ч</div><div class="t2">${nextYi.official ? 'Утверждён' : 'Предварительный расчёт по ТК РФ'}</div></div></div>
+      </div>
+      <p class="hint">Пятидневная неделя, 40 часов. Рабочий день — 8 ч, предпраздничный — 7 ч. Праздничные часы — только в официальные нерабочие праздничные дни. Официальные данные: ${officialYears().join(', ')}. Календарь обновляется вместе с приложением и не затрагивает ваши записи.</p>`,
+  }));
+}
+
+function openTzPicker() {
+  const el = openLayer(sheet({
+    title: 'Часовой пояс',
+    body: `<p class="hint">Для отметки «сейчас», поездки «в пути» и статуса отдыха.</p>
+      <div class="choice-list" id="tz-list">${TZ.map(([v, l]) => `<button type="button" class="choice" data-tz="${v}" aria-pressed="${S.settings.tz === v}">${l}</button>`).join('')}</div>`,
+  }));
+  el.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-tz]');
+    if (!b) return;
+    closeLayer(el);
+    if (b.dataset.tz !== S.settings.tz) { await saveSettings({ tz: b.dataset.tz }); toast('Часовой пояс сохранён'); }
+  });
+}
+
 function renderSettings() {
   const s = S.settings;
   const y = new Date(nowLocal()).getUTCFullYear();
   const yi = yearInfo(y);
-  const nextYi = yearInfo(y + 1);
-  const off = officialYears();
   const themeBtn = (v, label, ic) => `<button data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${small(ic, 16)} ${label}</button>`;
   const lastBk = S.backup.lastAt ? `Последняя копия: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Копия ещё не сохранялась';
   return `${pageHead('Настройки', { back: true })}
-    <div class="group"><div class="group-title">Профиль</div>
-      <div class="panel"><button class="row" data-act="go" data-page="profile-settings"><span class="ico" style="--c:var(--accent)">${I.user}</span><div class="grow"><div class="t1">Настройка профиля</div><div class="t2">Профиль и карьера: стаж, должности, вознаграждение за преданность</div></div>${small(I.right, 18)}</button></div>
-    </div>
-    <div class="group"><div class="group-title">Напоминания</div>
-      <div class="panel" id="med-panel">${medSettingsHtml()}</div>
-    </div>
     <div class="group"><div class="group-title">Оформление</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
     </div>
-    <div class="group"><div class="group-title">Время</div>
-      <div class="panel">
-        <div class="row"><span class="ico" style="--c:var(--night)">${I.globe}</span><div class="grow"><label class="t1" for="tz">Часовой пояс</label><div class="t2">Для отметки «сейчас», поездки «в пути» и статуса отдыха</div></div></div>
-        <div class="row"><select class="input" id="tz">${TZ.map(([v, l]) => `<option value="${v}" ${s.tz === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      </div>
+    <div class="group"><div class="group-title">Профиль</div>
+      <div class="panel"><button class="row" data-act="go" data-page="profile-settings"><span class="ico" style="--c:var(--accent)">${I.user}</span><div class="grow"><div class="t1">Настройка профиля</div><div class="t2">Профиль и карьера: стаж, должности, вознаграждение за преданность</div></div>${small(I.right, 18)}</button></div>
     </div>
-    <div class="group"><div class="group-title">Данные</div>
+    <div class="group"><div class="group-title">Данные и резервная копия</div>
       <div class="notice">${I.alert}<div><b>Данные хранятся только на этом устройстве.</b> Если удалить приложение или очистить данные браузера без резервной копии, поездки, отвлечения, профиль и документы будут потеряны.</div></div>
       <div class="panel">
         <div class="row"><span class="ico" style="--c:var(--warn)">${I.folder}</span><div class="grow"><div class="t1">Включить рабочие документы</div><div class="t2">Копия будет больше, но сохранит все файлы</div></div>
@@ -371,11 +380,10 @@ function renderSettings() {
       </div>
     </div>
     <div class="group"><div class="group-title">Производственный календарь</div>
-      <div class="panel">
-        <div class="row"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">${y} год: ${yi.hours} ч</div><div class="t2">${yi.official ? esc(yi.source) : 'Предварительный расчёт по ТК РФ'}</div></div></div>
-        <div class="row"><span class="ico">${I.calendar}</span><div class="grow"><div class="t1">${y + 1} год: ${nextYi.hours} ч</div><div class="t2">${nextYi.official ? 'Утверждён' : 'Предварительный расчёт по ТК РФ'}</div></div></div>
-        <div class="row"><span class="ico">${I.info}</span><div class="grow"><div class="t2">Пятидневная неделя, 40 часов. Рабочий день — 8 ч, предпраздничный — 7 ч. Праздничные часы — только в официальные нерабочие праздничные дни. Официальные данные: ${off.join(', ')}. Календарь обновляется вместе с приложением и не затрагивает ваши записи.</div></div></div>
-      </div>
+      <div class="panel"><button class="row" data-act="cal-info"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">РФ, 40-часовая неделя</div><div class="t2">${y} год — ${yi.hours} ч</div></div>${small(I.right, 18)}</button></div>
+    </div>
+    <div class="group"><div class="group-title">Часовой пояс</div>
+      <div class="panel"><button class="row" data-act="tz-pick" id="tz-row"><span class="ico" style="--c:var(--night)">${I.globe}</span><div class="grow"><div class="t1">${esc(tzLabel(s.tz))}</div><div class="t2">Для отметки «сейчас», поездки «в пути» и статуса отдыха</div></div>${small(I.right, 18)}</button></div>
     </div>
     <div class="group"><div class="group-title">Установка на экран</div>
       <div class="panel">
@@ -407,8 +415,6 @@ function render({ still = false } = {}) {
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
-  else if (V.tab === 'learn') app.innerHTML = `<div class="screen">${renderLearn()}</div>`;
-  else if (V.tab === 'chats') app.innerHTML = `<div class="screen">${renderChats()}</div>`;
   else app.innerHTML = `<div class="screen">${renderProfile()}</div>`;
   renderTabbar();
   scheduleTours();
@@ -453,15 +459,15 @@ function scheduleTours() {
     const p = page();
     if (p === 'work') workTour();
     else if (p === 'routes') routesTour();
-    else if (p === 'tariffs') { tariffsTour(); sickPayTour(); }
+    else if (p === 'tariffs') { tariffsTour(); payModeTour(); sickPayTour(); }
     else if (p === 'houses') housesTour();
     else if (p === 'stats') { statsTour(); slipPdfTour(); }
-    else if (p === 'settings') { settingsTour(); medSettingsTour(); }
+    else if (p === 'settings') settingsTour();
     else if (p === 'profile-edit') profileEditTour();
     else if (p === 'profile-settings') profileSettingsTour();
     else if (p === 'career') careerTour();
     else if (p) return;
-    else if (V.tab === 'home') { homeTour(); tabsTour(); if (app.querySelector('.swipe')) swipeTour(); }
+    else if (V.tab === 'home') { homeTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), fixTileTour()));
     else if (V.tab === 'profile') profileTour();
   }, 500);
@@ -471,7 +477,7 @@ export { scheduleTours };
 onChange(() => rerender());
 
 function openTariffsPage() { go('work'); V.pages.push('tariffs'); resetPayRole(); render(); }
-setTariffsOpener(() => { openTariffsPage(); setTimeout(() => document.getElementById('pay-sick')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
+setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
 setNavigator((startStr) => {
   const ms = parseLocal(startStr);
   if (!Number.isFinite(ms)) return;
@@ -539,6 +545,8 @@ app.addEventListener('click', async (e) => {
     case 'back': back(); break;
     case 'stats': go('stats'); break;
     case 'set-rate': openTariffsPage(); break;
+    case 'cal-info': openCalendarInfo(); break;
+    case 'tz-pick': openTzPicker(); break;
     case 'prev': shiftMonth(-1); break;
     case 'next': shiftMonth(1); break;
     case 'today': goToday(); render(); break;
@@ -618,9 +626,7 @@ app.addEventListener('change', async (e) => {
   if (await workChange(e)) return;
   if (await profileChange(e)) return;
   if (await careerChange(e)) return;
-  if (await medChange(e)) return;
-  if (t.id === 'tz') { await saveSettings({ tz: t.value }); toast('Часовой пояс сохранён'); }
-  else if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
+  if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
   else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) applyTheme(); }
 });
 

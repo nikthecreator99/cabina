@@ -125,13 +125,14 @@ export function tripStats(trip, liveEnd) {
   return res;
 }
 
-// { live: true } — разрешить поездку «в пути» без окончания (не позже now).
+// { live: true } — разрешить поездку без окончания: «в пути» или «ждёт явки» (явка не дальше чем через 3 суток).
+export const PENDING_MAX = 3 * 24 * 60;
 export function validateTrip(trip, { live = false, now } = {}) {
   const s = parseLocal(trip.start);
   const e = parseLocal(trip.end);
   if (!Number.isFinite(s)) return 'Укажите дату и время начала поездки.';
   if (!trip.end && live) {
-    if (Number.isFinite(now) && s > now) return 'Поездка «в пути» не может начаться позже текущего времени. Проверьте начало или укажите окончание.';
+    if (Number.isFinite(now) && s > now + PENDING_MAX * MIN) return 'Явку можно указать не больше чем за 3 суток вперёд. Проверьте дату начала.';
   } else {
     if (!Number.isFinite(e)) return 'Укажите дату и время окончания поездки.';
     if (e < s) return 'Окончание поездки раньше начала. Проверьте даты и время.';
@@ -169,6 +170,28 @@ export function autoAbsenceHours(startKey, endKey) {
     byMonth[mk] = (byMonth[mk] || 0) + dayInfo(k).hours;
   });
   return byMonth;
+}
+
+// Расшифровка «Из нормы вычтется» для формы отвлечения: «8 + 8 + 7 + 8, выходные и праздник — 0».
+// Длинный период — сгруппированно: «20 × 8 + 1 × 7».
+export function absenceBreakdown(startKey, endKey) {
+  const hours = [];
+  let weekends = 0, holidays = 0;
+  eachDate(startKey, endKey, (k) => {
+    const d = dayInfo(k);
+    if (d.hours > 0) hours.push(d.hours);
+    else if (d.kind === 'holiday') holidays++;
+    else weekends++;
+  });
+  const fmt = (h) => String(h).replace('.', ',');
+  let work = '';
+  if (hours.length > 10) {
+    const groups = new Map();
+    for (const h of hours) groups.set(h, (groups.get(h) || 0) + 1);
+    work = [...groups].sort((a, b) => b[0] - a[0]).map(([h, n]) => `${n} × ${fmt(h)}`).join(' + ');
+  } else work = hours.map(fmt).join(' + ');
+  const off = [weekends ? (weekends > 1 ? 'выходные' : 'выходной') : '', holidays ? (holidays > 1 ? 'праздники' : 'праздник') : ''].filter(Boolean).join(' и ');
+  return [work, off ? `${off} — 0` : ''].filter(Boolean).join(', ');
 }
 
 export function absenceMonths(startKey, endKey) {
@@ -214,7 +237,7 @@ export function monthSummary(y, m, trips, absences) {
       monthTrips.push(t);
     } else if (st.live && monthKeyOf(st.start) === mk) monthTrips.push(t); // только что начатая поездка «в пути»
   }
-  const absByType = { sick: 0, vacation: 0, medical: 0 };
+  const absByType = { sick: 0, vacation: 0, medical: 0, study: 0 };
   const monthAbs = [];
   for (const a of absences) {
     const h = absenceHoursByMonth(a)[mk];

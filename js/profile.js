@@ -1,7 +1,7 @@
 // Профиль (основа будущей сети). Пока всё хранится только в этом телефоне и никому не показывается.
 // Экран «Профиль» — просмотр; изменить фото, имя, должность, депо и приватность — «Редактировать профиль».
 import { I, esc, small, pageHead, toast, confirmDialog, plural, whenShort, dayMonth, MONTHS_PREP } from './ui.js';
-import { S, saveProfile, nowLocal, liveTrip, statsOf, routeOf } from './store.js';
+import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf } from './store.js';
 import { dateKeyOf, monthSummary, fmtDur, parseLocal } from './calc.js';
 import { ROLES } from './pay.js';
 import { currentRest, dayOffIntervals } from './rest.js';
@@ -31,6 +31,7 @@ const subLine = (p) => [ROLES[p.role] + (p.role === 'driver' && p.klass ? `, ${p
 // Причину отвлечения статус не называет: больничный — это сведения о здоровье.
 export function profileStatus(now = nowLocal()) {
   const live = liveTrip();
+  if (live && isPending(live, now)) return { kind: 'soon', label: 'Скоро явка', sub: whenShort(statsOf(live).start, now) };
   if (live) {
     const r = routeOf(live);
     return { kind: 'trip', label: 'В пути', sub: `с ${whenShort(statsOf(live).start, now)}${r ? ` · ${r}` : ''}` };
@@ -51,9 +52,11 @@ export function renderProfile() {
   const now = new Date(nowLocal());
   const y = now.getUTCFullYear(); const m = now.getUTCMonth() + 1;
   const sum = monthSummary(y, m, S.trips, S.absences);
-  const total = S.trips.length;
-  const tiles = total ? `<div class="profile-tiles">
-      <div class="pt"><b class="num">${sum.monthTrips.length}</b><span>${plural(sum.monthTrips.length, 'поездка', 'поездки', 'поездок')} в ${MONTHS_PREP[m - 1]}</span></div>
+  // поездка, которая ждёт явки, в счёт не идёт, пока не началась
+  const total = S.trips.filter((t) => !isPending(t)).length;
+  const inMonth = sum.monthTrips.filter((t) => !isPending(t)).length;
+  const tiles = S.trips.length ? `<div class="profile-tiles">
+      <div class="pt"><b class="num">${inMonth}</b><span>${plural(inMonth, 'поездка', 'поездки', 'поездок')} в ${MONTHS_PREP[m - 1]}</span></div>
       <div class="pt"><b class="num">${fmtDur(sum.work, { short: true })}</b><span>отработано в ${MONTHS_PREP[m - 1]}</span></div>
       <div class="pt"><b class="num">${total}</b><span>${plural(total, 'поездка', 'поездки', 'поездок')} всего</span></div>
     </div>` : '';

@@ -83,6 +83,10 @@ export function renderTariffs() {
   return `${pageHead('Тарифные ставки и надбавки', { back: true })}
     <div class="seg" id="pay-role">${Object.entries(ROLES).map(([k, v]) => `<button data-act="pay-role" data-role="${k}" aria-pressed="${payRole === k}">${v}</button>`).join('')}</div>
     <div class="hint">${payRole === S.profile.role ? 'Этот набор используется в расчёте — он соответствует должности в профиле.' : `В расчёте сейчас используется набор «${ROLES[S.profile.role]}» — по должности в профиле.`}</div>
+    <div class="group-title">Как считать заработок</div>
+    <div class="seg" id="pay-mode">${[['tariff', 'По тарифной ставке'], ['avg', 'По среднему за час']].map(([k, v]) => `<button data-act="pay-mode" data-mode="${k}" aria-pressed="${cfg.mode === k}">${v}</button>`).join('')}</div>
+    ${cfg.mode === 'avg' ? `<div class="panel pay-panel" id="pay-avg">${fields.filter((f) => f.group === 'avg').map(field).join('')}
+      <div class="pay-field"><div class="hint">Все рабочие часы × средний за час, затем минус НДФЛ. Упрощённо: ночные, праздничные и переработка отдельно не учитываются — они уже внутри среднего.</div></div></div>` : `
     <div class="panel pay-panel">
       <div class="pay-field">
         <label for="pf-rate">Тарифная ставка, ₽ в час</label>
@@ -90,16 +94,14 @@ export function renderTariffs() {
         <div class="hint">В квитке — «Оклад/Тариф» в шапке. Все часы умножаются на неё, от неё считаются все доплаты.</div>
         ${rates.length > 1 || (rates[0] && rates[0].from) ? `<div class="rate-hist"><div class="mini-label">История ставки</div>${rates.map((r, i) => `<div class="rate-row"><span>${r.from ? `с ${dateText(r.from)}` : rates.length > 1 ? 'раньше' : 'всегда'}</span><b>${fmtRub(r.rate, true)}</b>${rates.length > 1 ? `<button class="icon-btn danger sm" data-act="rate-del" data-i="${cfg.rates.indexOf(r)}" aria-label="Удалить ставку ${fmtRub(r.rate, true)}">${small(I.trash, 16)}</button>` : ''}</div>`).join('')}</div>` : ''}
       </div>
-      <div class="pay-field">
-        <label for="pf-oklad">Оклад, ₽ в месяц</label>
-        <div class="input-unit"><input class="input" id="pf-oklad" inputmode="decimal" autocomplete="off" value="${raw.oklad ? esc(numText(raw.oklad)) : ''}" placeholder="Например, 48 000"><span>₽</span></div>
-        <div class="hint">Месячный оклад (тарифная ставка за месяц) без премий и надбавок. От него считается вознаграждение за преданность компании — см. «Профиль → ⚙ → Настройка профиля → Карьера».</div>
-      </div>
       ${fields.filter((f) => !f.deduct && !f.group).map(field).join('')}
-    </div>
+    </div>`}
     <div class="group-title">Больничный</div>
     <div class="panel pay-panel" id="pay-sick">${fields.filter((f) => f.group === 'sick').map(field).join('')}
       <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Больничный»: число дней больничного в месяце × оплата одного дня. НДФЛ с неё тоже вычитается.</div></div></div>
+    <div class="group-title">Учёба (сессия)</div>
+    <div class="panel pay-panel" id="pay-study">${fields.filter((f) => f.group === 'study').map(field).join('')}
+      <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Учёба (сессия)»: календарные дни отвлечения «Учёба» в месяце × эта сумма.</div></div></div>
     <div class="group-title">Удержания (необязательно)</div>
     <div class="panel pay-panel">${fields.filter((f) => f.deduct).map(field).join('')}
       <div class="pay-field"><div class="hint">НДФЛ 13% вычитается всегда.</div></div></div>
@@ -247,6 +249,7 @@ export async function workClick(act, b, ctx) {
       return true;
     }
     case 'pay-role': payRole = b.dataset.role; ctx.rerender(); return true;
+    case 'pay-mode': { const m = b.dataset.mode === 'avg' ? 'avg' : 'tariff'; await savePaySet(payRole, { mode: m }); toast(m === 'avg' ? 'Заработок считается по среднему за час' : 'Заработок считается по тарифной ставке'); return true; }
     case 'rate-del': {
       const cfg = payCfg(S.settings.pay, payRole);
       const r = cfg.rates[+b.dataset.i];
@@ -282,13 +285,6 @@ export async function workChange(e) {
     return true;
   }
   if (t.id === 'pf-rate') { await changeRate(t); return true; }
-  if (t.id === 'pf-oklad') {
-    const v = parseNum(t.value);
-    if (Number.isNaN(v) || (v !== '' && v > 1000000)) { toast('Оклад — число в рублях, например 48000', { error: true }); return true; }
-    await savePaySet(payRole, { oklad: v === '' ? '' : Math.round(v * 100) / 100 });
-    toast(v === '' || v === 0 ? 'Оклад удалён' : 'Оклад сохранён');
-    return true;
-  }
   if (t.dataset.pf) {
     const v = parseNum(t.value);
     if (Number.isNaN(v)) { toast('Введите число, например 12 или 12,5', { error: true }); return true; }

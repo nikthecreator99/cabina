@@ -51,7 +51,7 @@ export async function offerMedReminder() {
   if (cfg.on) { toast(soon ? 'Срок следующей медкомиссии близко — напоминание на главном экране' : `Напомним о следующей медкомиссии ${dateText(at)}`); return; }
   const ok = await confirmDialog({
     title: 'Напомнить о следующей медкомиссии?',
-    text: `Следующая — до ${dateText(due)}. ${soon ? 'Срок уже близко, напоминание появится на главном экране сразу.' : `Напомним на главном экране за 2 недели, ${dateText(at)}.`} Изменить или выключить можно в «Настройках».`,
+    text: `Следующая — до ${dateText(due)}. ${soon ? 'Срок уже близко, напоминание появится на главном экране сразу.' : `Напомним на главном экране за 2 недели, ${dateText(at)}.`} Изменить или выключить можно в самой медкомиссии в «Отвлечениях».`,
     ok: 'Да, напомнить', cancel: 'Не нужно',
   });
   if (!ok) return;
@@ -81,16 +81,16 @@ export async function medChange(e) {
   return true;
 }
 
-// Строки для «Настроек»
-export function medSettingsHtml() {
+// Блок в форме отвлечения «Медкомиссия» (2.5; раньше был в «Настройках»). end — дата окончания этой медкомиссии.
+export function medFormHtml(end) {
   const cfg = medCfg();
-  const last = lastMedical();
+  const last = [lastMedical(), end].filter(Boolean).sort().pop();
   const due = medDue(last, cfg.months);
-  const state = !last ? 'Добавьте пройденную медкомиссию в «Отвлечения» — срок посчитается сам'
-    : `Прошлая ${dateText(last)} · следующая до ${dateText(due)}`;
-  return `<div class="row"><span class="ico" style="--c:var(--medical)">${I.medical}</span><div class="grow"><div class="t1">Медкомиссия</div><div class="t2">${cfg.on ? 'Напомним на главном экране за 2 недели. ' : ''}${state}</div></div>
-      <button class="switch" role="switch" id="med-on" aria-checked="${cfg.on}" aria-label="Напоминать о медкомиссии" data-act="med-toggle"></button></div>
-    <div class="row"><div class="grow"><label class="t2" for="med-period">Как часто проходите</label></div>
+  const sub = cfg.on ? `Напомним на главном экране за 2 недели${due ? ` · следующая до ${dateText(due)}` : ''}`
+    : 'На главном экране за 2 недели до срока';
+  return `<div class="switch-row"><div class="grow"><div style="font-weight:700">Напомнить о следующей</div><div class="hint">${sub}</div></div>
+      <button type="button" class="switch" role="switch" id="med-on" aria-checked="${cfg.on}" aria-label="Напомнить о следующей медкомиссии" data-act="med-toggle"></button></div>
+    <div class="row-field"><label class="hint" for="med-period">Как часто проходите</label>
       <select class="input" id="med-period" style="width:auto">${MED_PERIODS.map(([m, l]) => `<option value="${m}" ${cfg.months === m ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
 }
 

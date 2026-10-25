@@ -263,7 +263,12 @@ test('настройки: тема и минимальный отдых сохр
   assert.equal(await page.locator('#theme-seg button').count(), 2);
   await page.locator('[data-act=theme][data-v=light]').click();
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
-  assert.match(await text(page, '.screen'), /2026 год: 1972 ч/);
+  // 2.5: календарь — одной строкой, пояснения в отдельном окне
+  assert.match(await text(page, '[data-act=cal-info]'), /РФ, 40-часовая неделя[\s\S]*2026 год — 1972 ч/);
+  await page.locator('[data-act=cal-info]').click();
+  assert.match(await text(page, '#layers'), /2026 год: 1972 ч[\s\S]*Пятидневная неделя, 40 часов/);
+  await page.locator('#layers [data-close]').first().click();
+  await waitNoLayers(page);
   await workPage(page, 'houses');
   assert.equal(await text(page, '#min-rest'), '4 ч 00 мин');
   await page.locator('[data-act=rest-plus]').click();

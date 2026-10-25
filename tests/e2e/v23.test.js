@@ -28,16 +28,25 @@ test('медкомиссия: после добавления предлагае
   const med = await page.evaluate(async () => (await import('./js/store.js')).S.settings.med);
   assert.equal(med.on, true);
   assert.equal(med.months, 12);
-  // в настройках видно срок, можно выключить и выбрать периодичность
+  // 2.5: в настройках раздела «Напоминания» больше нет — всё в самой медкомиссии
   await tab(page, 'profile');
   await page.locator('[data-page=settings]').click();
-  const panel = page.locator('#med-panel');
-  assert.match(await panel.innerText(), /Прошлая 19 октября 2026 · следующая до 19 октября 2027/);
-  assert.equal(await page.locator('#med-on').getAttribute('aria-checked'), 'true');
-  await page.selectOption('#med-period', '6');
-  await page.waitForFunction(() => document.querySelector('#med-panel')?.innerText.includes('следующая до 19 апреля 2027'));
-  await page.locator('#med-on').click();
-  await page.waitForFunction(() => document.querySelector('#med-on')?.getAttribute('aria-checked') === 'false');
+  assert.equal(await page.locator('#med-panel, #med-on').count(), 0);
+  await tab(page, 'home');
+  await page.locator('[data-act=absences]').click();
+  await sheet(page).locator('[data-act=al-open]').first().click();
+  const box = sheet(page).locator('#af-med');
+  assert.match(await box.innerText(), /Напомнить о следующей[\s\S]*следующая до 19 октября 2027/);
+  assert.equal(await box.locator('#med-on').getAttribute('aria-checked'), 'true');
+  await box.locator('#med-period').selectOption('6');
+  await page.waitForFunction(() => [...document.querySelectorAll('#af-med')].pop()?.innerText.includes('следующая до 19 апреля 2027'));
+  assert.equal((await page.evaluate(async () => (await import('./js/store.js')).S.settings.med)).months, 6);
+  await box.locator('#med-on').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#med-on')].pop()?.getAttribute('aria-checked') === 'false');
+  assert.equal((await page.evaluate(async () => (await import('./js/store.js')).S.settings.med)).on, false);
+  // у других видов отвлечений блока нет
+  await sheet(page).locator('[data-type=sick]').click();
+  assert.equal(await sheet(page).locator('#af-med').isHidden(), true);
   assert.deepEqual(errors, []);
   await context.close();
 });

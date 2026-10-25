@@ -62,6 +62,8 @@ export function overRestByTrip() {
   return m;
 }
 export const liveTrip = () => S.trips.find(isLive) || null;
+// Поездка без окончания, начало которой ещё не наступило: «Ждёт явки»
+export const isPending = (t, now = nowLocal()) => isLive(t) && parseLocal(t.start) > now;
 
 // Статистика поездки. Поездка «в пути» пересчитывается раз в минуту до текущего момента.
 export function statsOf(t) {

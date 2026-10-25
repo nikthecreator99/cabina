@@ -10,7 +10,10 @@
 //  • премия — процент от заработка за работу этого же месяца;
 //  • районный коэффициент, северная, зональная и бамовская надбавки — на заработок вместе с премией;
 //  • НДФЛ 13%, необязательные удержания (профсоюз, корпоративная пенсия);
-//  • ком. расходы за поездку — компенсация, налогом не облагается.
+//  • ком. расходы за поездку — компенсация, налогом не облагается;
+//  • следование резервом (вид движения «Резерв») — по тарифу отдельной строкой («ОплЗаРабНаОдиночСледЛоком»);
+//  • учёба (сессия) — календарные дни × средний заработок за день, как в квитке («ОплатаУчебногоОтпуска»);
+//  • режим «по среднему»: все рабочие часы × средний заработок за час, без отдельных доплат и надбавок.
 // Все суммы — в рублях, время на входе — в минутах.
 import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal } from './calc.js';
 
@@ -30,6 +33,8 @@ export const PAY_FIELDS = [
   { k: 'bam', label: 'Бамовская надбавка', unit: '%', def: null, hint: 'Только для работающих на БАМе. Если в квитке её нет — оставьте пустым.' },
   { k: 'trip', label: 'Ком. расходы за поездку', unit: '₽', def: null, hint: 'Фиксированная выплата за каждую поездку, если она у вас есть. Налогом не облагается.' },
   { k: 'sickDay', label: 'Оплата одного дня больничного', unit: '₽', def: null, hint: 'Сколько вам начисляют за один календарный день больничного. Найти можно в расчётном листке: сумму по больничному разделите на число дней болезни. Если оставить пустым, больничный не считается.', group: 'sick', ph: 'Например, 2 500' },
+  { k: 'studyDay', label: 'Средний заработок за день', unit: '₽', def: null, hint: 'По нему считается учёба (сессия): календарные дни учёбы × эта сумма. Найти можно в квитке: сумму отпускных или учебных разделите на число дней.', group: 'study', ph: 'Например, 3 500' },
+  { k: 'avgHour', label: 'Средний заработок за час', unit: '₽/ч', def: null, hint: 'Сколько вы в среднем получаете за час со всеми доплатами, до вычета НДФЛ. Найти можно в квитке: сумму за техучёбу разделите на её часы.', group: 'avg', ph: 'Например, 600' },
   { k: 'union', label: 'Профсоюзный взнос', unit: '%', def: null, hint: 'Удержание, если вы в профсоюзе. В квитке — «Профсоюз…», обычно 1%.', deduct: true },
   { k: 'pension', label: 'Корпоративная пенсия', unit: '%', def: null, hint: 'Добровольный взнос, если вы его платите. В квитке — «Удержание взнос КорпПенсия».', deduct: true },
 ];
@@ -40,7 +45,7 @@ const round2 = (v) => Math.round(v * 100) / 100;
 // Набор ставок с подставленными значениями по умолчанию
 export function payCfg(sets, role = 'assistant') {
   const raw = (sets && sets[role]) || {};
-  const cfg = { role, rates: Array.isArray(raw.rates) ? raw.rates.filter((r) => num(r.rate)) : [] };
+  const cfg = { role, mode: raw.mode === 'avg' ? 'avg' : 'tariff', rates: Array.isArray(raw.rates) ? raw.rates.filter((r) => num(r.rate)) : [] };
   for (const f of PAY_FIELDS) {
     if (f.role && f.role !== role) { cfg[f.k] = 0; continue; }
     const v = raw[f.k];
@@ -58,7 +63,9 @@ export function rateOn(cfg, dateKey) {
   for (const x of list) if (!x.from || x.from <= dateKey) r = num(x.rate);
   return r;
 }
-export const hasRate = (cfg) => (cfg.rates || []).some((r) => num(r.rate) > 0);
+// Есть из чего считать: тарифная ставка, а в режиме «по среднему» — средний за час
+export const hasRate = (cfg) => (cfg.mode === 'avg' ? cfg.avgHour > 0 : (cfg.rates || []).some((r) => num(r.rate) > 0));
+export const isAvg = (cfg) => cfg.mode === 'avg';
 export function currentRate(cfg, todayKey) { return rateOn(cfg, todayKey); }
 
 // Отдых в пункте оборота сверх нормы: от «окончание поездки + привезённое рабочее время»
@@ -93,11 +100,14 @@ function minutesInMonth(ivs, mk) {
 
 // Начисление за часы поездки (или её часть в месяце) без переработки:
 // ставка, ожидание, ночные, вредность, класс, праздничные. part — { work, night, holiday, wait } в минутах.
-function hoursPay(part, rate, cfg) {
+// kind — вид движения поездки: у резерва часы (кроме ожидания) идут своей строкой, тоже по тарифу
+function hoursPay(part, rate, cfg, kind) {
   const h = part.work / 60;
   const w = (part.wait || 0) / 60;
+  const reserve = kind === 'reserve';
   return {
-    base: (h - w) * rate,
+    base: reserve ? 0 : (h - w) * rate,
+    reserve: reserve ? (h - w) * rate : 0,
     wait: w * rate,
     night: (part.night / 60) * rate * cfg.night / 100,
     harm: h * rate * cfg.harm / 100,
@@ -112,10 +122,14 @@ const regionalPct = (cfg) => cfg.rk + cfg.sn + cfg.zone + cfg.bam;
 // районные надбавки, минус НДФЛ и удержания, плюс ком. расходы. Переработка считается только за месяц.
 export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
   if (!hasRate(cfg) || !Number.isFinite(st.start)) return null;
-  const rate = rateOn(cfg, dateKeyOf(st.start));
-  const p = hoursPay(st, rate, cfg);
-  const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3;
-  const gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
+  let gross;
+  if (isAvg(cfg)) gross = (st.work / 60) * cfg.avgHour;
+  else {
+    const rate = rateOn(cfg, dateKeyOf(st.start));
+    const p = hoursPay(st, rate, cfg, trip.kind);
+    const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3;
+    gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
+  }
   const ded = gross * (NDFL + cfg.union + cfg.pension) / 100;
   return { gross: round2(gross), net: round2(gross - ded + (st.live ? 0 : cfg.trip)) };
 }
@@ -126,14 +140,16 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const sum = monthSummary(y, m, trips, absences);
   const res = { mk, sum, lines: [], deductions: [], gross: 0, ndfl: 0, net: 0, hasRate: hasRate(cfg), empty: true };
   if (!res.hasRate) return res;
-  const acc = { base: 0, wait: 0, night: 0, harm: 0, klass: 0, holiday: 0 };
+  const acc = { base: 0, reserve: 0, wait: 0, night: 0, harm: 0, klass: 0, holiday: 0 };
   let comp = 0;
+  let reserveMin = 0;
   for (const t of sum.monthTrips) {
     const st = statsOf(t);
     const part = st.byMonth[mk];
     if (!part) continue;
-    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg);
+    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t.kind);
     for (const k of Object.keys(acc)) acc[k] += p[k];
+    if (t.kind === 'reserve') reserveMin += part.work - (part.wait || 0);
     if (!st.live && monthKeyOf(st.start) === mk) comp += cfg.trip;
   }
   const lastDay = `${mk}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
@@ -151,30 +167,47 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const h = (min) => Math.round(min) / 60;
   // label — название строки, pct — процент (показывается рядом), hours — часы, к которым он применён, days — дни
   const L = (key, label, amount, { pct, hours, days } = {}) => { if (amount > 0.004) res.lines.push({ key, label, pct, hours, days, amount: round2(amount) }); };
-  L('base', 'Оплата по тарифу', acc.base, { hours: h(sum.work - (sum.wait || 0)) });
+  const avg = isAvg(cfg);
+  const avgPay = avg ? (sum.work / 60) * cfg.avgHour : 0;
+  if (avg) {
+    // по среднему: все часы × средний за час; доплаты, премия и коэффициенты уже внутри среднего
+    L('avg', 'Заработок по среднему', avgPay, { hours: h(sum.work) });
+    for (const k of Object.keys(acc)) acc[k] = 0;
+  }
+  const noAvg = (v) => (avg ? 0 : v);
+  L('base', 'Оплата по тарифу', acc.base, { hours: h(sum.work - (sum.wait || 0) - reserveMin) });
+  L('reserve', 'Следование резервом', acc.reserve, { hours: h(reserveMin) });
   L('wait', 'Ожидание следования пассажиром', acc.wait, { hours: h(sum.wait || 0) });
   L('night', 'Ночные', acc.night, { pct: cfg.night, hours: h(sum.night) });
   L('harm', 'Вредность', acc.harm, { pct: cfg.harm, hours: h(sum.work) });
   L('klass', 'Надбавка за класс', acc.klass, { pct: cfg.klass, hours: h(sum.work) });
   L('holiday', 'Праздничные', acc.holiday, { pct: 100, hours: h(sum.holiday) });
-  L('overOther', 'Переработка', overOther, { pct: 50, hours: O - Ow });
-  L('overWeekend', 'Переработка в выходные', overWeekend, { pct: 100, hours: Ow - hOw });
-  L('overRest', 'Отдых сверх нормы в пункте оборота', orPay, { hours: h(orMin) });
-  const workPay = acc.base + acc.wait + acc.night + acc.harm + acc.klass + acc.holiday + overOther + overWeekend + orPay;
-  const bonus = workPay * cfg.bonus / 100;
+  L('overOther', 'Переработка', noAvg(overOther), { pct: 50, hours: O - Ow });
+  L('overWeekend', 'Переработка в выходные', noAvg(overWeekend), { pct: 100, hours: Ow - hOw });
+  L('overRest', 'Отдых сверх нормы в пункте оборота', noAvg(orPay), { hours: h(orMin) });
+  const workPay = avg ? avgPay : acc.base + acc.reserve + acc.wait + acc.night + acc.harm + acc.klass + acc.holiday + overOther + overWeekend + orPay;
+  const bonus = avg ? 0 : workPay * cfg.bonus / 100;
   L('bonus', 'Премия', bonus, { pct: cfg.bonus });
   const withBonus = workPay + bonus;
-  L('rk', 'Районный коэффициент', withBonus * cfg.rk / 100, { pct: cfg.rk });
-  L('sn', 'Северная надбавка', withBonus * cfg.sn / 100, { pct: cfg.sn });
-  L('zone', 'Зональная надбавка', withBonus * cfg.zone / 100, { pct: cfg.zone });
-  L('bam', 'Бамовская надбавка', withBonus * cfg.bam / 100, { pct: cfg.bam });
+  const regional = avg ? 0 : regionalPct(cfg);
+  if (!avg) {
+    L('rk', 'Районный коэффициент', withBonus * cfg.rk / 100, { pct: cfg.rk });
+    L('sn', 'Северная надбавка', withBonus * cfg.sn / 100, { pct: cfg.sn });
+    L('zone', 'Зональная надбавка', withBonus * cfg.zone / 100, { pct: cfg.zone });
+    L('bam', 'Бамовская надбавка', withBonus * cfg.bam / 100, { pct: cfg.bam });
+  }
   // больничный: календарные дни в этом месяце × оплата дня из настроек; премия и надбавки на него не начисляются
   const sickDays = sickDaysInMonth(absences, y, m);
   const sickPay = sickDays * cfg.sickDay;
   L('sick', 'Больничный', sickPay, { days: sickDays });
+  // учёба (сессия): календарные дни в этом месяце × средний заработок за день
+  const studyDays = absDaysInMonth(absences, y, m, 'study');
+  const studyPay = studyDays * cfg.studyDay;
+  L('study', 'Учёба (сессия)', studyPay, { days: studyDays });
   res.sickDays = sickDays;
-  res.rate = rateEnd;
-  const gross = withBonus * (1 + regionalPct(cfg) / 100) + sickPay;
+  res.studyDays = studyDays;
+  res.rate = avg ? 0 : rateEnd;
+  const gross = withBonus * (1 + regional / 100) + sickPay + studyPay;
   res.workPay = round2(workPay);
   res.gross = round2(gross);
   res.ndfl = Math.round(gross * NDFL / 100); // НДФЛ считается в целых рублях
@@ -190,13 +223,16 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
 }
 
 // Календарные дни больничного внутри месяца (отвлечения «Больничный»)
-export function sickDaysInMonth(absences, y, m) {
+export const sickDaysInMonth = (absences, y, m) => absDaysInMonth(absences, y, m, 'sick');
+
+// Календарные дни отвлечений данного вида внутри месяца
+export function absDaysInMonth(absences, y, m, type) {
   const p2 = (n) => String(n).padStart(2, '0');
   const first = `${y}-${p2(m)}-01`;
   const last = `${y}-${p2(m)}-${p2(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
   let n = 0;
   for (const a of absences || []) {
-    if (a.type !== 'sick' || !a.start || !a.end) continue;
+    if (a.type !== type || !a.start || !a.end) continue;
     const s = a.start > first ? a.start : first;
     const e = a.end < last ? a.end : last;
     if (e >= s) n += Math.round((Date.parse(`${e}T00:00Z`) - Date.parse(`${s}T00:00Z`)) / 86400000) + 1;
@@ -221,7 +257,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['base', 'wait', 'night', 'harm', 'klass', 'holiday', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'ndfl', 'union', 'pension'];
+  const order = ['avg', 'base', 'reserve', 'wait', 'night', 'harm', 'klass', 'holiday', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));

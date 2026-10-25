@@ -11,21 +11,24 @@ after(async () => { await env?.stop(); });
 const sheet = (page) => page.locator('#layers .layer:not(.closing)').last();
 const tab = (page, name) => page.locator(`.tab[data-tab=${name}]`).click();
 
-test('нижнее меню: Главная · Ещё · Обучение · Чаты · Профиль, помещается на 320 px', async () => {
+test('нижнее меню (2.5): Главная · Ещё · Профиль, помещается на 320 px', async () => {
   const { context, page, errors } = await openApp(env);
   await page.setViewportSize({ width: 320, height: 640 });
   const labels = await page.locator('.tab').allInnerTexts();
-  assert.deepEqual(labels.map((s) => s.trim()), ['Главная', 'Ещё', 'Обучение', 'Чаты', 'Профиль']);
+  assert.deepEqual(labels.map((s) => s.trim()), ['Главная', 'Ещё', 'Профиль']);
   const fits = await page.$$eval('.tab', (els) => els.every((e) => e.scrollWidth <= e.clientWidth + 1));
   assert.ok(fits, 'подписи вкладок не обрезаются');
-  await tab(page, 'learn');
-  assert.match(await text(page, '.screen'), /Обучение[\s\S]*Скоро/i);
-  await tab(page, 'chats');
-  assert.match(await text(page, '.screen'), /Чаты[\s\S]*Скоро[\s\S]*сервером CABINA в России/i);
-  await page.locator('.screen [data-page=profile-edit]').click();
-  assert.match(await text(page, '.page-head'), /Редактировать профиль/);
+  // три вкладки делят ширину поровну
+  const xs = await page.$$eval('.tab', (els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+  assert.ok(Math.max(...xs) - Math.min(...xs) <= 1 && xs[0] >= 100, `ширины вкладок: ${xs}`);
   await tab(page, 'extra');
   assert.match(await text(page, '.page-head'), /^Ещё$/);
+  // три пункта одним списком
+  assert.equal(await page.locator('.extra-list > .row').count(), 3);
+  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.act)), ['extra-notes', 'extra-docs', 'extra-fix']);
+  await tab(page, 'profile');
+  await page.locator('.screen [data-page=profile-edit]').click();
+  assert.match(await text(page, '.page-head'), /Редактировать профиль/);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -87,12 +90,13 @@ test('карьера: дата устройства, должности, окл�
   await waitNoLayers(page);
   assert.match(await text(page, '#cr-jobs'), /Машинист\s+с 1 марта 2025 · сейчас/);
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.role === 'driver');
-  // оклад — в тарифных ставках
+  // 2.5: оклад — здесь же, в «Карьере», после стажа; в тарифных ставках его больше нет
+  assert.match(await text(page, '#cr-oklad >> xpath=ancestor::div[contains(@class,"pay-field")]'), /Нужен для расчёта вознаграждения за преданность/);
   await page.locator('[data-act=career-oklad]').click();
-  await page.fill('#pf-oklad', '50000');
-  await page.locator('#pf-oklad').blur();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'cr-oklad');
+  await page.fill('#cr-oklad', '50000');
+  await page.locator('#cr-oklad').blur();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.driver?.oklad === 50000);
-  await page.locator('[data-act=back]').click();
   assert.match(await text(page, '.loyal-next'), /150\s000\s₽[\s\S]*130\s500\s₽/);
   // на главной — напоминание (до права 56 дней), скрывается крестиком
   await tab(page, 'home');

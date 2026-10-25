@@ -17,17 +17,22 @@ async function markDone(id) {
   done.add(id);
   try { await db.put('meta', { id: 'tours', done: [...done] }); } catch {}
 }
+// отметить подсказку показанной, не показывая (её шаг уже вошёл в общую подсказку)
+export const markTourDone = (id) => (done.has(id) ? null : markDone(id));
 export async function resetTours() {
   done = new Set();
   try { await db.put('meta', { id: 'tours', done: [] }); } catch {}
 }
+
+const ARROW_ARC = '<svg viewBox="0 0 44 56" width="40" height="52"><path d="M13 52C4 39 7 21 26 10" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M17 7.5 26.5 9.6 24.4 19" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ARROW_STRAIGHT = '<svg viewBox="0 0 40 52" width="40" height="52"><path d="M20 49V6" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M11 15 20 5.5 29 15" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const resolve = (t) => (typeof t === 'function' ? t() : document.querySelector(t));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const visible = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
 
 /**
- * steps: [{ target, title, text, onShow?, pad? }]
+ * steps: [{ target, title, text, onShow?, pad?, arrow? }] — arrow: 'straight' — прямая стрелка ровно по центру элемента.
  * Шаги, чей элемент не найден, пропускаются. Тур показывается один раз.
  */
 export function runTour(id, steps) {
@@ -50,13 +55,14 @@ function start(id, allSteps) {
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-modal', 'true');
   ov.innerHTML = `<div class="tour-spot"></div>
-    <div class="tour-arrow" aria-hidden="true"><svg viewBox="0 0 44 56" width="40" height="52"><path d="M13 52C4 39 7 21 26 10" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M17 7.5 26.5 9.6 24.4 19" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="tour-arrow" aria-hidden="true"></div>
     <div class="tour-card" aria-live="polite"><div class="tour-body"></div>
-      <div class="tour-foot"><span class="tour-count"></span><button class="tour-next" type="button"></button></div></div>`;
+      <div class="tour-foot"><button class="tour-skip" type="button">Пропустить</button><span class="tour-count"></span><button class="tour-next" type="button"></button></div></div>`;
   document.body.appendChild(ov);
   const spot = ov.querySelector('.tour-spot');
   const card = ov.querySelector('.tour-card');
   const arrow = ov.querySelector('.tour-arrow');
+  const skip = ov.querySelector('.tour-skip');
   let i = 0;
   let target = null;
 
@@ -89,7 +95,8 @@ function start(id, allSteps) {
     arrow.hidden = !showArrow;
     if (showArrow) {
       const ay = dir === 'up' ? top + height + 2 : top - 54;
-      Object.assign(arrow.style, { top: `${ay}px`, left: `${Math.min(Math.max(8, cx - (dir === 'up' ? 24 : 16)), vw - 52)}px` });
+      const shift = steps[i].arrow === 'straight' ? 20 : dir === 'up' ? 24 : 16;
+      Object.assign(arrow.style, { top: `${ay}px`, left: `${Math.min(Math.max(8, cx - shift), vw - 52)}px` });
       arrow.dataset.dir = dir;
     }
   }
@@ -105,6 +112,8 @@ function start(id, allSteps) {
     ov.querySelector('.tour-body').innerHTML = `${s.title ? `<div class="tour-title">${esc(s.title)}</div>` : ''}<div class="tour-text">${s.text}</div>`;
     ov.querySelector('.tour-count').textContent = steps.length > 1 ? `${i + 1} из ${steps.length}` : '';
     ov.querySelector('.tour-next').textContent = i + 1 < steps.length ? 'Дальше' : 'Понятно';
+    skip.hidden = i + 1 >= steps.length; // на последнем шаге «Понятно» и так закрывает
+    arrow.innerHTML = s.arrow === 'straight' ? ARROW_STRAIGHT : ARROW_ARC;
     place();
     card.classList.remove('swap');
     s.onShow?.(target);
@@ -125,6 +134,7 @@ function start(id, allSteps) {
   }
   const onKey = (e) => { if (e.key === 'Escape') finish(true); };
 
+  skip.onclick = () => finish(true);
   ov.querySelector('.tour-next').onclick = () => (i + 1 < steps.length ? show(i + 1) : finish());
   window.addEventListener('resize', place);
   window.addEventListener('scroll', place, true);

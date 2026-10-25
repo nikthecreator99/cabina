@@ -1,18 +1,18 @@
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
 import { I, esc, openLayer, closeLayer, sheet, confirmDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe } from './ui.js';
 import {
-  S, statsOf, nowLocal, routeText, routeOf, knownTypes, notesFor, locoKey, locoLabel, normNum, isLive, myPay, onChange, offChange,
+  S, statsOf, nowLocal, routeText, routeOf, knownTypes, notesFor, locoKey, locoLabel, normNum, isLive, isPending, myPay, onChange, offChange,
   saveTrip, deleteTrip, saveAbsence, deleteAbsence, saveRoute, deleteRoute, saveNote, deleteNote,
 } from './store.js';
 import {
   tripStats, validateTrip, parseLocal, fmtLocal, fmtDur, fmtHours, turnaroundRest,
-  autoAbsenceHours, absenceMonths, validateAbsence, monthSummary, DAY,
+  autoAbsenceHours, absenceBreakdown, absenceMonths, validateAbsence, monthSummary, DAY, MIN,
 } from './calc.js';
 import { dayInfo } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
-import { offerMedReminder, lastMedical } from './med.js';
-import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour } from './tours.js';
+import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
+import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, studyTour } from './tours.js';
 
 export { computeHomeRest };
 
@@ -30,6 +30,7 @@ export const ABS_TYPES = {
   sick: { label: 'Больничный', icon: I.sick, cls: 'c-sick', color: 'var(--sick)' },
   vacation: { label: 'Отпуск', icon: I.vacation, cls: 'c-vacation', color: 'var(--vacation)' },
   medical: { label: 'Медкомиссия', icon: I.medical, cls: 'c-medical', color: 'var(--medical)' },
+  study: { label: 'Учёба', icon: I.learn, cls: 'c-study', color: 'var(--study)' },
 };
 
 function errorBox(msg) { return msg ? `<div class="error-box" role="alert">${I.alert}<span>${esc(msg)}</span></div>` : ''; }
@@ -127,13 +128,27 @@ function draftPay(d, st) {
   return tripPay(d, st, cfg, { overRestMin: or });
 }
 
+// Вид движения. Резерв (одиночно следующий локомотив) в квитке оплачивается отдельной строкой по тарифу.
+export const TRIP_KINDS = {
+  freight: { label: 'Грузовой', hint: 'Грузовое движение' },
+  passenger: { label: 'Пассажирский', hint: 'Пассажирское движение' },
+  reserve: { label: 'Резерв', hint: 'Следование локомотива резервом' },
+};
+export const kindOf = (t) => (TRIP_KINDS[t?.kind] ? t.kind : 'freight');
+// вид движения из последней по времени поездки — чтобы не выбирать каждый раз
+function lastKind() {
+  let best = null;
+  for (const t of S.trips) if (!best || String(t.start) > String(best.start)) best = t;
+  return kindOf(best);
+}
+
 export function openTripForm(tripId) {
   const existing = tripId ? S.trips.find((t) => t.id === tripId) : null;
   const now = nowLocal();
   const today = fmtLocal(now).slice(0, 10);
   const base = existing ? JSON.parse(JSON.stringify({ ...existing, _stats: undefined, _statsAt: undefined })) : {
     id: uid(), routeId: null, routeLabel: '', start: '', end: '', passenger: [], waiting: [], locoType: '', locoNumber: '',
-    restType: 'turnaround', homeRest: null, homeChoice: null, createdAt: Date.now(),
+    restType: 'turnaround', homeRest: null, homeChoice: null, kind: lastKind(), createdAt: Date.now(),
   };
   const wasLive = existing ? isLive(existing) : false;
   const linkedNote = existing ? S.notes.find((n) => n.tripId === existing.id) : null;
@@ -146,6 +161,7 @@ export function openTripForm(tripId) {
     et: base.end ? base.end.slice(11, 16) : '',
     endTouched: !!existing && !wasLive,
     locoType: base.locoType || '', locoNumber: base.locoNumber || '',
+    kind: kindOf(base), kindOpen: false,
     passenger: (base.passenger || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     waiting: (base.waiting || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     note: linkedNote?.text || '',
@@ -169,6 +185,7 @@ export function openTripForm(tripId) {
       end: F.ed && F.et ? `${F.ed}T${F.et}` : '',
       passenger: F.passenger.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
       waiting: F.waiting.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
+      kind: F.kind,
       locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber),
       restType: F.restType, homeRest, homeChoice,
     };
@@ -185,7 +202,7 @@ export function openTripForm(tripId) {
   };
 
   const types = knownTypes();
-  const title = existing ? (wasLive ? 'Поездка в пути' : `Поездка ${dayMonth(parseLocal(existing.start))}`) : 'Новая поездка';
+  const title = existing ? (wasLive ? (isPending(existing) ? 'Ждёт явки' : 'Поездка в пути') : `Поездка ${dayMonth(parseLocal(existing.start))}`) : 'Новая поездка';
 
   const body = `
     ${existing ? '<div class="summary-top" id="tf-summary"></div>' : ''}
@@ -202,33 +219,38 @@ export function openTripForm(tripId) {
       <label for="tf-ed"><span class="step-n">3</span>Окончание поездки</label>
       <div class="dt"><input type="date" id="tf-ed" class="input" aria-label="Дата окончания"><input type="time" id="tf-et" class="input" aria-label="Время окончания"></div>
       <div class="hint" id="tf-end-hint"></div>
-      ${wasLive ? `<button type="button" class="btn btn-ghost btn-sm" data-act="finish-now">${I.check} Завершить поездку</button>` : ''}
+      ${wasLive && !isPending(existing) ? `<button type="button" class="btn btn-ghost btn-sm" data-act="finish-now">${I.check} Завершить поездку</button>` : ''}
     </div>
     <div class="field">
-      <label for="tf-lt"><span class="step-n">4</span>Тип локомотива</label>
+      <div class="label"><span class="step-n">4</span>Вид движения</div>
+      <button class="pick" type="button" data-act="pick-kind" id="tf-kind" aria-expanded="false">${I.train}<span class="grow" id="tf-kind-label"></span>${I.right}</button>
+      <div class="kind-list" id="tf-kind-list" hidden>${Object.entries(TRIP_KINDS).map(([k, v]) => `<button type="button" class="choice" data-kind="${k}"><span>${v.label}<small>${v.hint}</small></span></button>`).join('')}</div>
+    </div>
+    <div class="field">
+      <label for="tf-lt"><span class="step-n">5</span>Тип локомотива</label>
       <input id="tf-lt" class="input" list="tf-types" placeholder="Например, 2ЭС5К" autocomplete="off" autocapitalize="characters" maxlength="30">
       <datalist id="tf-types">${types.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
       ${types.length ? `<div class="quick" id="tf-type-quick">${types.slice(0, 10).map((t) => `<button type="button" class="qchip" data-type="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}
     </div>
     <div class="field">
-      <label for="tf-ln"><span class="step-n">5</span>Номер локомотива</label>
+      <label for="tf-ln"><span class="step-n">6</span>Номер локомотива</label>
       <input id="tf-ln" class="input" inputmode="numeric" placeholder="Например, 355" autocomplete="off" maxlength="12">
       <div id="tf-loco-notes"></div>
     </div>
     <div class="field">
-      <label for="tf-note"><span class="step-n">6</span>Заметка о локомотиве <span class="opt">· необязательно</span></label>
+      <label for="tf-note"><span class="step-n">7</span>Заметка о локомотиве <span class="opt">· необязательно</span></label>
       <textarea id="tf-note" class="input" placeholder="Например: часто ломается" maxlength="1000"></textarea>
       <div class="hint">Заметка привяжется к локомотиву и будет видна в следующих поездках на нём.</div>
     </div>
     <div class="field">
-      <div class="label"><span class="step-n">7</span>Следование пассажиром <span class="opt">· необязательно</span></div>
-      <div class="list" id="tf-pass"></div>
-      <button type="button" class="add-btn" data-act="add-pass">${I.plus} Добавить следование пассажиром</button>
+      <div class="label"><span class="step-n">8</span>Следование пассажиром <span class="opt">· необязательно</span></div>
       <div class="list" id="tf-wait"></div>
       <button type="button" class="add-btn" data-act="add-wait" id="tf-add-wait" hidden>${I.plus} Добавить ожидание следования пассажиром</button>
+      <div class="list" id="tf-pass"></div>
+      <button type="button" class="add-btn" data-act="add-pass">${I.plus} Добавить следование пассажиром</button>
     </div>
     <div class="field">
-      <div class="label"><span class="step-n">8</span>Вид отдыха после поездки</div>
+      <div class="label"><span class="step-n">9</span>Вид отдыха после поездки</div>
       <div class="seg accent" id="tf-rest">
         <button type="button" data-rest="turnaround">${I.bed2}<span>Отдых в пункте оборота</span></button>
         <button type="button" data-rest="home">${I.home2}<span>Домашний отдых</span></button>
@@ -260,7 +282,8 @@ export function openTripForm(tripId) {
   }
   function renderEndHint() {
     const h = $(el, '#tf-end-hint');
-    if (!F.et) h.textContent = F.st && (!existing || wasLive) ? 'Поездка ещё идёт? Оставьте время окончания пустым — она сохранится «в пути».' : '';
+    const future = F.sd && F.st && parseLocal(`${F.sd}T${F.st}`) > nowLocal();
+    if (!F.et) h.textContent = F.st && (!existing || wasLive) ? (future ? 'Явка ещё не наступила? Оставьте время окончания пустым — на главном появится «До явки осталось».' : 'Поездка ещё идёт? Оставьте время окончания пустым — она сохранится «в пути».') : '';
     else if (F.sd && F.ed && F.ed > F.sd) h.textContent = F.ed === addDays(F.sd, 1) ? 'Окончание на следующий день' : `Окончание через ${Math.round((parseLocal(`${F.ed}T00:00`) - parseLocal(`${F.sd}T00:00`)) / DAY)} дн.`;
     else h.textContent = '';
   }
@@ -294,6 +317,12 @@ export function openTripForm(tripId) {
     $(el, '#tf-add-wait').hidden = !F.passenger.length && !F.waiting.length;
     if (F.passenger.length && !F.waiting.length) setTimeout(() => waitTour(el), 400);
   }
+  function renderKind() {
+    $(el, '#tf-kind-label').textContent = TRIP_KINDS[F.kind].label;
+    $(el, '#tf-kind').setAttribute('aria-expanded', String(F.kindOpen));
+    $(el, '#tf-kind-list').hidden = !F.kindOpen;
+    el.querySelectorAll('[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === F.kind)));
+  }
   function renderRest() {
     el.querySelectorAll('[data-rest]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rest === F.restType)));
   }
@@ -316,6 +345,15 @@ export function openTripForm(tripId) {
     }
     const live = !d.end;
     const st = live ? tripStats(d, nowMs) : tripStats(d);
+    if (live && st.start > nowMs) {
+      // явка ещё не наступила: поездка сохранится как «Ждёт явки»
+      setHTML(box, `<div class="calc"><div class="calc-row main"><span>${ico(I.clock, 17)} До явки осталось</span><b>${fmtDur((st.start - nowMs) / MIN)}</b></div>
+        <div class="calc-row"><span>Явка</span><b>${whenShort(st.start, nowMs)}</b></div>
+        <div class="calc-row"><span>Когда время явки наступит, поездка сама станет «в пути».</span></div></div>`);
+      setHTML(home, '');
+      if (existing) $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Ждёт явки</div><div class="v">${hm(st.start)}</div></div>`;
+      return;
+    }
     const pay = draftPay(d, st);
     const months = Object.keys(st.byMonth).sort();
     let html = `<div class="calc">
@@ -399,7 +437,7 @@ export function openTripForm(tripId) {
   }
   function refreshAll() { renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
 
-  renderRoute(); renderPass(); refreshAll();
+  renderRoute(); renderKind(); renderPass(); refreshAll();
   setTimeout(() => tripFormTour(el), 450);
 
   // автодата окончания
@@ -434,6 +472,7 @@ export function openTripForm(tripId) {
     if (b.dataset.route) { F.routeId = b.dataset.route; renderRoute(); refreshAll(); return; }
     if (b.dataset.type) { F.locoType = b.dataset.type; $(el, '#tf-lt').value = b.dataset.type; refreshAll(); return; }
     if (b.dataset.rest) { F.restType = b.dataset.rest; refreshAll(); return; }
+    if (b.dataset.kind) { F.kind = b.dataset.kind; F.kindOpen = false; renderKind(); refreshAll(); return; }
     if (b.dataset.choice) { F.homeChoice = F.homeChoice === b.dataset.choice ? null : b.dataset.choice; refreshAll(); return; }
     if (b.dataset.cand) {
       const id = b.dataset.cand;
@@ -442,6 +481,7 @@ export function openTripForm(tripId) {
       refreshAll(); return;
     }
     const act = b.dataset.act;
+    if (act === 'pick-kind') { F.kindOpen = !F.kindOpen; renderKind(); return; }
     if (act === 'pick-route') {
       const res = await pickRoute(F.routeId);
       if (res !== undefined) { F.routeId = res; if (!res) F.routeLabel = ''; renderRoute(); refreshAll(); }
@@ -464,9 +504,10 @@ export function openTripForm(tripId) {
       renderPass(); refreshAll();
       const last = el.querySelectorAll('#tf-pass .interval'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else if (act === 'add-wait') {
-      const ref = F.passenger[F.passenger.length - 1];
+      // сначала ждали, потом поехали: окончание ожидания = начало следования пассажиром (можно поправить)
+      const ref = F.passenger[Math.min(F.waiting.length, F.passenger.length - 1)];
       const day = ref?.sd || F.ed || F.sd || today;
-      F.waiting.push({ id: uid(), sd: day, st: '', ed: day, et: '' });
+      F.waiting.push({ id: uid(), sd: day, st: '', ed: day, et: ref?.st || '' });
       renderPass(); refreshAll();
       const last = el.querySelectorAll('.interval.wait'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else if (act === 'del-pass') {
@@ -504,7 +545,7 @@ export function openTripForm(tripId) {
       }
       closeLayer(el);
       navigateToMonth(d.start);
-      toast(!d.end ? 'Поездка в пути сохранена' : wasLive ? 'Поездка завершена' : existing ? 'Изменения сохранены' : 'Поездка добавлена');
+      toast(!d.end && parseLocal(d.start) > nowLocal() ? 'Явка сохранена' : !d.end ? 'Поездка в пути сохранена' : wasLive ? 'Поездка завершена' : existing ? 'Изменения сохранены' : 'Поездка добавлена');
     }
   });
   return el;
@@ -596,15 +637,22 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
           <button type="button" class="switch" role="switch" id="af-auto" aria-label="Автоматический расчёт"></button></div>
         <div id="af-hours"></div>
       </div>
+      <div class="field" id="af-med" hidden></div>
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="save-abs">${I.check} Сохранить</button>`,
   }));
   $(el, '#af-start').value = A.start;
   $(el, '#af-end').value = A.end;
-  setTimeout(() => absenceTour(el), 450);
+  setTimeout(() => { absenceTour(el); studyTour(el); }, 450);
 
+  function renderMed() {
+    const box = $(el, '#af-med');
+    box.hidden = A.type !== 'medical';
+    box.innerHTML = A.type === 'medical' ? medFormHtml(A.end && A.end >= A.start ? A.end : null) : '';
+  }
   function render() {
     el.querySelectorAll('[data-type]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.type === A.type)));
+    renderMed();
     $(el, '#af-auto').setAttribute('aria-checked', String(A.auto !== false));
     const box = $(el, '#af-hours');
     if (!A.start || !A.end || A.end < A.start) { box.innerHTML = '<div class="hint">Укажите корректный период — расчёт появится здесь.</div>'; return; }
@@ -619,7 +667,8 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
       }
       const total = Object.values(auto).reduce((s, v) => s + v, 0);
       box.innerHTML = `<div class="calc">
-        <div class="calc-row main"><span>Будет вычтено</span><b>${fmtHours(total)}</b></div>
+        <div class="calc-row main tight"><span>Из нормы вычтется</span><b>${fmtHours(total)}</b></div>
+        <div class="calc-note" id="af-breakdown">${esc(absenceBreakdown(A.start, A.end))}</div>
         ${months.length > 1 ? months.map((mk) => `<div class="calc-row"><span>${monthName(mk)}</span><b>${fmtHours(auto[mk])}</b></div>`).join('') : ''}
         <div class="calc-row"><span>Рабочих дней</span><b>${work + short}${short ? ` (сокращённых: ${short})` : ''}</b></div>
         <div class="calc-row"><span>Выходных и праздников</span><b>${off}</b></div></div>`;
@@ -631,12 +680,13 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
   }
   render();
 
-  const onAbsField = (e) => {
+  const onAbsField = async (e) => {
     const t = e.target;
     if ((t.id === 'af-start' && A.start === t.value) || (t.id === 'af-end' && A.end === t.value)) return;
     if (t.id === 'af-start') { A.start = t.value; if (A.end && A.end < A.start) { A.end = A.start; $(el, '#af-end').value = A.end; } render(); }
     else if (t.id === 'af-end') { A.end = t.value; render(); }
     else if (t.dataset.mk) { A.monthHours = { ...A.monthHours, [t.dataset.mk]: t.value }; return; }
+    else if (t.id === 'med-period') { if (e.type === 'change' && await medChange(e)) renderMed(); return; }
     else return;
     $(el, '[data-error]').innerHTML = '';
   };
@@ -647,6 +697,7 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
     if (!b) return;
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
     if (b.dataset.type) { A.type = b.dataset.type; render(); return; }
+    if (b.dataset.act === 'med-toggle') { await medClick('med-toggle', b); renderMed(); return; }
     if (b.id === 'af-auto') {
       if (A.auto !== false) {
         A.auto = false;
@@ -681,6 +732,8 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
       if (obj.type === 'medical' && existing?.type !== 'medical' && obj.end === lastMedical()) setTimeout(offerMedReminder, 350);
       // больничный без оплаты дня в настройках — подсказать, что его можно посчитать
       if (obj.type === 'sick' && existing?.type !== 'sick' && !myPay().sickDay) setTimeout(offerSickPay, 350);
+      // учёба без среднего за день — подсказать, где его указать
+      if (obj.type === 'study' && existing?.type !== 'study' && !myPay().studyDay) setTimeout(offerStudyPay, 350);
     }
   });
 }
@@ -691,7 +744,16 @@ async function offerSickPay() {
     text: 'CABINA добавит больничный в расчёт заработка, если указать, сколько вам начисляют за один день больничного. Это делается в ☰ → «Тарифные ставки и надбавки» → «Больничный».',
     ok: 'Указать', cancel: 'Позже',
   });
-  if (ok) openTariffs();
+  if (ok) openTariffs('pay-sick');
+}
+
+async function offerStudyPay() {
+  const ok = await confirmDialog({
+    title: 'Посчитать оплату учёбы?',
+    text: 'Учёбу (сессию) квиток оплачивает по среднему заработку за день. Укажите его в ☰ → «Тарифные ставки и надбавки» → «Учёба» — тогда она появится в расчёте заработка.',
+    ok: 'Указать', cancel: 'Позже',
+  });
+  if (ok) openTariffs('pay-study');
 }
 
 // =====================================================================

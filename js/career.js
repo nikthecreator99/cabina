@@ -4,7 +4,7 @@
 // Право возникает в день, когда исполняется стаж; выплата — с зарплатой за первый месяц следующего квартала.
 // Всё хранится только в этом телефоне (S.profile.career) и попадает в резервную копию вместе с профилем.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, uid, MONTHS, MONTHS_GEN, MONTHS_PREP } from './ui.js';
-import { S, saveProfile, nowLocal } from './store.js';
+import { S, saveProfile, saveSettings, nowLocal } from './store.js';
 import { fmtLocal } from './calc.js';
 import { ROLES, NDFL, fmtRub } from './pay.js';
 
@@ -144,6 +144,9 @@ export function renderCareer() {
         <input type="date" class="input" id="cr-hired" value="${esc(c.hired)}" max="${today}">
         <div class="hint">Начало непрерывного стажа в компании. От неё считается вознаграждение за преданность.</div></div>
       ${t ? `<div class="pay-field"><div class="label">Непрерывный стаж</div><div class="career-tenure num">${tenureText(t)}</div></div>` : ''}
+      <div class="pay-field"><label for="cr-oklad">Оклад, ₽ в месяц</label>
+        <div class="input-unit"><input class="input" id="cr-oklad" inputmode="decimal" autocomplete="off" value="${oklad ? esc(okladText(oklad)) : ''}" placeholder="Например, 48 000"><span>₽</span></div>
+        <div class="hint">Нужен для расчёта вознаграждения за преданность.</div></div>
     </div>
     ${nextHtml}
     <div class="sec-head"><h2>Должности</h2></div>
@@ -219,7 +222,7 @@ async function saveCareer(c) {
 export async function careerClick(act, b, ctx) {
   if (act === 'job-add') { openJobForm(null); return true; }
   if (act === 'job-edit') { openJobForm(b.dataset.id); return true; }
-  if (act === 'career-oklad') { ctx.go('tariffs'); return true; }
+  if (act === 'career-oklad') { const f = document.getElementById('cr-oklad'); f?.scrollIntoView({ block: 'center', behavior: 'smooth' }); f?.focus(); return true; }
   if (act === 'loyal-hide') {
     const r = loyaltyReminder();
     if (r) { await saveProfile({ career: { ...careerOf(), dismissed: `${r.years}` } }); toast('Напоминание скрыто. Срок виден в «Карьере».'); }
@@ -228,8 +231,22 @@ export async function careerClick(act, b, ctx) {
   return false;
 }
 
+const okladText = (v) => String(v).replace('.', ',');
+
 export async function careerChange(e) {
   const t = e.target;
+  if (t.id === 'cr-oklad') {
+    // оклад хранится в наборе ставок должности из профиля (как и раньше — в «Тарифных ставках»)
+    const raw = t.value.replace(/\s/g, '').replace(',', '.');
+    const v = raw === '' ? '' : Number(raw);
+    if (v !== '' && (!Number.isFinite(v) || v < 0 || v > 1000000)) { toast('Оклад — число в рублях, например 48000', { error: true }); return true; }
+    const role = S.profile.role || 'assistant';
+    const pay = { ...(S.settings.pay || {}) };
+    pay[role] = { ...(pay[role] || {}), oklad: v === '' ? '' : Math.round(v * 100) / 100 };
+    await saveSettings({ pay });
+    toast(v === '' || v === 0 ? 'Оклад удалён' : 'Оклад сохранён');
+    return true;
+  }
   if (t.id !== 'cr-hired') return false;
   const v = t.value;
   if (v && (!isDateKey(v) || v > todayKey())) { toast('Дата устройства не может быть в будущем', { error: true }); t.value = careerOf().hired; return true; }

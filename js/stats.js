@@ -1,7 +1,7 @@
 // Статистика: поездная и заработная плата за месяц, квартал, год или всё время.
 // Показываются только блоки, где есть данные.
 import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, plural } from './ui.js';
-import { S, statsOf, nowLocal, routeOf, locoLabel, locoKey, myPay, refreshLive } from './store.js';
+import { S, statsOf, nowLocal, routeOf, locoLabel, locoKey, myPay, refreshLive, isPending } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN } from './calc.js';
 import { dayInfo } from './calendar.js';
 import { payMonth, payTotal, overRestIntervals, hasRate, fmtRub, fmtH } from './pay.js';
@@ -64,8 +64,9 @@ function compareLabel(p) {
 }
 
 // ---------------------------------------------------------------- подсчёт
+// поездка, которая ждёт явки, в статистику не входит, пока не началась
 function tripsIn(keys) {
-  return S.trips.filter((t) => keys.has(monthKeyOf(statsOf(t).start)));
+  return S.trips.filter((t) => keys.has(monthKeyOf(statsOf(t).start)) && !isPending(t));
 }
 function gapAfter(sorted, i) {
   const st = statsOf(sorted[i]);
@@ -78,7 +79,7 @@ function collect(p) {
   const months = periodMonths(p);
   const keys = new Set(months.map(([y, m]) => mkOf(y, m)));
   const sums = months.map(([y, m]) => monthSummary(y, m, S.trips, S.absences));
-  const R = { months, sums, keys, work: 0, norm: 0, overtime: 0, night: 0, holiday: 0, wait: 0, abs: { sick: 0, vacation: 0, medical: 0 } };
+  const R = { months, sums, keys, work: 0, norm: 0, overtime: 0, night: 0, holiday: 0, wait: 0, abs: { sick: 0, vacation: 0, medical: 0, study: 0 } };
   for (const s of sums) {
     R.work += s.work; R.norm += s.normMin; R.overtime += s.overtime; R.night += s.night; R.holiday += s.holiday; R.wait += s.wait || 0;
     for (const k of Object.keys(R.abs)) R.abs[k] += s.absByType[k] || 0;
@@ -94,6 +95,12 @@ function collect(p) {
   const arms = new Map();
   const locos = new Map();
   R.passenger = 0;
+  // следование резервом: число поездок периода и их часы по месяцам периода (без ожидания — как в заработке)
+  R.reserve = { n: trips.filter((t) => t.kind === 'reserve').length, min: 0 };
+  for (const t of S.trips) {
+    if (t.kind !== 'reserve') continue;
+    for (const [mk, b] of Object.entries(statsOf(t).byMonth || {})) if (keys.has(mk)) R.reserve.min += b.work - (b.wait || 0);
+  }
   for (const t of trips) {
     const r = t.routeId && S.routes.find((x) => x.id === t.routeId);
     if (r?.distanceKm) R.km += r.distanceKm;
@@ -175,7 +182,7 @@ function monthCalendar(y, m) {
     used.add(cls);
     cells += `<span class="cal-d ${cls} ${kind === 'holiday' ? 'hol' : ''} ${kind === 'weekend' || kind === 'off' || kind === 'holiday' ? 'we' : ''}" title="${d} ${MONTHS_SHORT[m - 1]}">${d}</span>`;
   }
-  const lg = [['work', 'работа'], ['dayoff', 'выходной'], ['free', 'отдых'], ['abs-sick', 'больничный'], ['abs-vacation', 'отпуск'], ['abs-medical', 'медкомиссия']]
+  const lg = [['work', 'работа'], ['dayoff', 'выходной'], ['free', 'отдых'], ['abs-sick', 'больничный'], ['abs-vacation', 'отпуск'], ['abs-medical', 'медкомиссия'], ['abs-study', 'учёба']]
     .filter(([c]) => used.has(c)).map(([c, l]) => `<span><i class="cal-d ${c}"></i>${l}</span>`).join('');
   return `<div class="cal"><div class="cal-wd">${['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((w) => `<span>${w}</span>`).join('')}</div><div class="cal-grid">${cells}</div><div class="cal-lg">${lg}</div></div>`;
 }
@@ -217,6 +224,7 @@ function tripsView(R) {
       ${R.km > 0 ? kv('Пройдено', `${Math.round(R.km).toLocaleString('ru-RU')} км`) : ''}
       ${R.passenger > 0 ? kv('Пассажиром', fmtDur(R.passenger, { short: true })) : ''}
       ${R.wait > 0 ? kv('Ожидание следования', fmtDur(R.wait, { short: true })) : ''}
+      ${R.reserve.n || R.reserve.min > 0 ? kv('Резервом', `${R.reserve.n} ${plural(R.reserve.n, 'поездка', 'поездки', 'поездок')}`, fmtDur(R.reserve.min, { short: true })) : ''}
     </div>`);
   }
   if (R.night > 0 || R.holiday > 0) {
