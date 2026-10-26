@@ -857,3 +857,19 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .ph-tel-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .ph-tel-row .input { flex: 1; min-width: 0; }
 #ph-groups { margin-top: 8px; }
+/* аккаунт CABINA */
+.acc-pass { position: relative; }
+.acc-pass .input { width: 100%; padding-right: 108px; }
+.acc-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); min-height: 40px; padding: 0 12px; border-radius: 10px; font-weight: 700; font-size: 14px; color: var(--night); background: color-mix(in srgb, var(--night) 10%, transparent); }
+.acc-consent { display: flex; gap: 12px; align-items: flex-start; }
+.acc-consent input { flex: none; width: 24px; height: 24px; margin: 1px 0 0; accent-color: var(--accent); }
+.acc-consent label { font-weight: 600; font-size: 15px; line-height: 1.35; cursor: pointer; }
+.acc-docs { display: flex; flex-wrap: wrap; gap: 8px; }
+.acc-btns { display: grid; gap: 10px; }
+.acc-err:empty { display: none; }
+.acc-email { overflow-wrap: anywhere; }
+.legal { display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.45; color: var(--text-2); }
+.legal p, .legal ul { margin: 0; }
+.legal ul { padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.legal b { color: var(--text); }
+.btn:disabled { opacity: .6; cursor: default; }

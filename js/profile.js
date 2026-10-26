@@ -7,6 +7,7 @@ import { ROLES, OVERREST_MAX } from './pay.js';
 import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
 import { careerOf, tenure, tenureText, todayKey } from './career.js';
 import { normPhone } from './phones.js';
+import { accountRowHtml } from './account.js';
 
 const CLASSES = ['3', '2', '1'];
 const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -82,6 +83,7 @@ export function renderProfile() {
       ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
       <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.edit, 16)} Редактировать профиль</button>
     </section>
+    ${accountRowHtml()}
     ${tiles}
     <div class="notice ok">${I.shield}<div><b>Профиль хранится только в этом телефоне</b> и никому не показывается. Он попадает в резервную копию — не пересылайте её другим людям.</div></div>`;
 }

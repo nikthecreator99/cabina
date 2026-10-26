@@ -45,8 +45,8 @@ test('страница запрещает чужие скрипты и обра�
   const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] || '';
   assert.match(csp, /default-src 'self'/);
   assert.match(csp, /script-src 'self'(;|$)/, 'без unsafe-inline и unsafe-eval для скриптов');
-  assert.match(csp, /connect-src 'self'/);
+  assert.match(csp, /connect-src 'self' https:\/\/api\.cabina-app\.ru;/, 'запросы — только к своему сайту и своему серверу аккаунтов в России');
   assert.match(csp, /object-src 'none'/);
   assert.doesNotMatch(html, /<script>/, 'скриптов внутри страницы нет');
-  assert.doesNotMatch(html, /https?:\/\//, 'внешних адресов нет');
+  assert.doesNotMatch(html.replace("connect-src 'self' https://api.cabina-app.ru;", ''), /https?:\/\//, 'других внешних адресов нет');
 });

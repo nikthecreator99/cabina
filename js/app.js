@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, sickPayTour, payModeTour, pendingTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -20,8 +20,11 @@ import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
 import { careerSub, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
+import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion } from './account.js';
+import { consumeAuthRedirect, touch } from './auth.js';
+import { legalReady, policyHtml } from './legal.js';
 
-export const VERSION = '2.8.0';
+export const VERSION = '2.9.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -382,7 +385,7 @@ function renderSettings() {
         <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные будут заменены</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
         <div class="row"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Локальное хранение</div>
           <div class="t2">${isMemoryMode() ? 'Хранилище браузера недоступно — данные пропадут после закрытия. Откройте CABINA в обычном (не приватном) окне.'
-            : `Без регистрации и серверов. Данные не передаются по сети.${storageInfo ? ` Занято ${fmtSize(storageInfo.usage)}${storageInfo.persisted ? ' · защищено от автоочистки' : ''}.` : ''}`}</div></div></div>
+            : `${legalReady() ? 'Записи хранятся только в этом телефоне и по сети не передаются. Аккаунт — по желанию: на сервере в России только почта и даты входа.' : 'Без регистрации и серверов. Данные не передаются по сети.'}${storageInfo ? ` Занято ${fmtSize(storageInfo.usage)}${storageInfo.persisted ? ' · защищено от автоочистки' : ''}.` : ''}`}</div></div></div>
       </div>
     </div>
     <div class="group"><div class="group-title">Производственный календарь</div>
@@ -403,13 +406,14 @@ function renderSettings() {
       <div class="panel">
         <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Показать подсказки заново</div><div class="t2">Объяснения по каждому разделу при первом открытии</div></div>${small(I.right, 18)}</button>
+        ${legalReady() ? `<button class="row" data-act="policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки персональных данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>` : ''}
         <button class="row" data-act="about"><span class="ico">${I.info}</span><div class="grow"><div class="t1">CABINA ${VERSION}</div><div class="t2">Личный учёт поездок. Не является официальной системой ОАО «РЖД».</div></div>${small(I.right, 18)}</button>
       </div>
     </div>`;
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, career: renderCareer };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, career: renderCareer, account: renderAccount };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
 }
@@ -450,6 +454,7 @@ function go(name) {
   if (name === 'stats') statsAt(V.y, V.m);
   if (name === 'search') { V.tripQ = ''; setTimeout(() => app.querySelector('#trip-q')?.focus(), 50); }
   if (name === 'settings') refreshStorage().then(() => page() === 'settings' && rerender());
+  if (name === 'account') accountEnter().then(() => page() === 'account' && rerender());
   V.pages.push(name);
   render();
   window.scrollTo(0, 0);
@@ -475,7 +480,7 @@ function scheduleTours() {
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
-    else if (V.tab === 'profile') profileTour();
+    else if (V.tab === 'profile') { profileTour(); if (legalReady()) accountTileTour(); }
   }, 500);
 }
 export { scheduleTours };
@@ -545,6 +550,7 @@ app.addEventListener('click', async (e) => {
   if (await profileClick(act, b, ctx)) return;
   if (await careerClick(act, b, ctx)) return;
   if (await medClick(act, b, ctx)) return;
+  if (await accountClick(act, b, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   switch (act) {
     case 'go': go(b.dataset.page); break;
@@ -613,11 +619,14 @@ app.addEventListener('click', async (e) => {
       break;
     }
     case 'about': showOnboarding(true); break;
+    case 'policy': openLayer(sheet({ title: 'Политика обработки персональных данных', body: policyHtml(), tall: true, foot: '<button class="btn btn-primary" data-close>Понятно</button>' })); break;
     case 'whats-new': showWhatsNew(); break;
     case 'tours-reset': await resetTours(); V.tab = 'home'; V.pages = []; goToday(); render(); window.scrollTo(0, 0); break;
     default: break;
   }
 });
+app.addEventListener('submit', (e) => { accountSubmit(e, ctx); });
+
 // карточка итогов — тоже кнопка (клавиатура)
 app.addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.hero[data-act=stats]')) { e.preventDefault(); go('stats'); }
@@ -668,7 +677,7 @@ function showOnboarding(again = false) {
     title: again ? 'О приложении' : 'Добро пожаловать',
     body: `<div class="onb">
       <div class="onb-hero"><img src="icons/icon-192.png" alt="" width="84" height="84"><h2>CABINA</h2><div class="hint">Личный учёт поездок, часов, отдыха и заработка</div></div>
-      <div class="onb-item"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div><b>Без регистрации</b><span>Все данные хранятся только на этом устройстве и никуда не передаются.</span></div></div>
+      <div class="onb-item"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div>${legalReady() ? '<b>Записи — только в телефоне</b><span>Поездки, заработок, отвлечения и документы хранятся только на этом устройстве. Аккаунт — по желанию.</span>' : '<b>Без регистрации</b><span>Все данные хранятся только на этом устройстве и никуда не передаются.</span>'}</div></div>
       <div class="onb-item"><span class="ico" style="--c:var(--night)">${I.globe}</span><div><b>Работает без интернета</b><span>После первого открытия CABINA доступна в дороге и вне зоны связи.</span></div></div>
       <div class="onb-item"><span class="ico" style="--c:var(--warn)">${I.download}</span><div><b>Делайте резервные копии</b><span>Удаление приложения или очистка данных браузера сотрёт записи. Копия — в «Профиль → Настройки».</span></div></div>
       <div class="onb-item"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div><b>Установите на экран</b><span>${isIOS() ? 'Safari → «Поделиться» → «На экран „Домой“».' : 'Chrome → меню ⋮ → «Добавить на главный экран».'}</span></div></div>
@@ -688,6 +697,9 @@ function showOnboarding(again = false) {
 // ---------------------------------------------------------------- старт
 async function start() {
   goToday();
+  setAccountVersion(VERSION);
+  // ссылка из письма (подтверждение почты, новый пароль): данные входа сразу убираются из адресной строки
+  const redirect = consumeAuthRedirect();
   try { await loadAll(); } catch (e) { console.error(e); }
   // отсчёт для напоминания о резервной копии — с первого запуска этой версии
   if (!S.backup.since) saveBackupInfo({ since: Date.now() }).catch(() => {});
@@ -695,6 +707,9 @@ async function start() {
   applyTheme();
   render();
   if (!S.onboarded) showOnboarding();
+  if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
+  // аккаунт: отметка «заходил сегодня» для статистики (раз в день; без аккаунта ничего не отправляется)
+  touch(VERSION).catch(() => {});
   // обновление календаря отдельно от приложения
   fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); rerender(); } }).catch(() => {});
   // обновлять «сейчас» (поездка «в пути», статус отдыха) раз в минуту

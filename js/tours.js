@@ -96,6 +96,13 @@ export function profileTour() {
   ]);
 }
 
+// Аккаунт CABINA (2.9)
+export function accountTileTour() {
+  runTour('accountTile', [
+    { target: '[data-page=account]', title: 'Аккаунт CABINA', text: 'По желанию. Сейчас идёт закрытое испытание — только по приглашению. <b>Записи из телефона на сервер не уходят</b>: там только почта и даты входа.' },
+  ]);
+}
+
 export function profileEditTour() {
   runTour('profileEdit', [
     { target: '#pr-role', title: 'Должность', text: 'От неё зависит, какие тарифные ставки используются в расчёте заработка.' },
