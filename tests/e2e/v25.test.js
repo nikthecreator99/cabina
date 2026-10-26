@@ -194,7 +194,7 @@ test('настройки: новый порядок, календарь и ча�
   await tab(page, 'profile');
   await page.locator('[data-page=settings]').click();
   const titles = (await page.locator('.screen .group-title').allInnerTexts()).map((s) => s.trim().toLowerCase());
-  assert.deepEqual(titles, ['оформление', 'профиль', 'данные и резервная копия', 'производственный календарь', 'часовой пояс', 'установка на экран', 'о приложении']);
+  assert.deepEqual(titles, ['оформление', 'карьера', 'данные и резервная копия', 'производственный календарь', 'часовой пояс', 'установка на экран', 'о приложении']);
   assert.equal(await page.locator('#tz').count(), 0, 'длинного списка в самих настройках нет');
   assert.match(await text(page, '#tz-row'), /Москва \(МСК\)/);
   await page.locator('#tz-row').click();

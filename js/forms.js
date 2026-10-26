@@ -155,7 +155,7 @@ export function openTripForm(tripId) {
   const today = fmtLocal(now).slice(0, 10);
   const base = existing ? JSON.parse(JSON.stringify({ ...existing, _stats: undefined, _statsAt: undefined })) : {
     id: uid(), routeId: null, routeLabel: '', start: '', end: '', passenger: [], waiting: [], locoType: '', locoNumber: '',
-    restType: 'turnaround', homeRest: null, homeChoice: null, kind: usualKind(), createdAt: Date.now(),
+    restType: null, homeRest: null, homeChoice: null, kind: usualKind(), createdAt: Date.now(),
   };
   const wasLive = existing ? isLive(existing) : false;
   const linkedNote = existing ? S.notes.find((n) => n.tripId === existing.id) : null;
@@ -176,7 +176,8 @@ export function openTripForm(tripId) {
     waiting: (base.waiting || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     note: linkedNote?.text || '',
     noteOpen: !!linkedNote?.text,
-    restType: base.restType || 'turnaround',
+    // вид отдыха выбирается только после окончания поездки: у новой и у поездки «в пути» он не выбран
+    restType: wasLive || !base.end ? null : base.restType || null,
     homeSel: base.homeRest?.ids ? [...base.homeRest.ids] : [],
     homeOpen: !!base.homeRest?.ids,
     homeChoice: base.homeChoice || null,
@@ -276,6 +277,7 @@ export function openTripForm(tripId) {
         <button type="button" data-rest="turnaround">${I.bed2}<span>Отдых в пункте оборота</span></button>
         <button type="button" data-rest="home">${I.home2}<span>Домашний отдых</span></button>
       </div>
+      <div class="hint" id="tf-rest-hint" hidden>Отдых можно выбрать, когда укажете время окончания поездки.</div>
       <div id="tf-calc"></div>
       <div class="list" id="tf-home"></div>
     </div>
@@ -367,8 +369,16 @@ export function openTripForm(tripId) {
     $(el, '#tf-kind-list').hidden = !F.kindOpen;
     el.querySelectorAll('[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === F.kind)));
   }
+  // без окончания поездки отдых не выбирается, а кнопка внизу — «В путь» (или «Сохранить явку»)
   function renderRest() {
-    el.querySelectorAll('[data-rest]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rest === F.restType)));
+    const open = !F.et;
+    if (open && F.restType) { F.restType = null; F.homeChoice = null; F.homeOpen = false; }
+    el.querySelectorAll('[data-rest]').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.rest === F.restType)); b.disabled = open; });
+    $(el, '#tf-rest-hint').hidden = !open;
+    const pending = open && F.sd && F.st && parseLocal(`${F.sd}T${F.st}`) > nowLocal();
+    const label = !open ? 'Сохранить' : pending ? 'Сохранить явку' : 'В путь';
+    const btn = $(el, '[data-act=save-trip]');
+    if (btn.dataset.label !== label) { btn.dataset.label = label; btn.innerHTML = `${open && !pending ? I.train : I.check} ${label}`; }
   }
   const ico = (svg, n) => svg.replace('width="22" height="22"', `width="${n}" height="${n}"`);
   const shiftH = () => fmtDur(S.settings.minShiftRest ?? 960, { short: true });
@@ -410,6 +420,7 @@ export function openTripForm(tripId) {
       html += `<div class="calc-head">По месяцам</div>` + months.map((mk) => `<div class="calc-row"><span>${monthName(mk)}</span><b>${fmtDur(st.byMonth[mk].work)}</b></div>`).join('');
     }
     if (live) html += `<div class="calc-row"><span>Время окончания и отдых посчитаются, когда вы завершите поездку.</span></div>`;
+    else if (!F.restType) html += `<div class="calc-row"><span>Выберите вид отдыха после поездки — он появится на главном.</span></div>`;
     else if (F.restType === 'turnaround') html += restBlock(d);
     else if (F.homeChoice === 'queue') {
       const until = queueUntil(st.end);
@@ -515,7 +526,7 @@ export function openTripForm(tripId) {
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
     if (b.dataset.route) { F.routeId = b.dataset.route; renderRoute(); refreshAll(); return; }
     if (b.dataset.type) { F.locoType = b.dataset.type; $(el, '#tf-lt').value = b.dataset.type; refreshAll(); return; }
-    if (b.dataset.rest) { F.restType = b.dataset.rest; refreshAll(); return; }
+    if (b.dataset.rest) { if (!F.et) return; F.restType = b.dataset.rest; refreshAll(); return; }
     if (b.dataset.kind) { F.kind = b.dataset.kind; F.kindOpen = false; renderKind(); renderTrain(); refreshAll(); return; }
     if (b.dataset.choice) { F.homeChoice = F.homeChoice === b.dataset.choice ? null : b.dataset.choice; refreshAll(); return; }
     if (b.dataset.cand) {

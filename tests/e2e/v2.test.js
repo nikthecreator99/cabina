@@ -86,6 +86,8 @@ test('поездка «в пути»: только начало, идёт вре
   f = sheet(page);
   assert.equal(await f.locator('[data-act=finish-now]').count(), 0);
   await f.locator('#tf-et').fill('12:00');
+  // 2.8: отдых выбирается после окончания
+  await f.locator('[data-rest=turnaround]').click();
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.match(await text(page, '.trip'), /10:00 — 12:00/);

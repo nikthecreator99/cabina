@@ -100,15 +100,11 @@ export function reminderHtml(r) {
 }
 
 // ---------------------------------------------------------------- экраны
-export function renderProfileSettings() {
+// Подпись строки «Карьера» в Настройках (профиль меняется с экрана «Профиль» → «Редактировать профиль»)
+export function careerSub() {
   const c = careerOf();
   const t = c.hired ? tenure(c.hired, todayKey()) : null;
-  return `${pageHead('Настройка профиля', { back: true })}
-    <div class="panel">
-      <button class="row" data-act="go" data-page="profile-edit"><span class="ico" style="--c:var(--accent)">${I.user}</span><div class="grow"><div class="t1">Профиль</div><div class="t2">Фото, имя, должность, депо, приватность</div></div>${small(I.right, 18)}</button>
-      <button class="row" data-act="go" data-page="career"><span class="ico" style="--c:var(--warn)">${I.briefcase}</span><div class="grow"><div class="t1">Карьера</div><div class="t2">${t ? `Стаж ${tenureText(t)}` : 'Дата устройства, должности, вознаграждение за преданность'}</div></div>${small(I.right, 18)}</button>
-    </div>
-    <div class="notice ok">${I.shield}<div><b>Эти данные хранятся только в этом телефоне</b> и никому не показываются.</div></div>`;
+  return t ? `Стаж ${tenureText(t)}` : 'Дата устройства, должности, вознаграждение за преданность';
 }
 
 export function renderCareer() {

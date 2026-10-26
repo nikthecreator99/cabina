@@ -848,3 +848,12 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .ava-sm svg { width: 20px; height: 20px; }
 .call-btn { flex: none; color: var(--ok); }
 #pay-mode .t1 { font-weight: 700; }
+.seg button:disabled { opacity: .45; cursor: default; }
+.phone-row { flex-wrap: wrap; }
+.phone-nums { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; padding-left: 54px; }
+.phone-num { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line-2); color: var(--text); text-decoration: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.phone-num svg { color: var(--ok); flex: none; }
+.phone-groups { margin-bottom: 12px; }
+.ph-tel-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ph-tel-row .input { flex: 1; min-width: 0; }
+#ph-groups { margin-top: 8px; }

@@ -44,6 +44,17 @@ export function tripIntervals(trip, { withWait = true } = {}) {
   return mergeIntervals(list);
 }
 
+// Минуты объединения интервалов [{start, end}] по месяцам: { 'YYYY-MM': минуты }
+function minutesByMonth(list = []) {
+  const out = {};
+  const iv = mergeIntervals(list.map((p) => [parseLocal(p.start), parseLocal(p.end)]).filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b > a));
+  for (const [s, e] of iv) {
+    let cur = s;
+    while (cur < e) { const stop = Math.min(e, nextMonthStart(cur)); const mk = monthKeyOf(cur); out[mk] = (out[mk] || 0) + (stop - cur) / MIN; cur = stop; }
+  }
+  return out;
+}
+
 const ov = (a, b, c, d) => Math.max(0, Math.min(b, d) - Math.max(a, c));
 
 function nightIn(s, e) {
@@ -85,8 +96,8 @@ function nextMonthStart(ms) {
 
 // Возвращает минуты: { work, night, holiday, restDay, wait, pass, start, end, byMonth: { 'YYYY-MM': {work, night, holiday, restDay, wait, pass} } }
 // restDay — время в выходные и праздничные дни по производственному календарю.
-// wait — ожидание следования пассажиром, не совпавшее с поездкой и следованием (входит в work).
-// pass — следование пассажиром, не совпавшее с самой поездкой (входит в work). Остальное — работа на локомотиве.
+// pass — следование пассажиром, wait — ожидание следования, не совпавшее со следованием (оба входят в work).
+// Остальное — работа на локомотиве.
 // Поездка «в пути» (без окончания) считается до момента liveEnd, если он передан.
 export function tripStats(trip, liveEnd) {
   const t = !trip.end && Number.isFinite(liveEnd) && liveEnd > parseLocal(trip.start) ? { ...trip, end: fmtLocal(liveEnd) } : trip;
@@ -110,28 +121,14 @@ export function tripStats(trip, liveEnd) {
       cur = stop;
     }
   }
-  if ((t.waiting || []).length) {
-    // ожидание = всё рабочее время минус время без ожидания (по месяцам)
-    for (const [s, e] of tripIntervals(t, { withWait: false })) {
-      let cur = s;
-      while (cur < e) {
-        const stop = Math.min(e, nextMonthStart(cur));
-        const b = res.byMonth[monthKeyOf(cur)];
-        if (b) b.wait -= (stop - cur) / MIN;
-        cur = stop;
-      }
-    }
-    for (const b of Object.values(res.byMonth)) { b.wait += b.work; res.wait += b.wait; }
-  }
-  if ((t.passenger || []).length) {
-    // следование = рабочее время без ожидания минус сама поездка (по месяцам)
-    const drive = {};
-    const ds = parseLocal(t.start); const de = parseLocal(t.end);
-    if (Number.isFinite(ds) && Number.isFinite(de)) {
-      let cur = ds;
-      while (cur < de) { const stop = Math.min(de, nextMonthStart(cur)); const mk = monthKeyOf(cur); drive[mk] = (drive[mk] || 0) + (stop - cur) / MIN; cur = stop; }
-    }
-    for (const [mk, b] of Object.entries(res.byMonth)) { b.pass = Math.max(0, b.work - b.wait - (drive[mk] || 0)); res.pass += b.pass; }
+  // Следование и ожидание пассажиром, вписанные человеком, важнее времени поездки: если они совпали
+  // с поездкой, эти часы идут строкой «Следование пассажиром» / «Ожидание…», а не «работой на локомотиве».
+  const pass = minutesByMonth(t.passenger);
+  const passWait = minutesByMonth([...(t.passenger || []), ...(t.waiting || [])]);
+  for (const [mk, b] of Object.entries(res.byMonth)) {
+    b.pass = Math.min(b.work, pass[mk] || 0);
+    b.wait = Math.max(0, Math.min(b.work, passWait[mk] || 0) - b.pass);
+    res.pass += b.pass; res.wait += b.wait;
   }
   return res;
 }

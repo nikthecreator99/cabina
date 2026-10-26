@@ -91,6 +91,7 @@ export function chosenRest(trip, pool = S.trips) {
     }
     return null;
   }
+  if (trip.restType !== 'turnaround') return null; // отдых после поездки не выбран
   const house = houseOf(trip);
   const r = turnaroundRest(st.work, st.end, houseMinRest(house));
   return { kind: 'turnaround', label: 'Отдых в пункте оборота', house, until: r.until, rest: r.rest };

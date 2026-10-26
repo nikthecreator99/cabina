@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, profileSettingsTour, slipPdfTour, sickPayTour, payModeTour, pendingTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, sickPayTour, payModeTour, pendingTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -17,14 +17,14 @@ import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workC
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
-import { renderPhones, phonesListHtml, openPhoneForm } from './phones.js';
-import { renderProfileSettings, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
+import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
+import { careerSub, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
 
-export const VERSION = '2.7.0';
+export const VERSION = '2.8.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
-const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '' };
+const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
 const page = () => V.pages[V.pages.length - 1] || null;
 
 const p2 = (n) => String(n).padStart(2, '0');
@@ -289,7 +289,7 @@ function renderExtra() {
   if (V.extra === 'notes') html = renderNotes();
   else if (V.extra === 'docs') html = renderDocs();
   else if (V.extra === 'fix') html = renderFix();
-  else if (V.extra === 'phones') html = renderPhones(V.phonesQ);
+  else if (V.extra === 'phones') html = renderPhones(V.phonesQ, V.phonesGroup);
   else {
     const locos = new Set(S.notes.map((n) => locoKey(n.type, n.number))).size;
     const docs = docsCount();
@@ -300,7 +300,7 @@ function renderExtra() {
         <button class="row" data-act="extra-docs"><span class="ico" style="--c:var(--warn)">${I.folder}</span>
           <div class="grow"><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="extra-phones"><span class="ico" style="--c:var(--ok)">${I.book}</span>
-          <div class="grow"><div class="t1">Телефоны</div><div class="t2">${S.contacts.length ? `${S.contacts.length} ${plural(S.contacts.length, 'номер', 'номера', 'номеров')} · только в этом телефоне` : 'Нарядчик, дежурный, коллеги'}</div></div>${small(I.right, 18)}</button>
+          <div class="grow"><div class="t1">Телефоны</div><div class="t2">${S.contacts.length ? `${S.contacts.length} ${plural(S.contacts.length, 'контакт', 'контакта', 'контактов')} · только в этом телефоне` : 'Нарядчик, дежурный, коллеги'}</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="extra-fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
           <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>
       </div>`;
@@ -370,8 +370,8 @@ function renderSettings() {
     <div class="group"><div class="group-title">Оформление</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
     </div>
-    <div class="group"><div class="group-title">Профиль</div>
-      <div class="panel"><button class="row" data-act="go" data-page="profile-settings"><span class="ico" style="--c:var(--accent)">${I.user}</span><div class="grow"><div class="t1">Настройка профиля</div><div class="t2">Профиль и карьера: стаж, должности, вознаграждение за преданность</div></div>${small(I.right, 18)}</button></div>
+    <div class="group"><div class="group-title">Карьера</div>
+      <div class="panel"><button class="row" data-act="go" data-page="career"><span class="ico" style="--c:var(--warn)">${I.briefcase}</span><div class="grow"><div class="t1">Карьера</div><div class="t2">${careerSub()}</div></div>${small(I.right, 18)}</button></div>
     </div>
     <div class="group"><div class="group-title">Данные и резервная копия</div>
       <div class="notice">${I.alert}<div><b>Данные хранятся только на этом устройстве.</b> Если удалить приложение или очистить данные браузера без резервной копии, поездки, отвлечения, профиль и документы будут потеряны.</div></div>
@@ -409,7 +409,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, 'profile-settings': renderProfileSettings, career: renderCareer };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, career: renderCareer };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
 }
@@ -471,7 +471,6 @@ function scheduleTours() {
     else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); }
     else if (p === 'settings') settingsTour();
     else if (p === 'profile-edit') profileEditTour();
-    else if (p === 'profile-settings') profileSettingsTour();
     else if (p === 'career') careerTour();
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); }
@@ -580,8 +579,11 @@ app.addEventListener('click', async (e) => {
     case 'extra-notes': V.extra = 'notes'; V.notesQ = ''; render(); window.scrollTo(0, 0); break;
     case 'extra-docs': V.extra = 'docs'; render(); window.scrollTo(0, 0); break;
     case 'extra-fix': V.extra = 'fix'; render(); window.scrollTo(0, 0); break;
-    case 'extra-phones': V.extra = 'phones'; V.phonesQ = ''; render(); window.scrollTo(0, 0); break;
-    case 'phone-add': openPhoneForm(null); break;
+    case 'extra-phones': V.extra = 'phones'; V.phonesQ = ''; V.phonesGroup = null; render(); window.scrollTo(0, 0); break;
+    case 'phones-group': V.phonesGroup = b.dataset.g; V.phonesQ = ''; render(); window.scrollTo(0, 0); break;
+    case 'phones-up': V.phonesGroup = null; render(); window.scrollTo(0, 0); break;
+    case 'phones-forget': if (await forgetGroup(b.dataset.g)) { V.phonesGroup = null; render(); } break;
+    case 'phone-add': openPhoneForm(null, { group: b.dataset.g || '' }); break;
     case 'phone-edit': openPhoneForm(id); break;
     case 'phones-clear': V.phonesQ = ''; render({ still: true }); app.querySelector('#phones-q')?.focus(); break;
     case 'fix-slope': fixSlope(b); break;
@@ -634,7 +636,7 @@ app.addEventListener('input', (e) => {
   }
   if (e.target.id === 'phones-q') {
     V.phonesQ = e.target.value;
-    app.querySelector('#phones-list').innerHTML = phonesListHtml(V.phonesQ);
+    app.querySelector('#phones-list').innerHTML = phonesListHtml(V.phonesQ, null);
     const head = e.target.parentElement;
     const x = head.querySelector('.search-x');
     if (V.phonesQ && !x) head.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="phones-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);

@@ -37,7 +37,8 @@ test('статус: на отдыхе в пункте оборота → жду 
   assert.match(await status(page), /^Жду явку Сосновка$/);
   // поехали обратно
   await seed(page, { trips: [{ id: 'b', routeId: 'r2', start: '2026-10-20T15:30', end: '' }] });
-  assert.match(await status(page), /В пути → Ёлкино · с 15:30/);
+  // 2.8: откуда → куда
+  assert.match(await status(page), /В пути Сосновка → Ёлкино · с 15:30/);
   // дома: домашний отдых, «На очередь» — между поездками
   await seed(page, { trips: [{ id: 'b', routeId: 'r2', start: '2026-10-20T15:30', end: '2026-10-20T23:00', restType: 'home', homeChoice: 'queue' }] });
   await at(page, '2026-10-21T08:00:00+03:00');

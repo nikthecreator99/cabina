@@ -11,7 +11,7 @@ const st = (t) => tripStats(t);
 const NORMS = { r1: { weight: 5199, length: 59 } };
 const cfgOf = (fields = {}, norms = NORMS) => ({ ...payCfg({ main: { rates: [{ from: null, rate: 300 }], bonus: 0, harm: 0, night: 0, ...fields } }), norms });
 
-test('следование пассажиром: минуты вне самой поездки, по месяцам', () => {
+test('следование и ожидание пассажиром: отдельно от работы на локомотиве, по месяцам', () => {
   const t = T('a', '2026-10-31T20:00', '2026-10-31T23:00', {
     passenger: [{ id: 'p', start: '2026-10-31T23:30', end: '2026-11-01T01:30' }],
     waiting: [{ id: 'w', start: '2026-10-31T23:00', end: '2026-10-31T23:30' }],
@@ -22,10 +22,16 @@ test('следование пассажиром: минуты вне самой 
   assert.equal(s.pass, 120);
   assert.equal(s.byMonth['2026-10'].pass, 30);
   assert.equal(s.byMonth['2026-11'].pass, 90);
-  // следование, совпавшее с поездкой, не считается дважды
+  // следование, совпавшее с поездкой, не считается дважды; с 2.8 совпавший час — тоже следование
   const o = tripStats(T('o', '2026-10-14T08:00', '2026-10-14T12:00', { passenger: [{ id: 'p', start: '2026-10-14T11:00', end: '2026-10-14T13:00' }] }));
   assert.equal(o.work, 300);
-  assert.equal(o.pass, 60);
+  assert.equal(o.pass, 120);
+  // ожидание внутри поездки — тоже отдельной строкой (раньше пропадало в «работе на локомотиве»)
+  const w = tripStats(T('w', '2026-10-14T08:00', '2026-10-14T16:00', { waiting: [{ id: 'w', start: '2026-10-14T14:00', end: '2026-10-14T16:00' }] }));
+  assert.deepEqual({ work: w.work, wait: w.wait, pass: w.pass }, { work: 480, wait: 120, pass: 0 });
+  // ожидание, совпавшее со следованием, считается следованием
+  const pw = tripStats(T('pw', '2026-10-14T08:00', '2026-10-14T12:00', { passenger: [{ id: 'p', start: '2026-10-14T12:00', end: '2026-10-14T14:00' }], waiting: [{ id: 'w', start: '2026-10-14T13:00', end: '2026-10-14T15:00' }] }));
+  assert.deepEqual({ work: pw.work, wait: pw.wait, pass: pw.pass }, { work: 420, wait: 60, pass: 120 });
   assert.equal(monthSummary(2026, 10, [t], []).pass, 30);
 });
 

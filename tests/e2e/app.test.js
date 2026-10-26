@@ -57,7 +57,11 @@ test('добавление поездки через форму: часы, но�
   const calc = await f.locator('#tf-calc').innerText();
   assert.match(calc, /Рабочее время\s+11 ч 30 мин/);
   assert.match(calc, /Ночные \(22:00–06:00\)\s+8 ч 00 мин/);
-  assert.match(calc, /Отдых в пункте оборота\s+Длительность\s+5 ч 45 мин/i);
+  // 2.8: отдых по умолчанию не выбран — выбирается после окончания
+  assert.match(calc, /Выберите вид отдыха/);
+  assert.equal(await f.locator('[data-rest][aria-pressed=true]').count(), 0);
+  await f.locator('[data-rest=turnaround]').click();
+  assert.match(await f.locator('#tf-calc').innerText(), /Отдых в пункте оборота\s+Длительность\s+5 ч 45 мин/i);
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.match(await text(page, '.toast-wrap'), /Поездка добавлена/);

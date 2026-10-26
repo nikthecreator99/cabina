@@ -36,11 +36,10 @@ const subLine = (p) => [ROLES[p.role] + (p.role === 'driver' && p.klass ? `, ${p
 const when = (ms, now) => whenShort(ms, now).replace(/^сегодня, /, '');
 export function profileStatus(now = nowLocal()) {
   const live = liveTrip();
-  if (live && isPending(live, now)) return { kind: 'soon', label: 'Скоро явка', sub: whenShort(statsOf(live).start, now) };
-  if (live) {
-    const to = routeEnds(live)?.to;
-    return { kind: 'trip', label: 'В пути', sub: `${to ? `→ ${to} · ` : ''}с ${when(statsOf(live).start, now)}` };
-  }
+  // «В пути: Сумский Посад → Малошуйка · с 05:40» — откуда и куда
+  const path = (t) => { const e = routeEnds(t); return e ? `${e.from} → ${e.to}` : routeOf(t); };
+  if (live && isPending(live, now)) return { kind: 'soon', label: 'Скоро явка', sub: [whenShort(statsOf(live).start, now), path(live)].filter(Boolean).join(' · ') };
+  if (live) return { kind: 'trip', label: 'В пути', sub: [path(live), `с\u00a0${when(statsOf(live).start, now)}`].filter(Boolean).join(' · ') };
   const today = dateKeyOf(now);
   const abs = S.absences.find((a) => a.start <= today && a.end >= today);
   if (abs) return { kind: 'abs', label: 'На отвлечении', sub: `до ${dayMonth(parseLocal(`${abs.end}T00:00`))} включительно` };

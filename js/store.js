@@ -16,7 +16,8 @@ export const S = {
   backup: { id: 'backup', lastAt: 0, since: 0, snoozeUntil: 0 },
   locoTypes: [],
   daysOff: [], // дни, отмеченные в календаре как «Выходной» ('YYYY-MM-DD'): только отметка, на норму и заработок не влияет
-  contacts: [], // записная книжка «Телефоны»: [{ id, name, who, phone, note, createdAt, updatedAt }], только в этом телефоне
+  contacts: [], // записная книжка «Телефоны»: [{ id, group, name, who, phones: [], note, createdAt, updatedAt }], только в этом телефоне
+  contactGroups: [], // названия групп «Телефонов», запоминаются для следующих номеров
   onboarded: false,
 };
 
@@ -42,6 +43,7 @@ export async function loadAll() {
   S.locoTypes = m.locoTypes?.list || [];
   S.daysOff = Array.isArray(m.daysOff?.list) ? m.daysOff.list.filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)) : [];
   S.contacts = Array.isArray(m.contacts?.list) ? m.contacts.list.filter((c) => c && typeof c === 'object' && c.id) : [];
+  S.contactGroups = Array.isArray(m.contacts?.groups) ? m.contacts.groups.filter((g) => typeof g === 'string' && g.trim()).map((g) => g.trim().slice(0, 60)).slice(0, 50) : [];
   S.onboarded = !!m.onboarded;
   S.trips.forEach(normalizeTrip);
   S.trips.forEach((t) => { t._stats = null; statsOf(t); });
@@ -50,6 +52,8 @@ export async function loadAll() {
 
 // Поездки из версий 1.x: полный отдых считался и сразу показывался на главной — считаем это выбором «Полный отдых».
 function normalizeTrip(t) {
+  // до 2.8 вид отдыха был всегда; поле без значения у старой записи — отдых в пункте оборота
+  if (t.restType === undefined) t.restType = 'turnaround';
   if (t.restType === 'home' && t.homeRest?.ids?.length && t.homeChoice === undefined) t.homeChoice = 'full';
   if (t.restType !== 'home') t.homeChoice = null;
   if (t.end == null) t.end = '';
@@ -158,18 +162,28 @@ export async function setDayOff(key, on) {
 }
 
 // Записная книжка хранится одной записью в meta (как типы локомотивов): попадает в резервную копию без смены схемы базы
+const groupKey = (g) => String(g || '').trim().toLowerCase().replace(/ё/g, 'е');
+async function putContacts(list, groups) {
+  await db.put('meta', { id: 'contacts', list, groups });
+  S.contacts = list;
+  S.contactGroups = groups;
+  emit();
+}
+// Группа нового номера запоминается: в следующий раз её можно выбрать одним нажатием
 export async function saveContact(c) {
   const list = S.contacts.filter((x) => x.id !== c.id);
   list.push(c);
-  await db.put('meta', { id: 'contacts', list });
-  S.contacts = list;
-  emit();
+  const g = String(c.group || '').trim();
+  const groups = g && !S.contactGroups.some((x) => groupKey(x) === groupKey(g)) ? [...S.contactGroups, g].slice(-50) : S.contactGroups;
+  await putContacts(list, groups);
 }
 export async function deleteContact(id) {
-  const list = S.contacts.filter((x) => x.id !== id);
-  await db.put('meta', { id: 'contacts', list });
-  S.contacts = list;
-  emit();
+  await putContacts(S.contacts.filter((x) => x.id !== id), S.contactGroups);
+}
+// Убрать запомненную группу из подсказок (номера в ней остаются, просто без группы)
+export async function forgetContactGroup(name) {
+  const k = groupKey(name);
+  await putContacts(S.contacts.map((c) => (groupKey(c.group) === k ? { ...c, group: '' } : c)), S.contactGroups.filter((g) => groupKey(g) !== k));
 }
 
 export async function setOnboarded() {
