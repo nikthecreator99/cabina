@@ -35,6 +35,9 @@ const passInput = (auto) => `<div class="acc-pass"><input class="input" id="acc-
 const errBox = '<div id="acc-err" class="acc-err" role="alert" aria-live="assertive"></div>';
 const submitBtn = (label) => `<button class="btn btn-primary" type="submit" form="acc-form" id="acc-submit" data-label="${esc(label)}">${esc(label)}</button>`;
 const modeBtn = (mode, label) => `<button class="link-btn" data-act="acc-mode" data-mode="${mode}">${label}</button>`;
+// Каждая галочка — отдельно и не отмечена заранее: согласие по 152-ФЗ даётся отдельно от других документов
+const consentBox = (id, text, act, icon, btn) => `<div class="pay-field"><div class="acc-consent"><input type="checkbox" id="${id}"><label for="${id}">${text}</label></div>
+          <div class="acc-docs"><button type="button" class="link-btn" data-act="${act}">${small(icon, 16)} ${btn}</button></div></div>`;
 const docsBtns = `<div class="acc-docs"><button type="button" class="link-btn" data-act="acc-consent-doc">${small(I.shield, 16)} Согласие</button><button type="button" class="link-btn" data-act="acc-policy">${small(I.book, 16)} Политика</button></div>`;
 const localNote = `<div class="notice ok">${I.shield}<div><b>Аккаунт не обязателен.</b> Без него CABINA работает как раньше. Поездки, заработок, отвлечения, документы и профиль хранятся только в этом телефоне и на сервер не отправляются — с аккаунтом тоже.</div></div>`;
 
@@ -63,8 +66,8 @@ function formHtml() {
         ${field('acc-email', 'Почта', emailInput(), 'На неё придёт письмо для подтверждения. Лучше российская почта (Яндекс, Mail.ru).')}
         ${field('acc-pass', 'Придумайте пароль', passInput('new-password'), `Не меньше ${PASS_MIN} символов. Не берите пароль от почты или Госуслуг.`)}
         ${field('acc-invite', 'Код приглашения', `<input class="input" id="acc-invite" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32" placeholder="Например, 7F3A9C21B4" value="${esc(A.invite)}">`, 'Сейчас идёт закрытое испытание: аккаунт создаётся только по приглашению.')}
-        <div class="pay-field"><div class="acc-consent"><input type="checkbox" id="acc-consent"><label for="acc-consent">Мне исполнилось 18 лет. Даю согласие на обработку моих персональных данных и принимаю политику обработки данных CABINA.</label></div>
-          ${docsBtns}</div>
+        ${consentBox('acc-consent', 'Мне исполнилось 18 лет. Даю согласие на обработку моих персональных данных.', 'acc-consent-doc', I.shield, 'Прочитать согласие')}
+        ${consentBox('acc-policy-ok', 'Я ознакомлен(а) с политикой обработки персональных данных CABINA.', 'acc-policy', I.book, 'Прочитать политику')}
       </form>${errBox}${submitBtn('Создать аккаунт')}${modeBtn('login', 'У меня уже есть аккаунт')}`;
     case 'login': return `<form class="panel pay-panel" id="acc-form" novalidate>
         ${field('acc-email', 'Почта', emailInput())}
@@ -213,6 +216,7 @@ export async function accountSubmit(e, ctx) {
     A.invite = normInvite(val('acc-invite'));
     if (!A.invite) { showError('Введите код приглашения.', 'acc-invite'); return true; }
     if (!document.getElementById('acc-consent')?.checked) { showError('Отметьте согласие: без него аккаунт создать нельзя.'); document.getElementById('acc-consent')?.focus(); return true; }
+    if (!document.getElementById('acc-policy-ok')?.checked) { showError('Отметьте, что ознакомились с политикой обработки данных.'); document.getElementById('acc-policy-ok')?.focus(); return true; }
   }
   showError('');
   setBusy(true);

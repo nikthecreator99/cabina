@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startEnv, openApp, seed, NOW, waitNoLayers } from './helpers.js';
 
+const VERSION = (await readFile(new URL('../../js/app.js', import.meta.url), 'utf8')).match(/VERSION = '([\d.]+)'/)[1];
+
 let env;
 before(async () => { env = await startEnv(); });
 after(async () => { await env?.stop(); });
@@ -138,7 +140,13 @@ test('регистрация: проверки формы, согласие, п�
   await page.locator('#acc-submit').click();
   assert.match(await errBox(page).innerText(), /Отметьте согласие/);
   assert.equal(log.length, 0, 'пока форма не заполнена, на сервер ничего не уходит');
+  assert.equal(await page.locator('#acc-consent').isChecked(), false, 'согласие не отмечено заранее');
+  assert.equal(await page.locator('#acc-policy-ok').isChecked(), false, 'политика не отмечена заранее');
   await page.locator('#acc-consent').check();
+  await page.locator('#acc-submit').click();
+  assert.match(await errBox(page).innerText(), /ознакомились с политикой/);
+  assert.equal(log.length, 0, 'без второй галочки на сервер ничего не уходит');
+  await page.locator('#acc-policy-ok').check();
   await page.locator('#acc-submit').click();
   await page.waitForFunction(() => /Код приглашения неверный/.test(document.getElementById('acc-err')?.innerText || ''));
   assert.equal(await page.locator('#acc-pass').inputValue(), 'Probnyj-parol-1', 'после ошибки сервера пароль не стирается');
@@ -149,7 +157,7 @@ test('регистрация: проверки формы, согласие, п�
   assert.equal(sent.length, 2);
   const last = sent.at(-1);
   assert.deepEqual(Object.keys(last.body).sort(), ['data', 'email', 'password']);
-  assert.deepEqual(last.body.data, { consent: 'privacy-1', invite: 'GOODCODE01', platform: 'web', version: '2.9.0' });
+  assert.deepEqual(last.body.data, { consent: 'privacy-1', invite: 'GOODCODE01', platform: 'web', version: VERSION });
   assert.equal(last.apikey, (await page.evaluate(async () => (await import('./js/auth.js')).ANON_KEY)));
   assert.equal(last.auth, null);
   const everything = JSON.stringify(log);
@@ -181,7 +189,7 @@ test('вход, отметка «заходил сегодня» раз в де�
   for (let i = 0; i < 2; i++) { await page.reload(); await page.waitForSelector('.screen'); await page.waitForTimeout(300); }
   const touches = log.filter((r) => r.path === '/rest/v1/rpc/touch');
   assert.equal(touches.length, 1);
-  assert.deepEqual(touches[0].body, { p_platform: 'web', p_version: '2.9.0' });
+  assert.deepEqual(touches[0].body, { p_platform: 'web', p_version: VERSION });
   assert.equal(touches[0].auth, `Bearer ${ACCESS}`);
   // скачать мои данные
   await openAccount(page);
@@ -312,6 +320,8 @@ test('экраны аккаунта помещаются на 320 px в тёмн
     assert.ok(await fits(), `регистрация с ошибкой, ${theme}`);
     const box = await page.locator('#acc-consent').boundingBox();
     assert.ok(box.width >= 20 && box.height >= 20, 'галочка согласия крупная');
+    const box2 = await page.locator('#acc-policy-ok').boundingBox();
+    assert.ok(box2.width >= 20 && box2.height >= 20, 'галочка политики крупная');
     await page.locator('[data-act=acc-mode][data-mode=login]').click();
     await page.locator('#acc-email').fill('ivan@example.com');
     await page.locator('#acc-pass').fill('Probnyj-parol-1');
