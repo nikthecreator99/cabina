@@ -1,15 +1,17 @@
 // Статистика: поездная и заработная плата за месяц, квартал, год или всё время.
 // Показываются только блоки, где есть данные.
-import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, plural } from './ui.js';
-import { S, statsOf, nowLocal, routeOf, locoLabel, locoKey, myPay, refreshLive, isPending } from './store.js';
+import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, MONTHS_PREP, plural, sheet, openLayer, closeLayer, hm } from './ui.js';
+import { S, statsOf, nowLocal, routeOf, locoLabel, normType, normNum, myPay, refreshLive, isPending, overRestByTrip } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN } from './calc.js';
 import { dayInfo } from './calendar.js';
-import { payMonth, payTotal, overRestIntervals, hasRate, fmtRub, fmtH } from './pay.js';
+import { payMonth, payTotal, overRestIntervals, hasRate, isAvg, rateOn, fmtRub, fmtH } from './pay.js';
 import { houseOf, dayOffIntervals } from './rest.js';
-import { ABS_TYPES } from './forms.js';
+import { ABS_TYPES, openTripForm } from './forms.js';
 import { exportSlip } from './slip.js';
 import { slipPdfTour } from './tours.js';
 import { openDay } from './day.js';
+import { eyeBtn } from './money.js';
+import { openRecap } from './recap.js';
 
 const MONTHS_DAT = ['январю', 'февралю', 'марту', 'апрелю', 'маю', 'июню', 'июлю', 'августу', 'сентябрю', 'октябрю', 'ноябрю', 'декабрю'];
 const ROMAN = ['I', 'II', 'III', 'IV'];
@@ -56,6 +58,13 @@ function shifted(p, d) {
   n.y = Math.floor(idx / 12); n.m = (idx % 12) + 1;
   return n;
 }
+// «в октябре 2026», «во II квартале 2026», «в 2026 году», «за всё время»
+function periodPrep(p = ST) {
+  if (p.period === 'month') return `в ${MONTHS_PREP[p.m - 1]} ${p.y}`;
+  if (p.period === 'quarter') return `${p.m <= 6 && p.m > 3 ? 'во' : 'в'} ${ROMAN[Math.floor((p.m - 1) / 3)]} квартале ${p.y}`;
+  if (p.period === 'year') return `в ${p.y} году`;
+  return 'за всё время';
+}
 function compareLabel(p) {
   const prev = shifted(p, -1);
   if (p.period === 'month') return `к ${MONTHS_DAT[prev.m - 1]}`;
@@ -94,7 +103,6 @@ function collect(p) {
   // километры и плечи
   R.km = 0;
   const arms = new Map();
-  const locos = new Map();
   R.passenger = 0;
   // следование резервом: число поездок периода и их часы по месяцам периода (без ожидания — как в заработке)
   R.reserve = { n: trips.filter((t) => t.kind === 'reserve').length, min: 0 };
@@ -109,30 +117,62 @@ function collect(p) {
     if (r?.distanceKm) R.km += r.distanceKm;
     const label = routeOf(t);
     if (label) arms.set(label, (arms.get(label) || 0) + 1);
-    const ll = locoLabel(t.locoType, t.locoNumber);
-    if (t.locoType && t.locoNumber) { const k = locoKey(t.locoType, t.locoNumber); const x = locos.get(k) || { label: ll, n: 0 }; x.n++; locos.set(k, x); }
     for (const pi of t.passenger || []) { const s = parseLocal(pi.start); const e = parseLocal(pi.end); if (e > s) R.passenger += (e - s) / MIN; }
   }
   R.arms = [...arms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-  R.locos = [...locos.values()].sort((a, b) => b.n - a.n).slice(0, 5);
+  R.series = locoSeries(trips);
+  // время явки: по два часа, начиная с полуночи
+  R.calls = Array(12).fill(0);
+  for (const t of trips) { const st = statsOf(t).start; if (Number.isFinite(st)) R.calls[Math.floor(new Date(st).getUTCHours() / 2)]++; }
+  const top = R.calls.indexOf(Math.max(...R.calls));
+  R.callTop = R.calls[top] ? { from: top * 2, n: R.calls[top] } : null;
   // дома отдыха и домашний отдых: от окончания поездки до начала следующей
   const all = [...S.trips].sort((a, b) => statsOf(a).start - statsOf(b).start);
   const houses = new Map();
   R.home = { n: 0, total: 0 };
+  // переотдых — отдых в пункте оборота сверх привезённого рабочего времени (как в заработке)
+  const over = overRestByTrip();
+  const cfg = myPay();
+  const orPay = !isAvg(cfg) && hasRate(cfg);
   all.forEach((t, i) => {
     if (!keys.has(monthKeyOf(statsOf(t).start))) return;
     const gap = gapAfter(all, i);
     if (gap == null || gap <= 0) return;
     if (t.restType === 'turnaround' && gap <= HOUSE_GAP_MAX) {
       const name = houseOf(t) || 'Дом отдыха не указан';
-      const x = houses.get(name) || { name, n: 0, total: 0, unknown: !houseOf(t) };
+      const x = houses.get(name) || { name, n: 0, total: 0, unknown: !houseOf(t), overN: 0, over: 0, overRub: 0 };
       x.n++; x.total += gap / MIN; houses.set(name, x);
+      const o = over.get(t.id) || 0;
+      if (o > 0) { x.overN++; x.over += o; if (orPay) x.overRub += (o / 60) * rateOn(cfg, dateKeyOf(statsOf(t).end)) * 2 / 3; }
     } else if (t.restType === 'home' && gap <= HOME_GAP_MAX) { R.home.n++; R.home.total += gap / MIN; }
   });
   R.houses = [...houses.values()].sort((a, b) => (a.unknown - b.unknown) || b.n - a.n);
   R.houseTotal = R.houses.reduce((s, h) => s + h.total, 0);
   R.houseN = R.houses.reduce((s, h) => s + h.n, 0);
+  R.over = R.houses.reduce((s, h) => s + h.over, 0);
+  R.overN = R.houses.reduce((s, h) => s + h.overN, 0);
+  R.overRub = R.houses.reduce((s, h) => s + h.overRub, 0);
   return R;
+}
+
+// Локомотивы периода по сериям: серия → номера → поездки. «Раз» — число поездок.
+// Поездка без номера идёт в серию строкой «Без номера», без серии — в «Серия не указана».
+let LOCOS = [];
+function locoSeries(trips) {
+  const series = new Map();
+  for (const t of trips) {
+    const tk = normType(t.locoType); const nk = normNum(t.locoNumber);
+    if (!tk && !nk) continue;
+    const s = series.get(tk) || { key: tk || '—', label: String(t.locoType || '').trim() || 'Серия не указана', unknown: !tk, n: 0, nums: new Map() };
+    s.n++;
+    const n = s.nums.get(nk) || { key: `${tk}|${nk}`, label: nk ? `№${nk}` : 'Без номера', unknown: !nk, trips: [] };
+    n.trips.push(t);
+    s.nums.set(nk, n); series.set(tk, s);
+  }
+  const last = (n) => statsOf(n.trips[n.trips.length - 1]).start;
+  LOCOS = [...series.values()].map((s) => ({ ...s, nums: [...s.nums.values()].sort((a, b) => (a.unknown - b.unknown) || b.trips.length - a.trips.length || last(b) - last(a)) }))
+    .sort((a, b) => (a.unknown - b.unknown) || b.n - a.n || a.label.localeCompare(b.label, 'ru'));
+  return LOCOS;
 }
 
 // ---------------------------------------------------------------- графики
@@ -249,15 +289,73 @@ function tripsView(R) {
   if (R.houseN || R.home.n) {
     let b = '';
     if (R.houseN) {
-      b += `<div class="kv-grid">${kv('В домах отдыха', fmtDur(R.houseTotal, { short: true }), `${R.houseN} ${plural(R.houseN, 'раз', 'раза', 'раз')}`)}${kv('Средний отдых', fmtDur(R.houseTotal / R.houseN, { short: true }))}</div>`;
-      b += `<div class="rows">${R.houses.map((h) => `<div class="r"><span class="grow ${h.unknown ? 'muted' : ''}">${esc(h.name)}</span><span class="muted">${h.n} ${plural(h.n, 'раз', 'раза', 'раз')} · ср. ${fmtDur(h.total / h.n, { short: true })}</span><b>${fmtDur(h.total, { short: true })}</b></div>`).join('')}</div>`;
+      b += `<div class="kv-grid">${kv('В домах отдыха', fmtDur(R.houseTotal, { short: true }), `${R.houseN} ${plural(R.houseN, 'раз', 'раза', 'раз')}`)}${kv('Средний отдых', fmtDur(R.houseTotal / R.houseN, { short: true }))}${R.overN ? kv('Переотдых', fmtDur(R.over, { short: true }), `${R.overN} ${plural(R.overN, 'раз', 'раза', 'раз')}${R.overRub > 0 ? ` · <span class="money">≈ ${fmtRub(R.overRub)}</span>` : ''}`) : ''}</div>`;
+      b += `<div class="rows">${R.houses.map((h) => `<div class="r st-house"><div class="grow"><span class="${h.unknown ? 'muted' : ''}">${esc(h.name)}</span><small>${h.n} ${plural(h.n, 'раз', 'раза', 'раз')} · ср. ${fmtDur(h.total / h.n, { short: true })}</small>${h.overN ? `<small class="over">Переотдых ${fmtDur(h.over, { short: true })} · ${h.overN} ${plural(h.overN, 'раз', 'раза', 'раз')}${h.overRub > 0 ? ` · <span class="money">≈ ${fmtRub(h.overRub)}</span>` : ''}</small>` : ''}</div><b>${fmtDur(h.total, { short: true })}</b></div>`).join('')}</div>`;
     }
     if (R.home.n) b += `<div class="kv-grid">${kv('Домашний отдых', fmtDur(R.home.total, { short: true }), `${R.home.n} ${plural(R.home.n, 'раз', 'раза', 'раз')}`)}${kv('В среднем', fmtDur(R.home.total / R.home.n, { short: true }))}</div>`;
-    html += block('Отдых', `${b}<div class="hint">От окончания поездки до начала следующей.</div>`);
+    html += block('Отдых', `${b}<div class="hint">От окончания поездки до начала следующей.${R.overN ? ' Переотдых — сверх привезённого рабочего времени.' : ''}</div>`);
   }
-  if (R.locos.length) html += block('Частые локомотивы', `<div class="rows">${R.locos.map((l) => `<div class="r"><span class="grow">${small(I.train, 15)} ${esc(l.label)}</span><b>${l.n} ${plural(l.n, 'поездка', 'поездки', 'поездок')}</b></div>`).join('')}</div>`);
+  if (R.series.length) html += block('Локомотивы', locosHtml(R.series));
+  if (R.count >= 3 && R.callTop) {
+    const items = R.calls.map((v, i) => ({ v, label: i % 2 ? '' : String(i * 2), full: callRange(i * 2) }));
+    html += block('Время явки', `<div class="kv-grid">${kv('Чаще всего вызывают', callRange(R.callTop.from, true), `${R.callTop.n} из ${R.count} ${plural(R.count, 'явки', 'явок', 'явок')}`)}</div>
+      ${barChart(items, { fmt: (v) => `${v} ${plural(v, 'явка', 'явки', 'явок')}`, id: 'ch-calls' })}`);
+  }
+  if (R.count) html += `<button class="btn btn-ghost" data-act="st-recap">${I.share} Итоги картинкой</button>`;
   return html;
 }
+const p2h = (h) => `${String(h % 24).padStart(2, '0')}:00`;
+const callRange = (h, words = false) => (words ? `с ${p2h(h)} до ${p2h(h + 2)}` : `${p2h(h)}–${p2h(h + 2)}`);
+const times = (n) => `${n} ${plural(n, 'раз', 'раза', 'раз')}`;
+// серия раскрывается на месте: номера и сколько раз; номер открывает его поездки
+const openSeries = new Set();
+function locosHtml(series) {
+  const max = series[0].n;
+  return `<div class="rows st-locos">${series.map((s) => {
+    const open = openSeries.has(s.key);
+    return `<button class="r bar-r st-series" data-act="st-series" data-k="${esc(s.key)}" aria-expanded="${open}">
+      <span class="grow ${s.unknown ? 'muted' : ''}">${small(I.train, 15)} ${esc(s.label)}</span><b>${times(s.n)}</b><span class="chev">${small(I.right, 16)}</span><i style="width:${(s.n / max) * 100}%"></i></button>
+      ${open ? `<div class="st-nums">${s.nums.map((n) => `<button class="r" data-act="st-loco" data-k="${esc(n.key)}"><span class="grow ${n.unknown ? 'muted' : ''}">${esc(n.label)}</span><b>${times(n.trips.length)}</b><span class="chev">${small(I.right, 16)}</span></button>`).join('')}</div>` : ''}`;
+  }).join('')}</div>`;
+}
+
+// поездки одного локомотива за период: дата, маршрут, время; нажатие открывает поездку
+function openLoco(key) {
+  let found = null; let ser = null;
+  for (const s of LOCOS) { const n = s.nums.find((x) => x.key === key); if (n) { found = n; ser = s; break; } }
+  if (!found) return;
+  const title = ser.unknown ? found.label : found.unknown ? `${ser.label}, без номера` : `${ser.label} ${found.label}`;
+  const list = [...found.trips].reverse();
+  const el = openLayer(sheet({
+    title,
+    body: `<div class="hint">${times(list.length)} ${periodPrep()}</div>
+      <div class="panel">${list.map((t) => { const st = statsOf(t); const r = routeOf(t);
+        return `<button class="row" data-act="loco-trip" data-id="${esc(t.id)}"><div class="grow"><div class="t1">${new Date(st.start).getUTCDate()} ${MONTHS_SHORT[new Date(st.start).getUTCMonth()]}, ${hm(st.start)}${st.live ? ' · в пути' : ` · ${fmtDur(st.work, { short: true })}`}</div><div class="t2">${r ? esc(r) : 'Маршрут не указан'}</div></div>${small(I.right, 18)}</button>`; }).join('')}</div>`,
+  }));
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-close')) { closeLayer(el); return; }
+    if (b.dataset.act === 'loco-trip') { closeLayer(el); openTripForm(b.dataset.id); }
+  });
+}
+
+// Итоги периода для картинки: только часы, поездки и техника — без сумм, имени, депо и станций
+function recapData() {
+  const R = collect(ST);
+  const tiles = [];
+  tiles.push(['Поездок', String(R.count)]);
+  if (R.night > 0) tiles.push(['Ночью', fmtDur(R.night, { short: true }), `${Math.round((R.night / Math.max(1, R.work)) * 100)}% времени`]);
+  if (R.km > 0) tiles.push(['Пройдено', `${Math.round(R.km).toLocaleString('ru-RU')} км`]);
+  if (R.longest) tiles.push(['Самая длинная', fmtDur(statsOf(R.longest).work, { short: true })]);
+  if (R.count >= 3 && R.callTop) tiles.push(['Чаще вызывают', callRange(R.callTop.from)]);
+  const ser = R.series.find((x) => !x.unknown);
+  if (ser) tiles.push(['Чаще всего на', ser.label, times(ser.n)]);
+  if (R.overtime > 0) tiles.push(['Переработка', fmtDur(R.overtime, { short: true })]);
+  if (R.houseN) tiles.push(['Отдых в доме отдыха', `ср. ${fmtDur(R.houseTotal / R.houseN, { short: true })}`]);
+  return { title: periodTitle(), work: fmtDur(R.work, { short: true }), norm: R.norm > 0 ? Math.round((R.work / R.norm) * 100) : null, tiles: tiles.slice(0, 6), file: `CABINA-itogi-${ST.period === 'all' ? 'vse' : ST.period === 'year' ? ST.y : `${ST.y}-${String(ST.m).padStart(2, '0')}`}.png` };
+}
+
 // только часы за период — для сравнения
 function collectLite(p) {
   return periodMonths(p).reduce((s, [y, m]) => s + monthSummary(y, m, S.trips, S.absences).work, 0);
@@ -288,7 +386,7 @@ function payView(R) {
   if (total.gross <= 0 && total.comp <= 0) {
     return `<div class="empty"><div class="em-ico" style="--accent:var(--ok)">${I.wallet}</div><b>За этот период заработка нет</b><p>Здесь появится расчёт, похожий на квиток, когда в периоде будут поездки.</p></div>`;
   }
-  let html = `<section class="st-hero"><div class="eyebrow">На руки${ST.period === 'month' ? '' : ' за период'}</div><div class="st-big num">≈ ${fmtRub(total.net)}</div>
+  let html = `<section class="st-hero"><div class="eyebrow st-eye">На руки${ST.period === 'month' ? '' : ' за период'}${eyeBtn()}</div><div class="st-big num">≈ ${fmtRub(total.net)}</div>
     <div class="st-sub">начислено ${fmtRub(total.gross)} · НДФЛ 13%</div></section>`;
   if (R.months.length > 1) {
     const items = months.map((r, i) => ({ v: r.net, label: R.months.length > 12 ? MONTHS_SHORT[R.months[i][1] - 1][0] : MONTHS_SHORT[R.months[i][1] - 1], full: `${MONTHS[R.months[i][1] - 1]} ${R.months[i][0]}` }));
@@ -299,7 +397,7 @@ function payView(R) {
   html += block(ST.period === 'month' ? 'Квиток' : 'Квиток за период', slipHtml(total, { single: months.length === 1 ? months[0] : null }));
   if (ST.period === 'month') html += `<button class="btn btn-ghost" data-act="slip-pdf">${I.download} Скачать квиток в PDF</button>`;
   html += `<div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Отпускные, техучёба и разовые выплаты не учитываются. Больничный — если в «Тарифных ставках» указана оплата одного дня.</div></div>`;
-  return html;
+  return `<div class="money-area">${html}</div>`;
 }
 
 // ---------------------------------------------------------------- экран
@@ -326,6 +424,9 @@ export function statsClick(act, b, ctx) {
       return true;
     }
     case 'cal-day': openDay(b.dataset.d); return true;
+    case 'st-series': { const k = b.dataset.k; if (openSeries.has(k)) openSeries.delete(k); else openSeries.add(k); ctx.rerender(); return true; }
+    case 'st-loco': openLoco(b.dataset.k); return true;
+    case 'st-recap': openRecap(recapData()); return true;
     case 'st-month': ST.period = 'month'; ST.y = +b.dataset.y; ST.m = +b.dataset.m; ctx.rerender(); window.scrollTo(0, 0); return true;
     default: return false;
   }

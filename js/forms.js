@@ -415,7 +415,7 @@ export function openTripForm(tripId) {
       <div class="calc-row"><span>${ico(I.moon, 17)} Ночные (22:00–06:00)</span><b>${fmtDur(st.night)}</b></div>
       <div class="calc-row"><span>${ico(I.calStar, 17)} Праздничные</span><b>${fmtDur(st.holiday)}</b></div>
       ${st.wait > 0 ? `<div class="calc-row"><span>${ico(I.clock, 17)} В том числе ожидание следования</span><b>${fmtDur(st.wait)}</b></div>` : ''}
-      ${pay ? `<div class="calc-row"><span>${ico(I.wallet, 17)} ${live ? 'Заработано на руки' : 'Заработок на руки'}</span><b>≈ ${fmtRub(pay.net)}</b></div>` : ''}`;
+      ${pay ? `<div class="calc-row"><span>${ico(I.wallet, 17)} ${live ? 'Заработано на руки' : 'Заработок на руки'}</span><b class="money">≈ ${fmtRub(pay.net)}</b></div>` : ''}`;
     if (months.length > 1) {
       html += `<div class="calc-head">По месяцам</div>` + months.map((mk) => `<div class="calc-row"><span>${monthName(mk)}</span><b>${fmtDur(st.byMonth[mk].work)}</b></div>`).join('');
     }
@@ -487,7 +487,7 @@ export function openTripForm(tripId) {
   }
   function renderSummary(st, live, pay) {
     if (!existing) return;
-    $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">${live ? 'В пути' : 'Рабочее время'}</div><div class="v">${fmtDur(st.work)}</div>${pay ? `<div class="hint">≈ ${fmtRub(pay.net)} на руки</div>` : ''}</div>
+    $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">${live ? 'В пути' : 'Рабочее время'}</div><div class="v">${fmtDur(st.work)}</div>${pay ? `<div class="hint"><span class="money">≈ ${fmtRub(pay.net)}</span> на руки</div>` : ''}</div>
       <div class="chips" style="justify-content:flex-end">${st.night ? `<span class="chip" style="--c:var(--night)">${ico(I.moon, 14)} ${fmtDur(st.night, { short: true })}</span>` : ''}${st.holiday ? `<span class="chip" style="--c:var(--holiday)">${ico(I.calStar, 14)} ${fmtDur(st.holiday, { short: true })}</span>` : ''}</div>`;
   }
   function refreshAll() { renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }

@@ -43,7 +43,7 @@ function tripCard(t, key, ctx) {
       ${pass ? kv(`${small(I.passenger, 14)} Пассажиром`, fmtDur(pass)) : ''}
       ${loco ? kv(`${small(I.train, 14)} Локомотив`, esc(loco)) : ''}
       ${t.routeNo ? kv('Номер маршрута', esc(t.routeNo)) : ''}
-      ${pay && pay.net > 0 ? kv(`${small(I.wallet, 14)} Заработок`, `≈ ${fmtRub(pay.net)}`) : ''}
+      ${pay && pay.net > 0 ? kv(`${small(I.wallet, 14)} Заработок`, `<span class="money">≈ ${fmtRub(pay.net)}</span>`) : ''}
     </div>
     ${train ? `<div class="hint">Поезд: ${esc(train)}</div>` : ''}
     <button class="btn btn-ghost btn-sm" data-act="day-trip" data-id="${esc(t.id)}">Открыть поездку ${small(I.right, 16)}</button>

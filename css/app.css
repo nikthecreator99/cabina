@@ -702,6 +702,17 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .rows .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
 .rows .r .dot + span { flex: 1; }
 .rows .bar-r i { position: absolute; left: 0; bottom: -1px; height: 3px; border-radius: 3px; background: var(--accent); opacity: .7; }
+.rows button.r { background: none; border: 0; border-bottom: 1px solid var(--line); color: inherit; font: inherit; font-size: 15px; cursor: pointer; min-height: 44px; }
+.rows button.r:active { opacity: .7; }
+.rows .r .chev { color: var(--muted); display: inline-flex; transition: transform .2s; }
+.st-series[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.st-nums { display: flex; flex-direction: column; padding-left: 22px; border-bottom: 1px solid var(--line); }
+.st-nums .r:last-child { border-bottom: 0; }
+.st-locos > .st-series:last-child, .st-locos > .st-nums:last-child { border-bottom: 0; }
+.rows .st-house .grow { flex-direction: column; align-items: flex-start; gap: 2px; white-space: normal; }
+.st-house .grow > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-house small { font-size: 13px; color: var(--muted); }
+.st-house small.over { color: var(--warn); }
 .share { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .share i { display: block; height: 100%; background: var(--night); border-radius: 99px; }
 .chart { margin: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -873,3 +884,39 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .legal ul { padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .legal b { color: var(--text); }
 .btn:disabled { opacity: .6; cursor: default; }
+
+/* скрытые суммы (значок-глаз или телефон экраном вниз) */
+.money, .money-area b, .money-area .st-big, .money-area .st-sub, .money-area .chart-tip { transition: filter .25s; }
+.money-off .money, .money-off .money-area b, .money-off .money-area .st-big, .money-off .money-area .st-sub, .money-off .money-area .chart-tip { filter: blur(7px); user-select: none; -webkit-user-select: none; }
+.eye-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; margin: -8px -6px -8px 2px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; flex: none; }
+.eye-btn:active { background: var(--line); }
+.eye-btn svg { color: currentColor !important; }
+.st-eye { display: flex; align-items: center; justify-content: space-between; }
+@media (prefers-reduced-motion: reduce) { .money, .money-area b, .money-area .st-big { transition: none; } }
+
+/* код для входа */
+.lock { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px); overflow-y: auto; }
+.lock-logo { border-radius: 16px; }
+.lock-pad { width: 100%; max-width: 300px; }
+.lock-forgot { background: none; border: 0; color: var(--muted); font: inherit; font-size: 14px; padding: 10px 14px; cursor: pointer; }
+.lock-forget { max-width: 340px; display: flex; flex-direction: column; gap: 12px; text-align: center; align-items: stretch; }
+.lock-forget h2 { margin: 0; font-size: 22px; }
+.lock-forget p { margin: 0 0 6px; color: var(--text-2); font-size: 15px; line-height: 1.45; }
+.lock-warn { color: var(--holiday); display: flex; justify-content: center; }
+html.lock-cover body::after { content: ""; position: fixed; inset: 0; z-index: 99; background: var(--bg); }
+.pin { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 300px; margin: 0 auto; }
+.pin-title { font-size: 18px; font-weight: 700; text-align: center; }
+.pin-dots { display: flex; gap: 16px; }
+.pin-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--text-2); transition: background .12s; }
+.pin-dots i.on { background: var(--text); border-color: var(--text); }
+.pin-dots.shake { animation: pin-shake .35s; }
+@keyframes pin-shake { 25% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 75% { transform: translateX(-4px); } }
+.pin-msg { min-height: 20px; font-size: 14px; color: var(--muted); text-align: center; }
+.pin-msg.bad { color: var(--holiday); }
+.pin-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; }
+.pin-key { height: 62px; border-radius: 31px; border: 1px solid var(--line); background: var(--card-2); color: var(--text); font: inherit; font-size: 26px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.pin-key:active { background: var(--line-2); }
+.pin-key.del { background: none; border-color: transparent; color: var(--text-2); }
+.lk-pad:not(:empty) { padding-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .pin-dots.shake { animation: none; } }
+.recap-img { display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto; border-radius: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }

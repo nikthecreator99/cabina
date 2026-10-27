@@ -213,7 +213,7 @@ test('статистика: открывается с главного, поез
   assert.match(s, /Октябрь 2026/);
   assert.match(s, /Отработано\s+8 ч/i);
   assert.match(s, /Няндома → Коноша/);
-  assert.match(s, /2ЭС5К №355/);
+  assert.match(s, /Локомотивы[\s\S]*2ЭС5К/i, 'локомотивы по сериям (с 2.10)');
   assert.doesNotMatch(s, /Праздничные/, 'пустые блоки не показываются');
   await page.locator('#st-kind button').filter({ hasText: 'Заработная плата' }).click();
   s = await text(page, '.screen');

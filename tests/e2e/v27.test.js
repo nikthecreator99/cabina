@@ -3,6 +3,7 @@
 // Данные — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
 
 let env;
@@ -105,20 +106,12 @@ test('маршрут: нормы веса и длины; тяжёлый поез
 
 test('подсказка про нормы показывается при открытии сохранённого маршрута', async () => {
   const { context, page, errors } = await openApp(env, { tours: true });
-  // подсказки других экранов закрываем, пока они есть
-  const dismiss = async () => {
-    for (let i = 0; i < 20; i++) {
-      await page.waitForTimeout(700);
-      if (!await page.locator('.tour').count()) return;
-      await page.locator('.tour .tour-next').click();
-    }
-  };
-  await dismiss();
+  // все остальные подсказки уже показаны — чтобы не зависеть от их порядка и скорости
+  const ids = [...readFileSync(new URL('../../js/tours.js', import.meta.url), 'utf8').matchAll(/runTour\('([\w-]+)'/g)].map((m) => m[1]).filter((id) => id !== 'routeNorms');
+  await page.evaluate(async (done) => { const db = await import('./js/db.js'); await db.put('meta', { id: 'tours', done }); }, ids);
   await seed(page, { routes: ROUTES.slice(0, 1) });
-  await workPage(page);
-  await dismiss();
-  await page.locator('.screen [data-act=go][data-page=routes]').click();
-  await dismiss();
+  await page.reload(); await page.waitForSelector('.screen');
+  await workPage(page, 'routes');
   await page.locator('.route-pts[data-id=r1]').click();
   await page.waitForSelector('.tour', { timeout: 3000 });
   assert.match(await text(page, '.tour'), /Тяжёлый поезд[\s\S]*Впишите нормы участка/);

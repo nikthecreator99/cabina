@@ -93,7 +93,7 @@ export function loyaltyReminder(today = todayKey()) {
 
 export function reminderHtml(r) {
   const title = r.earned ? `${r.years} лет стажа — вознаграждение за преданность` : `Через ${r.left} ${plural(r.left, 'день', 'дня', 'дней')} — ${r.years} ${plural(r.years, 'год', 'года', 'лет')} стажа`;
-  const sub = `${r.salaries} ${plural(r.salaries, 'оклад', 'оклада', 'окладов')}${r.amount ? ` ≈ ${fmtRub(r.amount)}` : ''} · выплата в ${MONTHS_PREP[+r.payMonth.slice(5, 7) - 1]} ${r.payMonth.slice(0, 4)}`;
+  const sub = `${r.salaries} ${plural(r.salaries, 'оклад', 'оклада', 'окладов')}${r.amount ? ` <span class="money">≈ ${fmtRub(r.amount)}</span>` : ''} · выплата в ${MONTHS_PREP[+r.payMonth.slice(5, 7) - 1]} ${r.payMonth.slice(0, 4)}`;
   return `<div class="loyal-banner" role="status"><button class="grow" data-act="go" data-page="career"><span class="ico">${I.medal}</span>
     <span class="txt"><b>${title}</b><small>${sub}</small></span></button>
     <button class="icon-btn" data-act="loyal-hide" aria-label="Скрыть напоминание">${small(I.x, 18)}</button></div>`;
@@ -116,7 +116,7 @@ export function renderCareer() {
   const ms = c.hired ? loyaltyMilestones(c.hired) : [];
   const next = c.hired ? nextLoyalty(c.hired, today) : null;
   const shown = ms.filter((x) => x.date <= today || (next && x.years <= next.years + 10)).slice(-8);
-  const amount = (x) => (oklad ? ` · ≈ ${fmtRub(x.salaries * oklad)}` : '');
+  const amount = (x) => (oklad ? ` · <span class="money">≈ ${fmtRub(x.salaries * oklad)}</span>` : '');
   let nextHtml = '';
   if (next) {
     const left = daysBetween(today, next.date);
@@ -128,8 +128,8 @@ export function renderCareer() {
         <div class="r"><span class="grow">${left > 0 ? 'Осталось' : 'Стаж исполнился'}</span><b>${left > 0 ? `${left} ${plural(left, 'день', 'дня', 'дней')}` : 'да'}</b></div>
         <div class="r"><span class="grow">Выплата с зарплатой за</span><b>${monthText(next.payMonth)}</b></div>
         <div class="r"><span class="grow">Размер</span><b>${next.salaries} ${plural(next.salaries, 'оклад', 'оклада', 'окладов')}</b></div>
-        ${oklad ? `<div class="r"><span class="grow">Начислят ≈</span><b>${fmtRub(next.salaries * oklad)}</b></div>
-        <div class="r"><span class="grow">На руки ≈ (минус НДФЛ ${NDFL}%)</span><b>${fmtRub(Math.round(next.salaries * oklad * (1 - NDFL / 100)))}</b></div>` : ''}
+        ${oklad ? `<div class="r"><span class="grow">Начислят ≈</span><b class="money">${fmtRub(next.salaries * oklad)}</b></div>
+        <div class="r"><span class="grow">На руки ≈ (минус НДФЛ ${NDFL}%)</span><b class="money">${fmtRub(Math.round(next.salaries * oklad * (1 - NDFL / 100)))}</b></div>` : ''}
       </div>
       ${oklad ? '' : `<button class="link-btn" data-act="career-oklad">${small(I.wallet, 16)} Указать оклад, чтобы посчитать сумму</button>`}
     </section>`;

@@ -9,10 +9,12 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
+import { lockOn, lockScreen, initLock, openLockSettings } from './lock.js';
+import { initMoney, applyMoney, toggleMoney, eyeBtn, flipOn, setFlip } from './money.js';
 import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange } from './work.js';
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
@@ -24,7 +26,7 @@ import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedire
 import { consumeAuthRedirect, touch } from './auth.js';
 import { legalReady, policyHtml } from './legal.js';
 
-export const VERSION = '2.9.1';
+export const VERSION = '2.10.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -140,7 +142,7 @@ function tripRow(t, mk, payCtx) {
       <div class="trip-route">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ''}
     </div>
-    <div class="trip-right"><div class="dur">${pending ? '' : fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}${pay ? `<small class="earn">≈ ${fmtRub(pay.net)}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
+    <div class="trip-right"><div class="dur">${pending ? '' : fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}${pay ? `<small class="earn money">≈ ${fmtRub(pay.net)}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
   </button></div>`;
 }
 
@@ -196,7 +198,7 @@ function renderHome() {
   ].filter(Boolean);
   const linesHtml = lines.length ? `<div class="hero-lines">${lines.map(([k, l, v]) => `<div class="hl hl-${k}"><span>${l}:</span> <b>${v}</b></div>`).join('')}</div>` : '';
   let payHtml = '';
-  if (pay && pay.net > 0) payHtml = `<div class="hero-pay">${small(I.wallet, 16)} Заработано: <b>${fmtRub(pay.net)}</b></div>`;
+  if (pay && pay.net > 0) payHtml = `<div class="hero-pay">${small(I.wallet, 16)} Заработано: <b class="money">${fmtRub(pay.net)}</b>${eyeBtn()}</div>`;
   else if (!payCtx && (sum.monthTrips.length || isCurrent)) payHtml = `<button class="hero-pay set" data-act="set-rate">${small(I.wallet, 16)} Указать ставку ›</button>`;
 
   const absCount = sum.monthAbs.length;
@@ -373,6 +375,13 @@ function renderSettings() {
     <div class="group"><div class="group-title">Оформление</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
     </div>
+    <div class="group"><div class="group-title">Конфиденциальность</div>
+      <div class="panel">
+        <div class="row"><span class="ico" style="--c:var(--ok)">${I.eyeOff}</span><div class="grow"><div class="t1">Скрывать суммы переворотом</div><div class="t2">Экраном вниз — суммы скрыты, ещё раз — видны</div></div>
+          <button class="switch" role="switch" id="flip-sw" aria-checked="${flipOn()}" aria-label="Скрывать суммы переворотом телефона" data-act="flip-toggle"></button></div>
+        <button class="row" data-act="lock-settings" id="lock-row"><span class="ico" style="--c:var(--accent)">${I.lock}</span><div class="grow"><div class="t1">Код для входа</div><div class="t2">${lockOn() ? 'Включён' : 'Выключен'}</div></div>${small(I.right, 18)}</button>
+      </div>
+    </div>
     <div class="group"><div class="group-title">Карьера</div>
       <div class="panel"><button class="row" data-act="go" data-page="career"><span class="ico" style="--c:var(--warn)">${I.briefcase}</span><div class="grow"><div class="t1">Карьера</div><div class="t2">${careerSub()}</div></div>${small(I.right, 18)}</button></div>
     </div>
@@ -473,12 +482,12 @@ function scheduleTours() {
     else if (p === 'routes') routesTour();
     else if (p === 'tariffs') { tariffsTour(); payModeTour(); sickPayTour(); }
     else if (p === 'houses') housesTour();
-    else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); }
+    else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); if (app.querySelector('.st-locos, [data-act=st-recap]')) statsMoreTour(); }
     else if (p === 'settings') settingsTour();
     else if (p === 'profile-edit') profileEditTour();
     else if (p === 'career') careerTour();
     else if (p) return;
-    else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); }
+    else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
     else if (V.tab === 'profile') { profileTour(); if (legalReady()) accountTileTour(); }
   }, 500);
@@ -612,6 +621,9 @@ app.addEventListener('click', async (e) => {
     case 'doc-menu': docMenu(id); break;
     case 'doc-mkdir': mkdir(); break;
     case 'theme': await saveSettings({ theme: b.dataset.v }); applyTheme(); break;
+    case 'money-eye': await toggleMoney(); break;
+    case 'lock-settings': openLockSettings(rerender); break;
+    case 'flip-toggle': if (await setFlip(!flipOn())) rerender(); break;
     case 'bk-docs': V.bkDocs = V.bkDocs === false; rerender(); break;
     case 'export': await doExport(); break;
     case 'install': {
@@ -668,7 +680,7 @@ app.addEventListener('change', async (e) => {
   if (await profileChange(e)) return;
   if (await careerChange(e)) return;
   if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
-  else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) applyTheme(); }
+  else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) { applyTheme(); applyMoney(); } }
 });
 
 // ---------------------------------------------------------------- приветствие
@@ -705,6 +717,9 @@ async function start() {
   if (!S.backup.since) saveBackupInfo({ since: Date.now() }).catch(() => {});
   await loadTours();
   applyTheme();
+  initMoney();
+  initLock();
+  if (lockOn()) await lockScreen();
   render();
   if (!S.onboarded) showOnboarding();
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
