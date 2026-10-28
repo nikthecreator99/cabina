@@ -26,7 +26,7 @@ import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedire
 import { consumeAuthRedirect, touch } from './auth.js';
 import { legalReady, policyHtml } from './legal.js';
 
-export const VERSION = '2.11.0';
+export const VERSION = '2.11.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };

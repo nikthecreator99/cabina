@@ -822,8 +822,8 @@ async function offerStudyPay() {
 // МАРШРУТ
 // =====================================================================
 // нормативное время маршрута: минуты, пусто — не показывается
-const TN_KEYS = ['accept', 'depart', 'hand', 'walk'];
-const mins = (m) => (m < 60 ? `${Math.round(m)} мин` : fmtDur(m));
+const TN_KEYS = ['accept', 'depart', 'walk'];
+const mins = (m) => (m < 60 ? `${Math.round(m)}\u00a0мин` : fmtDur(m));
 const tnInput = (k, label, ph) => `<div><label for="rf-${k}" class="mini-label">${label}</label><div class="input-unit"><input class="input" id="rf-${k}" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="${ph}"><span>мин</span></div></div>`;
 
 // Нормативное время в поездке: в начале — часы начала приёмки и отправления, в конце — сколько положено
@@ -835,8 +835,8 @@ export function startNormsHtml(trip, startMs, nowMs, row) {
 }
 export function endNormsHtml(trip, row) {
   const n = timeNorms(trip);
-  if (!n || !(n.hand || n.walk)) return '';
-  return `${n.hand ? row('Сдача после прибытия', mins(n.hand)) : ''}${n.walk ? row('Ходьба до дома отдыха', mins(n.walk)) : ''}`;
+  if (!n?.walk) return '';
+  return row('От окончания сдачи до окончания работы', mins(n.walk));
 }
 
 export function openRouteForm(id, preset) {
@@ -858,11 +858,10 @@ export function openRouteForm(id, preset) {
         </div>
         <div class="hint">Поезд тяжелее или длиннее нормы — доплата за тяжёлый поезд.</div></div>
       <div class="field" id="rf-times"><div class="label">Нормативное время <span class="opt">· мин, необязательно</span></div>
-        <div class="two tn-grid">
-          ${tnInput('accept', 'Приёмка после явки', '30')}
-          ${tnInput('depart', 'Отправление после явки', '90')}
-          ${tnInput('hand', 'Сдача после прибытия', '30')}
-          ${tnInput('walk', 'Ходьба до дома отдыха', '15')}
+        <div class="tn-list">
+          ${tnInput('accept', 'От явки до начала приёмки в депо', '30')}
+          ${tnInput('depart', 'Всего от явки до отправления', '90')}
+          ${tnInput('walk', 'От окончания сдачи до окончания работы', '15')}
         </div></div>
       ${existing ? `<div class="hint">Используется в ${used} ${used % 10 === 1 && used % 100 !== 11 ? 'поездке' : 'поездках'}. Изменение названия обновит все эти поездки.</div>` : ''}
       <div data-error></div>`,
@@ -912,7 +911,8 @@ export function openRouteForm(id, preset) {
         times[`${k}Min`] = norm(`#rf-${k}`, 600);
         if (Number.isNaN(times[`${k}Min`])) { showError(el, 'Нормативное время — целое число минут, не больше 600.'); return; }
       }
-      await saveRoute({ ...(existing || { id: uid(), createdAt: Date.now() }), from, to, distanceKm, weightNorm, lengthNorm, ...times, updatedAt: Date.now() });
+      const { handMin, ...base } = existing || { id: uid(), createdAt: Date.now() }; // сдачу после прибытия больше не храним (2.11.1)
+      await saveRoute({ ...base, from, to, distanceKm, weightNorm, lengthNorm, ...times, updatedAt: Date.now() });
       closeLayer(el); toast(existing ? 'Маршрут изменён' : 'Маршрут сохранён');
     } else if (b.dataset.act === 'del-route') {
       const ok = await confirmDialog({ title: 'Удалить маршрут?', text: used ? 'Поездки с этим маршрутом сохранят его название.' : 'Маршрут будет удалён из списка.' });

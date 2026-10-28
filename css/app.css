@@ -920,4 +920,7 @@ html.lock-cover body::after { content: ""; position: fixed; inset: 0; z-index: 9
 .lk-pad:not(:empty) { padding-top: 6px; }
 @media (prefers-reduced-motion: reduce) { .pin-dots.shake { animation: none; } }
 .recap-img { display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto; border-radius: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
-.tn-grid > div { display: flex; flex-direction: column; justify-content: flex-end; }
+.tn-list { display: grid; gap: 10px; }
+.tn-list > div { display: flex; align-items: center; gap: 12px; }
+.tn-list .mini-label { flex: 1; margin: 0; font-size: 14px; color: var(--text); }
+.tn-list .input-unit { flex: 0 0 112px; }
