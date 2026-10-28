@@ -98,6 +98,14 @@ export function nowLocal() {
 }
 
 // ---- Маршруты и локомотивы ----
+// Нормативное время маршрута (2.11), в минутах: начало приёмки и отправление — после явки, сдача — после прибытия,
+// ходьба — от локомотива до дома отдыха. Только для справки: на часы и заработок не влияет.
+export const TIME_NORMS = ['acceptMin', 'departMin', 'handMin', 'walkMin'];
+export function timeNorms(trip) {
+  const r = trip?.routeId && S.routes.find((x) => x.id === trip.routeId);
+  if (!r || !TIME_NORMS.some((k) => r[k] > 0)) return null;
+  return { accept: r.acceptMin || 0, depart: r.departMin || 0, hand: r.handMin || 0, walk: r.walkMin || 0 };
+}
 export const routeText = (r) => (r ? `${r.from} → ${r.to}` : '');
 export function routeOf(trip) {
   const r = trip.routeId && S.routes.find((x) => x.id === trip.routeId);

@@ -2,7 +2,7 @@
 import { I, esc, openLayer, closeLayer, sheet, confirmDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe } from './ui.js';
 import {
   S, statsOf, nowLocal, routeText, routeOf, knownTypes, notesFor, locoKey, locoLabel, normNum, isLive, isPending, myPay, onChange, offChange,
-  saveTrip, deleteTrip, saveAbsence, deleteAbsence, saveRoute, deleteRoute, saveNote, deleteNote,
+  saveTrip, deleteTrip, saveAbsence, deleteAbsence, saveRoute, deleteRoute, saveNote, deleteNote, timeNorms,
 } from './store.js';
 import {
   tripStats, validateTrip, parseLocal, fmtLocal, fmtDur, fmtHours, turnaroundRest,
@@ -12,7 +12,7 @@ import { dayInfo } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
-import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, studyTour, routeNormsTour } from './tours.js';
+import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, studyTour, routeNormsTour, routeTimesTour } from './tours.js';
 
 export { computeHomeRest };
 
@@ -384,6 +384,7 @@ export function openTripForm(tripId) {
   const shiftH = () => fmtDur(S.settings.minShiftRest ?? 960, { short: true });
   const choiceBtn = (v, label, sub, icon) => `<button type="button" class="choice" data-choice="${v}" aria-pressed="${F.homeChoice === v}">${icon ? ico(icon, 20) : ''}<span>${label}${sub ? `<small>${sub}</small>` : ''}</span></button>`;
 
+  const calcRow = (label, value) => `<div class="calc-row"><span>${label}</span><b>${value}</b></div>`;
   function renderCalc() {
     const d = draft();
     const err = draftError(d);
@@ -403,6 +404,7 @@ export function openTripForm(tripId) {
       // явка ещё не наступила: поездка сохранится как «Ждёт явки»
       setHTML(box, `<div class="calc"><div class="calc-row main"><span>${ico(I.clock, 17)} До явки осталось</span><b>${fmtDur((st.start - nowMs) / MIN)}</b></div>
         <div class="calc-row"><span>Явка</span><b>${whenShort(st.start, nowMs)}</b></div>
+        ${startNormsHtml(d, st.start, nowMs, calcRow)}
         <div class="calc-row"><span>Когда время явки наступит, поездка сама станет «в пути».</span></div></div>`);
       setHTML(home, '');
       if (existing) $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Ждёт явки</div><div class="v">${hm(st.start)}</div></div>`;
@@ -416,6 +418,8 @@ export function openTripForm(tripId) {
       <div class="calc-row"><span>${ico(I.calStar, 17)} Праздничные</span><b>${fmtDur(st.holiday)}</b></div>
       ${st.wait > 0 ? `<div class="calc-row"><span>${ico(I.clock, 17)} В том числе ожидание следования</span><b>${fmtDur(st.wait)}</b></div>` : ''}
       ${pay ? `<div class="calc-row"><span>${ico(I.wallet, 17)} ${live ? 'Заработано на руки' : 'Заработок на руки'}</span><b class="money">≈ ${fmtRub(pay.net)}</b></div>` : ''}`;
+    const norms = live ? startNormsHtml(d, st.start, nowMs, calcRow) : endNormsHtml(d, calcRow);
+    if (norms) html += `<div class="calc-head">${live ? 'По нормативу' : 'Положено по нормативу'}</div>${norms}`;
     if (months.length > 1) {
       html += `<div class="calc-head">По месяцам</div>` + months.map((mk) => `<div class="calc-row"><span>${monthName(mk)}</span><b>${fmtDur(st.byMonth[mk].work)}</b></div>`).join('');
     }
@@ -817,6 +821,24 @@ async function offerStudyPay() {
 // =====================================================================
 // МАРШРУТ
 // =====================================================================
+// нормативное время маршрута: минуты, пусто — не показывается
+const TN_KEYS = ['accept', 'depart', 'hand', 'walk'];
+const mins = (m) => (m < 60 ? `${Math.round(m)} мин` : fmtDur(m));
+const tnInput = (k, label, ph) => `<div><label for="rf-${k}" class="mini-label">${label}</label><div class="input-unit"><input class="input" id="rf-${k}" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="${ph}"><span>мин</span></div></div>`;
+
+// Нормативное время в поездке: в начале — часы начала приёмки и отправления, в конце — сколько положено
+export function startNormsHtml(trip, startMs, nowMs, row) {
+  const n = timeNorms(trip);
+  if (!n || !(n.accept || n.depart)) return '';
+  const dep = startMs + n.depart * MIN;
+  return `${n.accept ? row('Начало приёмки', hm(startMs + n.accept * MIN)) : ''}${n.depart ? row(`Отправление${dep > nowMs ? ` <small>через ${mins((dep - nowMs) / MIN)}</small>` : ''}`, hm(dep)) : ''}`;
+}
+export function endNormsHtml(trip, row) {
+  const n = timeNorms(trip);
+  if (!n || !(n.hand || n.walk)) return '';
+  return `${n.hand ? row('Сдача после прибытия', mins(n.hand)) : ''}${n.walk ? row('Ходьба до дома отдыха', mins(n.walk)) : ''}`;
+}
+
 export function openRouteForm(id, preset) {
   const existing = id ? S.routes.find((r) => r.id === id) : null;
   const used = existing ? S.trips.filter((t) => t.routeId === id).length : 0;
@@ -835,6 +857,13 @@ export function openRouteForm(id, preset) {
           <div><label for="rf-ln" class="mini-label">Норма длины</label><div class="input-unit"><input class="input" id="rf-ln" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="59"><span>ваг.</span></div></div>
         </div>
         <div class="hint">Поезд тяжелее или длиннее нормы — доплата за тяжёлый поезд.</div></div>
+      <div class="field" id="rf-times"><div class="label">Нормативное время <span class="opt">· мин, необязательно</span></div>
+        <div class="two tn-grid">
+          ${tnInput('accept', 'Приёмка после явки', '30')}
+          ${tnInput('depart', 'Отправление после явки', '90')}
+          ${tnInput('hand', 'Сдача после прибытия', '30')}
+          ${tnInput('walk', 'Ходьба до дома отдыха', '15')}
+        </div></div>
       ${existing ? `<div class="hint">Используется в ${used} ${used % 10 === 1 && used % 100 !== 11 ? 'поездке' : 'поездках'}. Изменение названия обновит все эти поездки.</div>` : ''}
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="save-route">${I.check} Сохранить</button>`,
@@ -845,8 +874,9 @@ export function openRouteForm(id, preset) {
   $(el, '#rf-km').value = km0 != null && km0 !== '' ? String(km0) : '';
   $(el, '#rf-wn').value = existing?.weightNorm ? String(existing.weightNorm) : '';
   $(el, '#rf-ln').value = existing?.lengthNorm ? String(existing.lengthNorm) : '';
+  for (const k of TN_KEYS) $(el, `#rf-${k}`).value = existing?.[`${k}Min`] ? String(existing[`${k}Min`]) : '';
   if (!existing) setTimeout(() => $(el, '#rf-from').focus(), 250);
-  else setTimeout(() => routeNormsTour(el), 450);
+  else setTimeout(() => { routeNormsTour(el); routeTimesTour(el); }, 450);
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -877,7 +907,12 @@ export function openRouteForm(id, preset) {
       const lengthNorm = norm('#rf-ln', 1000);
       if (Number.isNaN(weightNorm)) { showError(el, 'Норма веса — целое число тонн, например 5199.'); return; }
       if (Number.isNaN(lengthNorm)) { showError(el, 'Норма длины — целое число условных вагонов, например 59.'); return; }
-      await saveRoute({ ...(existing || { id: uid(), createdAt: Date.now() }), from, to, distanceKm, weightNorm, lengthNorm, updatedAt: Date.now() });
+      const times = {};
+      for (const k of TN_KEYS) {
+        times[`${k}Min`] = norm(`#rf-${k}`, 600);
+        if (Number.isNaN(times[`${k}Min`])) { showError(el, 'Нормативное время — целое число минут, не больше 600.'); return; }
+      }
+      await saveRoute({ ...(existing || { id: uid(), createdAt: Date.now() }), from, to, distanceKm, weightNorm, lengthNorm, ...times, updatedAt: Date.now() });
       closeLayer(el); toast(existing ? 'Маршрут изменён' : 'Маршрут сохранён');
     } else if (b.dataset.act === 'del-route') {
       const ok = await confirmDialog({ title: 'Удалить маршрут?', text: used ? 'Поездки с этим маршрутом сохранят его название.' : 'Маршрут будет удалён из списка.' });

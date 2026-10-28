@@ -1,6 +1,6 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
-import { S, loadAll, onChange, emit, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
+import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
 import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
@@ -26,7 +26,7 @@ import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedire
 import { consumeAuthRedirect, touch } from './auth.js';
 import { legalReady, policyHtml } from './legal.js';
 
-export const VERSION = '2.10.0';
+export const VERSION = '2.11.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -146,6 +146,22 @@ function tripRow(t, mk, payCtx) {
   </button></div>`;
 }
 
+// Нормативное время маршрута на главном: начало приёмки и отправление (только справка)
+function normsLine(t) {
+  const n = timeNorms(t);
+  if (!n || !(n.accept || n.depart)) return '';
+  const s = statsOf(t).start;
+  return `<div class="t2">${[n.accept ? `Начало приёмки ${hm(s + n.accept * MIN)}` : '', n.depart ? `отправление ${hm(s + n.depart * MIN)}` : ''].filter(Boolean).join(' · ').replace(/^о/, 'О')}</div>`;
+}
+// в пути, но до отправления по нормативу: сколько осталось
+function departBanner(t, now) {
+  const n = t && timeNorms(t);
+  if (!n?.depart) return '';
+  const dep = statsOf(t).start + n.depart * MIN;
+  if (dep <= now) return '';
+  return `<button class="rest-banner pending depart" data-act="trip" data-id="${esc(t.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До отправления ${(dep - now) / MIN < 60 ? `${Math.round((dep - now) / MIN)} мин` : fmtDur((dep - now) / MIN)}</div>${normsLine(t)}</div><span class="chev">${small(I.right, 18)}</span></button>`;
+}
+
 // Напоминание о вознаграждении за преданность (за 90 дней до срока и до месяца выплаты)
 function loyaltyBanner() { const r = loyaltyReminder(); return r ? reminderHtml(r) : ''; }
 function medBanner() { const r = medReminder(); return r ? medBannerHtml(r) : ''; }
@@ -235,7 +251,8 @@ function renderHome() {
     </div>
     <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
-    ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${departBanner(lt && !pend ? lt : null, now)}
     ${rest ? `<button class="rest-banner" data-act="trip" data-id="${esc(rest.trip.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() : ''}
     ${backupNag(now)}
