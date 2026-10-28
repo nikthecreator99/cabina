@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -17,6 +17,8 @@ import { lockOn, lockScreen, initLock, openLockSettings } from './lock.js';
 import { initMoney, applyMoney, toggleMoney, eyeBtn, flipOn, setFlip } from './money.js';
 import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange } from './work.js';
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
+import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, hasAvatar } from './avatar-edit.js';
+import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
@@ -26,7 +28,7 @@ import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedire
 import { consumeAuthRedirect, touch } from './auth.js';
 import { legalReady, policyHtml } from './legal.js';
 
-export const VERSION = '2.11.1';
+export const VERSION = '2.12.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -439,9 +441,22 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, career: renderCareer, account: renderAccount };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, account: renderAccount };
+// На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
+let tabFace = { key: null, icon: null };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
+  // в конструкторе персонажа нижнее меню прячется: больше места и ничего не теряется случайным нажатием
+  document.body.classList.toggle('av-editing', page() === 'avatar');
+  const tab = document.querySelector('.tab[data-tab=profile]');
+  if (!tab) return;
+  const old = tab.querySelector('svg');
+  if (tabFace.icon == null) tabFace.icon = old?.outerHTML || '';
+  const key = hasAvatar() ? JSON.stringify([S.profile.avatar, premiumOk()]) : '';
+  if (key === tabFace.key) return;
+  tabFace.key = key;
+  const html = key ? avatarSvg(normalizeAvatar(S.profile.avatar, { premium: premiumOk() }), { size: 26, crop: 'face', bg: false, cls: 'tab-face' }) : tabFace.icon;
+  if (old) old.outerHTML = html; else tab.insertAdjacentHTML('afterbegin', html);
 }
 // still — перерисовка того же экрана (сохранение, обновление раз в минуту): без анимации появления,
 // иначе экран «дёргается»
@@ -502,6 +517,7 @@ function scheduleTours() {
     else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); if (app.querySelector('.st-locos, [data-act=st-recap]')) statsMoreTour(); }
     else if (p === 'settings') settingsTour();
     else if (p === 'profile-edit') profileEditTour();
+    else if (p === 'avatar') avatarTour();
     else if (p === 'career') careerTour();
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
@@ -553,7 +569,7 @@ const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll(), openAbsen
 async function doExport() {
   const ok = await confirmDialog({
     title: 'Сохранить резервную копию?',
-    text: 'В файле ваши личные данные: поездки, отвлечения, заработок, профиль и фото. Не пересылайте его другим людям — храните у себя (в «Файлах», облаке или отправьте себе).',
+    text: 'В файле ваши личные данные: поездки, отвлечения, заработок, профиль. Не пересылайте его другим людям — храните у себя (в «Файлах», облаке или отправьте себе).',
     ok: 'Сохранить копию', cancel: 'Отмена', danger: false,
   });
   if (!ok) return;
@@ -574,6 +590,7 @@ app.addEventListener('click', async (e) => {
   const { act, id } = b.dataset;
   if (await workClick(act, b, ctx)) return;
   if (await profileClick(act, b, ctx)) return;
+  if (await avatarClick(act, b, ctx)) return;
   if (await careerClick(act, b, ctx)) return;
   if (await medClick(act, b, ctx)) return;
   if (await accountClick(act, b, ctx)) return;
@@ -662,6 +679,7 @@ app.addEventListener('keydown', (e) => {
 });
 
 app.addEventListener('input', (e) => {
+  if (avatarInput(e.target)) return;
   if (fixInput(e.target)) return;
   if (e.target.id === 'trip-q') {
     V.tripQ = e.target.value;
@@ -695,6 +713,7 @@ app.addEventListener('change', async (e) => {
   const t = e.target;
   if (await workChange(e)) return;
   if (await profileChange(e)) return;
+  if (avatarChange(e)) return;
   if (await careerChange(e)) return;
   if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
   else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) { applyTheme(); applyMoney(); } }

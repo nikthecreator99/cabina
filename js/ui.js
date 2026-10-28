@@ -62,6 +62,12 @@ export const I = {
   call: sv('<path d="M5 4h3.5l1.7 4.3-2.2 1.4a11 11 0 0 0 6.3 6.3l1.4-2.2L20 15.5V19a1.5 1.5 0 0 1-1.6 1.5A16 16 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z"/>'),
   book: sv('<path d="M6.5 3.5H18a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><circle cx="12" cy="10" r="2.3"/><path d="M8.5 16c.6-1.6 1.9-2.5 3.5-2.5s2.9.9 3.5 2.5M3 8h3M3 12h3M3 16h3"/>'),
   mail: sv('<rect x="3.5" y="5.5" width="17" height="13" rx="2.2"/><path d="m4 7 8 6 8-6"/>'),
+  dice: sv('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'),
+  undo: sv('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+  face: sv('<circle cx="12" cy="12" r="8.5"/><path d="M9 10.5h.01M15 10.5h.01" stroke-width="2.6"/><path d="M8.8 14.8q3.2 2.6 6.4 0"/>'),
+  hair: sv('<path d="M5 15c0-6.2 3.1-10.5 7-10.5s7 4.3 7 10.5"/><path d="M5 15c2.2-1.2 4-4 5-7.2M19 15c-3-1-5.6-3.2-6.8-6.2"/><path d="M8.5 19.5c1 .6 2.2 1 3.5 1s2.5-.4 3.5-1"/>'),
+  shirt: sv('<path d="M8 3.5l4 2.8 4-2.8 4.5 2.8-1.8 4.8-2.2-1V20.5H7.5V10.1l-2.2 1L3.5 6.3z"/>'),
+  glasses: sv('<circle cx="7" cy="14" r="3.6"/><circle cx="17" cy="14" r="3.6"/><path d="M10.6 14q1.4-1.4 2.8 0M3.4 13 4.5 8M20.6 13 19.5 8"/>'),
   idea: sv('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'),
   bed2: sv('<path d="M2.5 19v-9M2.5 15h19v4M21.5 15v-1.5a3 3 0 0 0-3-3H10v4.5"/><circle cx="6.5" cy="12" r="1.8"/>'),
 };

@@ -1,5 +1,5 @@
 // Резервная копия: один JSON-файл со всеми записями и (по желанию) документами.
-// format 2 (CABINA 2.0): те же хранилища; в meta появились профиль (с фото), ставки, дома отдыха,
+// format 2 (CABINA 2.0): те же хранилища; в meta появились профиль (с фото, с 2.12 — персонаж avatar), ставки, дома отдыха,
 // у поездок — homeChoice и поездка «в пути» (end = ''). Копии формата 1 восстанавливаются как есть:
 // недостающие поля дополняются при загрузке (store.loadAll).
 export const FORMAT = 2;
@@ -68,7 +68,7 @@ export async function importBackup(file) {
   if (!backupSafe(d)) { toast('Файл копии повреждён или изменён вручную. Восстановление отменено, текущие данные не изменены.', { error: true, ms: 6000 }); return false; }
   const n = (k) => (Array.isArray(d[k]) ? d[k].length : 0);
   const docs = (d.files || []).filter((f) => f.kind === 'file').length;
-  const hasProfile = (d.meta || []).some((m) => m.id === 'profile' && (m.name || m.photo || m.depot));
+  const hasProfile = (d.meta || []).some((m) => m.id === 'profile' && (m.name || m.photo || m.avatar || m.depot));
   const when = payload.exportedAt ? new Date(payload.exportedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'неизвестно';
   const ok = await confirmDialog({
     title: 'Восстановить данные?',

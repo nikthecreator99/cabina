@@ -1,5 +1,6 @@
 // Профиль (основа будущей сети). Пока всё хранится только в этом телефоне и никому не показывается.
-// Экран «Профиль» — просмотр; изменить фото, имя, должность, депо и приватность — «Редактировать профиль».
+// Экран «Профиль» — просмотр; изменить персонажа, имя, должность, депо и приватность — «Редактировать профиль».
+// С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
 import { I, esc, small, pageHead, toast, confirmDialog, plural, whenShort, dayMonth, MONTHS_PREP } from './ui.js';
 import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf } from './store.js';
 import { dateKeyOf, monthSummary, fmtDur, parseLocal } from './calc.js';
@@ -8,6 +9,8 @@ import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
 import { careerOf, tenure, tenureText, todayKey } from './career.js';
 import { normPhone } from './phones.js';
 import { accountRowHtml } from './account.js';
+import { avatarSvg, normalizeAvatar } from './avatar.js';
+import { premiumOk, hasAvatar } from './avatar-edit.js';
 
 const CLASSES = ['3', '2', '1'];
 const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -18,12 +21,17 @@ const safePhoto = (v) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.
 export const PRIVACY = [
   { k: 'status', label: 'Статус', hint: 'В пути, на отдыхе, на выходном или на отвлечении.' },
   { k: 'depot', label: 'Депо', hint: 'Чтобы вас могли найти коллеги из вашего депо.' },
-  { k: 'photo', label: 'Фото', hint: 'Без этого коллеги увидят только первые буквы имени.' },
+  { k: 'avatar', label: 'Персонаж', hint: 'Без этого коллеги увидят только первые буквы имени.' },
   { k: 'phone', label: 'Номер телефона', hint: 'Только тем коллегам, кого вы сами добавите. Без этого номер не увидит никто.' },
 ];
-export const privacyOf = (p = S.profile) => ({ status: false, depot: false, photo: false, phone: false, ...(p.privacy || {}) });
+// До 2.12 вместо персонажа было фото: прежний выбор «показывать фото» переходит к персонажу
+export function privacyOf(p = S.profile) {
+  const { photo, ...pv } = p.privacy || {};
+  return { status: false, depot: false, avatar: photo === true, phone: false, ...pv };
+}
 
 export function avatarHtml(p = S.profile, size = 96) {
+  if (hasAvatar(p)) return avatarSvg(normalizeAvatar(p.avatar, { premium: premiumOk() }), { size, cls: 'ava-svg' });
   return safePhoto(p.photo) ? `<img src="${esc(p.photo)}" alt="" width="${size}" height="${size}">`
     : initials(p.name) ? `<span class="ava-txt">${esc(initials(p.name))}</span>` : I.user;
 }
@@ -75,7 +83,7 @@ export function renderProfile() {
     </div>` : '';
   return `${pageHead('Профиль', { right: `<button class="icon-btn" data-act="go" data-page="settings" aria-label="Настройки">${I.gear}</button>` })}
     <section class="profile-card">
-      <div class="avatar view">${avatarHtml(p)}</div>
+      <button class="avatar view big" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}</button>
       <div class="profile-name">${p.name ? esc(p.name) : '<span class="ph">Имя не указано</span>'}</div>
       <div class="profile-sub">${esc(subLine(p))}</div>
       ${p.phone ? `<div class="profile-sub">${small(I.call, 14)} <span class="nw">${esc(p.phone)}</span></div>` : ''}
@@ -93,10 +101,9 @@ export function renderProfileEdit() {
   const pv = privacyOf(p);
   return `${pageHead('Редактировать профиль', { back: true })}
     <section class="profile-card">
-      <label class="avatar" aria-label="${p.photo ? 'Сменить фото' : 'Добавить фото'}">${avatarHtml(p)}<span class="ava-cam">${I.camera}</span>
-        <input type="file" id="pr-photo" accept="image/*" hidden></label>
-      <div class="hint">${p.photo ? 'Нажмите на фото, чтобы сменить его' : 'Нажмите, чтобы добавить фото'}</div>
-      ${p.photo ? '<button class="link-btn" data-act="photo-del">Удалить фото</button>' : ''}
+      <button class="avatar big" id="pr-avatar" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}<span class="ava-cam">${hasAvatar(p) ? I.edit : I.plus}</span></button>
+      <div class="hint">${hasAvatar(p) ? 'Нажмите, чтобы изменить персонажа' : 'Создайте своего персонажа вместо фото'}</div>
+      ${p.photo ? `<button class="link-btn" data-act="photo-del">${hasAvatar(p) ? 'Удалить старое фото' : 'Удалить фото'}</button>` : ''}
     </section>
     <div class="panel pay-panel">
       <div class="pay-field"><label for="pr-name">Имя</label><input class="input" id="pr-name" maxlength="60" autocomplete="name" placeholder="Например, Иван" value="${esc(p.name)}"></div>
@@ -117,21 +124,6 @@ export function renderProfileEdit() {
     <div class="notice ok">${I.shield}<div><b>Сейчас коллеги не видят ничего</b>: профиль хранится только в этом телефоне. Эти настройки начнут действовать, когда в CABINA появится общение. Причину отвлечения — больничный, отпуск или медкомиссия — коллеги не увидят никогда, только «На отвлечении».</div></div>`;
 }
 
-// Фото уменьшается до квадрата 320×320 (JPEG), чтобы не занимать память и не раздувать резервную копию
-export async function resizePhoto(file, size = 320) {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
-    const s = Math.min(img.naturalWidth, img.naturalHeight);
-    if (!s) throw new Error('пустое изображение');
-    const c = document.createElement('canvas');
-    c.width = size; c.height = size;
-    const g = c.getContext('2d');
-    g.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
-    return c.toDataURL('image/jpeg', 0.82);
-  } finally { URL.revokeObjectURL(url); }
-}
-
 export async function profileClick(act, b) {
   if (act === 'pr-role') { await saveProfile({ role: b.dataset.role }); return true; }
   if (act === 'pr-klass') { await saveProfile({ klass: S.profile.klass === b.dataset.klass ? '' : b.dataset.klass }); return true; }
@@ -141,7 +133,7 @@ export async function profileClick(act, b) {
     return true;
   }
   if (act === 'photo-del') {
-    if (await confirmDialog({ title: 'Удалить фото профиля?', ok: 'Удалить' })) { await saveProfile({ photo: '' }); toast('Фото удалено'); }
+    if (await confirmDialog({ title: 'Удалить фото профиля?', text: hasAvatar() ? 'В профиле останется ваш персонаж.' : '', ok: 'Удалить' })) { await saveProfile({ photo: '' }); toast('Фото удалено'); }
     return true;
   }
   return false;
@@ -152,12 +144,5 @@ export async function profileChange(e) {
   if (t.id === 'pr-name') { await saveProfile({ name: t.value.trim().slice(0, 60) }); return true; }
   if (t.id === 'pr-depot') { await saveProfile({ depot: t.value.trim().slice(0, 60) }); return true; }
   if (t.id === 'pr-phone') { await saveProfile({ phone: normPhone(t.value) }); return true; }
-  if (t.id === 'pr-photo' && t.files?.[0]) {
-    const f = t.files[0];
-    t.value = '';
-    try { await saveProfile({ photo: await resizePhoto(f) }); toast('Фото сохранено'); }
-    catch { toast('Не удалось открыть это фото. Попробуйте другое.', { error: true }); }
-    return true;
-  }
   return false;
 }

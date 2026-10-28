@@ -167,7 +167,7 @@ test('отвлечения списком: изменить нажатием, у
   await context.close();
 });
 
-test('профиль: имя, должность, класс, фото — сохраняются', async () => {
+test('профиль: имя, должность, класс, старое фото — сохраняются', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
   assert.equal(await page.locator('#pr-name').count(), 0, 'без «Редактировать профиль» поля не показываются');
@@ -180,7 +180,9 @@ test('профиль: имя, должность, класс, фото — со�
   await page.locator('[data-act=pr-role][data-role=driver]').click();
   await page.locator('[data-act=pr-klass][data-klass="2"]').click();
   await page.waitForFunction(() => document.querySelector('[data-act=pr-klass][data-klass="2"]')?.getAttribute('aria-pressed') === 'true');
-  await page.locator('#pr-photo').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG });
+  // с 2.12 фото не загружается (вместо него — персонаж), но старое фото до 2.12 показывается
+  assert.equal(await page.locator('#pr-photo').count(), 0);
+  await page.evaluate(async (b64) => { const s = await import('./js/store.js'); await s.saveProfile({ photo: `data:image/jpeg;base64,${b64}` }); }, PNG.toString('base64'));
   await page.waitForSelector('.avatar img');
   await page.reload();
   await page.waitForSelector('.screen');
