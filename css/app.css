@@ -945,7 +945,7 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
 .av-fab.l span { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: var(--glow); }
 .av-fab.l { left: 0; } .av-fab.r { right: 0; }
 .av-fab:disabled { opacity: .4; cursor: default; }
-.av-try { position: absolute; left: 50%; transform: translateX(-50%); top: 8px; max-width: calc(100% - 16px); background: rgba(10, 12, 20, .84); color: #ffd98a; font-size: 12.5px; font-weight: 700; padding: 6px 12px; border-radius: 12px; display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.av-try { position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px; max-width: calc(100% - 16px); background: rgba(10, 12, 20, .84); color: #ffd98a; font-size: 12.5px; font-weight: 700; padding: 6px 12px; border-radius: 12px; display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .av-groups { display: flex; gap: 4px; padding: 4px; background: var(--card-solid); border: 1px solid var(--line); border-radius: 18px; }
 .av-groups button { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 0 6px; border-radius: 14px; font-size: 11.5px; font-weight: 700; color: var(--muted); }
 .av-groups button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
@@ -975,6 +975,10 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
 .av-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .av-chip { min-height: 42px; padding: 0 16px; border-radius: 21px; background: var(--card-2); border: 1px solid var(--line); font-size: 14.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
 .av-chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.av-chip.prem { border-color: #d29a2c; color: #f6d27a; }
+:root[data-theme="light"] .av-chip.prem { color: #9a6a0e; }
+.av-chip.prem[aria-pressed="true"], :root[data-theme="light"] .av-chip.prem[aria-pressed="true"] { background: linear-gradient(135deg, #f6d27a, #d29a2c); border-color: #d29a2c; color: #2a1a00; }
+.av-chars { margin-top: 12px; }
 .av-range-row { display: flex; align-items: center; gap: 12px; min-height: 44px; }
 .av-range-row label { flex: 0 0 86px; font-size: 14px; font-weight: 600; color: var(--text-2); }
 .av-range-row output { flex: 0 0 84px; text-align: right; font-weight: 700; font-size: 14px; white-space: nowrap; }
@@ -983,6 +987,8 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
   .av-top .page-head { gap: 8px; }
   .av-top .page-head h1 { font-size: 15px; }
   .av-top .page-head .btn { padding: 0 12px; }
+  .av-groups { gap: 2px; padding: 3px; }
+  .av-groups button { font-size: 10.5px; }
   .av-big { width: 176px; height: 176px; border-radius: 34px; }
   .av-fab { min-width: 56px; font-size: 11px; }
   .av-fab span { width: 44px; height: 44px; }

@@ -103,3 +103,35 @@ test('персонаж: рисунок не зависит от порядка �
   const strip = (s) => s.replace(/v\d+_/g, '');
   assert.equal(strip(A.avatarSvg(a)), strip(A.avatarSvg(b)));
 });
+
+test('робот (2.13): каждая деталь рисуется, с одеждой и уборами; без разрешения становится человеком', () => {
+  const R = { sex: 'robot' };
+  for (const [k, list] of [['rEyes', A.R_EYES], ['rMouth', A.R_MOUTHS], ['rTop', A.R_TOPS], ['head', A.HEADS], ['ears', A.EARS], ['outfit', A.OUTFITS], ['build', A.BUILDS], ['hat', A.HATS], ['glasses', A.GLASSES]]) {
+    for (const x of list) ok(A.avatarSvg({ ...R, [k]: x.id }));
+  }
+  A.METAL_C.forEach((_, metal) => A.GLOW_C.forEach((_, glow) => ok(A.avatarSvg({ ...R, metal, glow }))));
+  for (const crop of ['full', 'wide', 'face', 'top', 'bust']) ok(A.avatarSvg({ ...R, goggles: true, defenders: true, mazut: true }, { crop, bg: false }));
+  for (const e of A.R_EYES) for (const g of A.GLASSES) ok(A.avatarSvg({ ...R, rEyes: e.id, glasses: g.id }));
+  // у робота нет кожи, волос, бровей и носа: его рисунок не зависит от них
+  assert.equal(A.avatarSvg({ ...R, skin: 1, hair: 'mohawk', beard: 'full', brows: 'thick', nose: 'big', marks: ['scar'], earrings: 'hoop' }).replace(/v\d+_/g, ''),
+    A.avatarSvg(R).replace(/v\d+_/g, ''));
+  // «Ничего» на макушке сохраняется, неизвестное — по умолчанию
+  assert.equal(A.normalizeAvatar({ ...R, rTop: null }, { premium: true }).rTop, null);
+  const bad = A.normalizeAvatar({ ...R, rTop: '<x>', rEyes: 'x', rMouth: 5, metal: 99, glow: -1 }, { premium: true });
+  assert.deepEqual([bad.rTop, bad.rEyes, bad.rMouth, bad.metal, bad.glow], ['beacon', 'lens', 'smile', 0, 0]);
+  assert.deepEqual(A.premiumParts(A.normalizeAvatar(R, { premium: true })), ['робот']);
+  // без Премиума робот снимается: остаётся человек с той же одеждой, а пол — по причёске
+  const m = A.normalizeAvatar({ ...R, outfit: 'jacket', hair: 'buzz', beard: 'full' });
+  assert.deepEqual([m.sex, m.outfit, m.hair, m.beard], ['m', 'jacket', 'buzz', 'full']);
+  const f = A.normalizeAvatar({ ...R, hair: 'long', beard: 'full' });
+  assert.deepEqual([f.sex, f.hair, f.beard], ['f', 'long', null]);
+  // «Случайный» у робота оставляет робота, остальное — без премиум-деталей
+  const rnd = A.rng(7);
+  for (let i = 0; i < 40; i++) {
+    const a = A.randomAvatar(rnd, { sex: 'robot' });
+    assert.equal(a.sex, 'robot');
+    assert.deepEqual(A.premiumParts(a), ['робот']);
+    ok(A.avatarSvg(a));
+  }
+  assert.equal(A.hairsOf('robot').length, 0);
+});

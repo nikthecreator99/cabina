@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -517,7 +517,7 @@ function scheduleTours() {
     else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); if (app.querySelector('.st-locos, [data-act=st-recap]')) statsMoreTour(); }
     else if (p === 'settings') settingsTour();
     else if (p === 'profile-edit') profileEditTour();
-    else if (p === 'avatar') avatarTour();
+    else if (p === 'avatar') { avatarTour(); avatarCharsTour(); }
     else if (p === 'career') careerTour();
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }

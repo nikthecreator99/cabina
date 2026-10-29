@@ -22,8 +22,8 @@ async function refreshPremium() {
   } catch {}
 }
 
-const E = { a: null, base: '', hist: [], group: 'face', drag: false, prem: false };
-const NUM = new Set(['skin', 'eyeC', 'hairC', 'beardC', 'outfitC', 'hatC', 'glassesC', 'lips']);
+const E = { a: null, base: '', hist: [], group: 'face', drag: false, prem: false, chars: false };
+const NUM = new Set(['skin', 'eyeC', 'hairC', 'beardC', 'outfitC', 'hatC', 'glassesC', 'lips', 'metal', 'glow']);
 const GROUPS = [['face', 'Лицо', I.face], ['hair', 'Волосы', I.hair], ['wear', 'Одежда', I.shirt], ['acc', 'Детали', I.glasses], ['bg', 'Фон', I.image]];
 const norm = (a) => A.normalizeAvatar(a, { premium: true });
 const changed = () => !!E.a && JSON.stringify(E.a) !== E.base;
@@ -34,7 +34,7 @@ function start() {
   // первый раз — спокойный персонаж по умолчанию, дальше человек меняет сам или жмёт «Случайный»
   E.a = A.normalizeAvatar(hasAvatar() ? S.profile.avatar : {}, { premium: E.prem });
   E.base = JSON.stringify(E.a);
-  E.hist = []; E.group = 'face'; E.drag = false;
+  E.hist = []; E.group = 'face'; E.drag = false; E.chars = false;
 }
 
 export function openAvatarEditor(ctx) {
@@ -106,19 +106,44 @@ function stageHtml() {
     <button class="av-fab r" data-act="av-undo"${E.hist.length ? '' : ' disabled'}><span>${I.undo}</span>Назад</button>
     ${parts.length && !E.prem ? `<div class="av-try">${small(I.lock, 14)} Примерка: ${esc(parts.join(', '))}</div>` : ''}`;
 }
-const groupsHtml = () => GROUPS.map(([k, t, ic]) => `<button role="tab" data-act="av-group" data-g="${k}" aria-selected="${E.group === k}">${ic}<span>${t}</span></button>`).join('');
+// у робота вместо волос — макушка (антенны, мигалка)
+const groupName = (k, t) => (k === 'hair' && E.a.sex === 'robot' ? 'Макушка' : t);
+const groupsHtml = () => GROUPS.map(([k, t, ic]) => `<button role="tab" data-act="av-group" data-g="${k}" aria-selected="${E.group === k}">${ic}<span>${groupName(k, t)}</span></button>`).join('');
 
 // Разделы панели: id (по нему раздел обновляется отдельно) и разметка — функцией, чтобы собирать только нужное
 function sections() {
   const a = E.a;
-  const f = a.sex === 'f';
+  const f = a.sex === 'f', robot = a.sex === 'robot';
   const S_ = (id, title, body, note) => ({ id, html: () => sec(id, title, body(), note) });
+  // «Кто вы»: мужчина, женщина или премиум-персонажи (пока только робот)
+  const who = () => {
+    const open = E.chars || robot;
+    return `<div class="av-chips">${chip('av-set', 'sex', 'm', 'Мужчина', a.sex === 'm')}${chip('av-set', 'sex', 'f', 'Женщина', f)}<button class="av-chip prem" data-act="av-chars" aria-pressed="${open}" aria-expanded="${open}">Премиум</button></div>` +
+      (open ? `<div class="av-chars">${row('chars', A.CHARS.map((c) => tile('sex', c.id, c.name, { variant: { hat: null, glasses: null, goggles: false, defenders: false }, prem: c.premium })).join(''))}</div>` : '');
+  };
+  if (E.group === 'face' && robot) {
+    const clean = { hat: null, glasses: null, goggles: false, defenders: false, rTop: null };
+    const tiles = (k, list) => () => row(k, list.map((x) => tile(k, x.id, x.name, { variant: clean })).join(''));
+    return [
+      S_('sex', 'Кто вы', who),
+      S_('head', 'Форма головы', tiles('head', A.HEADS)),
+      S_('props', 'Пропорции', () => range('faceW', 'Лицо') + range('eyeS', 'Глаза') + range('eyeGap', 'Между глаз')),
+      S_('metal', 'Цвет корпуса', () => swatches('metal', A.METAL_C, a.metal)),
+      S_('rEyes', 'Глаза', tiles('rEyes', A.R_EYES)),
+      S_('glow', 'Цвет свечения', () => swatches('glow', A.GLOW_C, a.glow), 'глаза, рот, огоньки'),
+      S_('rMouth', 'Рот', tiles('rMouth', A.R_MOUTHS)),
+      S_('ears', 'Уши', tiles('ears', A.EARS)),
+    ];
+  }
+  if (E.group === 'hair' && robot) {
+    return [S_('rTop', 'Макушка', () => grid(A.R_TOPS.map((x) => tile('rTop', x.id, x.name, { crop: 'top', variant: { hat: null, goggles: false } })).join('')), a.hat ? 'под головным убором не видно' : '')];
+  }
   if (E.group === 'face') {
     const bare = { hair: f ? 'fbun' : 'bald', beard: null, mous: null, hat: null, glasses: null, goggles: false, defenders: false };
     const clean = { hat: null, glasses: null, goggles: false };
     const tiles = (k, list, variant = clean) => () => row(k, list.map((x) => tile(k, x.id, x.name, { variant })).join(''));
     return [
-      S_('sex', 'Кто вы', () => chipSet('sex', [{ id: 'm', name: 'Мужчина' }, { id: 'f', name: 'Женщина' }])),
+      S_('sex', 'Кто вы', who),
       S_('age', 'Возраст персонажа', () => range('age', 'Возраст')),
       S_('head', 'Форма головы', tiles('head', A.HEADS, bare)),
       S_('props', 'Пропорции', () => range('faceW', 'Лицо') + range('eyeS', 'Глаза') + range('eyeGap', 'Между глаз') + range('noseS', 'Нос')),
@@ -158,9 +183,9 @@ function sections() {
       S_('glasses', 'Очки', () => row('glasses', A.GLASSES.map((x) => tile('glasses', x.id, x.name, { variant: { goggles: false } })).join(''))),
       a.glasses && S_('glassesC', 'Цвет оправы', () => swatches('glassesC', A.FRAME_C, a.glassesC)),
       S_('more', 'Ещё', () => `<div class="av-chips">${chip('av-toggle', 'goggles', '', 'Очки на лбу', a.goggles)}${chip('av-toggle', 'defenders', '', 'Наушники', a.defenders)}${chip('av-toggle', 'mazut', '', 'Мазут', a.mazut, true)}</div>`),
-      S_('earrings', 'Серьги', () => chipSet('earrings', A.EARRINGS)),
-      S_('piercing', 'Пирсинг', () => chipSet('piercing', A.PIERCING)),
-      S_('marks', 'Приметы', () => `<div class="av-chips">${A.MARKS.map((m) => chip('av-mark', 'marks', m.id, m.name, a.marks.includes(m.id))).join('')}</div>`, 'можно несколько'),
+      !robot && S_('earrings', 'Серьги', () => chipSet('earrings', A.EARRINGS)),
+      !robot && S_('piercing', 'Пирсинг', () => chipSet('piercing', A.PIERCING)),
+      !robot && S_('marks', 'Приметы', () => `<div class="av-chips">${A.MARKS.map((m) => chip('av-mark', 'marks', m.id, m.name, a.marks.includes(m.id))).join('')}</div>`, 'можно несколько'),
     ].filter(Boolean);
   }
   return [S_('bg', 'Фон', () => grid(A.BG.map((b) => {
@@ -251,6 +276,7 @@ function set(patch) {
   if ('outfit' in patch && patch.outfit !== E.a.outfit) next.outfitC = null;
   // помаду выбирают только у женского персонажа — у мужского её не должно остаться скрытой
   if (patch.sex === 'm') next.lips = 0;
+  if (patch.sex === 'robot') E.chars = true;
   E.a = norm(next);
   refresh(sectionOf(Object.keys(patch)[0]));
 }
@@ -278,10 +304,13 @@ async function save(ctx) {
   const prem = premiumOk();
   const parts = A.premiumParts(E.a);
   if (parts.length && !prem) {
+    const robot = E.a.sex === 'robot', rest = parts.filter((p) => p !== 'робот');
     const ok = await confirmDialog({
       title: 'Это Премиум',
-      text: `Премиум-детали (${parts.join(', ')}) можно примерить, но сохранить пока нельзя: Премиум появится позже. Снять их и сохранить остальное?`,
-      ok: 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
+      text: robot
+        ? `Робот — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить, но сохранить пока нельзя: Премиум появится позже. Сохранить человека с той же одеждой?`
+        : `Премиум-детали (${parts.join(', ')}) можно примерить, но сохранить пока нельзя: Премиум появится позже. Снять их и сохранить остальное?`,
+      ok: robot ? 'Сохранить человека' : 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
     });
     if (!ok) return;
   }
@@ -309,7 +338,11 @@ export async function avatarClick(act, b, ctx) {
   const { k, v } = b.dataset;
   if (act === 'av-set') set({ [k]: v === '' ? null : NUM.has(k) ? parseInt(v, 10) : v });
   else if (act === 'av-toggle' && ['goggles', 'defenders', 'mazut'].includes(k)) set({ [k]: !E.a[k] });
-  else if (act === 'av-mark') set({ marks: E.a.marks.includes(v) ? E.a.marks.filter((m) => m !== v) : [...E.a.marks, v] });
+  else if (act === 'av-chars') {
+    // свернуть список можно, только пока робот не выбран
+    if (E.a.sex !== 'robot') E.chars = !E.chars;
+    refresh('sex');
+  } else if (act === 'av-mark') set({ marks: E.a.marks.includes(v) ? E.a.marks.filter((m) => m !== v) : [...E.a.marks, v] });
   else if (act === 'av-group' && GROUPS.some((g) => g[0] === b.dataset.g)) {
     E.group = b.dataset.g;
     refresh();

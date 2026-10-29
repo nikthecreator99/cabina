@@ -132,8 +132,24 @@ export const BG = [
   { id: 'peach', name: 'Персик', c: '#f8d9c2' }, { id: 'night', name: 'Ночь', c: '#262c3d' }, { id: 'pine', name: 'Хвоя', c: '#1f3b36' },
   { id: 'sunset', name: 'Закат', scene: true }, { id: 'ocean', name: 'Океан', scene: true, premium: true }, { id: 'depot', name: 'Депо', scene: true, premium: true },
 ];
+// Премиум-персонажи: пока только робот (свой, не похожий на известных роботов из мультфильмов)
+export const CHARS = [{ id: 'robot', name: 'Робот', premium: true }];
+export const METAL_C = ['#c3c9d2', '#8e98a5', '#5b6470', '#e9ebee', '#d6b264', '#c47a4e', '#f0c23c', '#3f7fd0', '#d64a3a', '#3a9a6a', '#2b2f36'];
+export const GLOW_C = ['#5ff2ff', '#7dff8a', '#ffe45c', '#ff6a5c', '#ffa24a', '#ffffff', '#c48bff', '#5c8dff'];
+export const R_EYES = [
+  { id: 'lens', name: 'Линзы' }, { id: 'big', name: 'Большие' }, { id: 'led', name: 'Огоньки' }, { id: 'square', name: 'Квадратные' },
+  { id: 'visor', name: 'Визор' }, { id: 'cyclops', name: 'Один глаз' }, { id: 'sleepy', name: 'Сонные' }, { id: 'happy', name: 'Довольные' },
+];
+export const R_MOUTHS = [
+  { id: 'smile', name: 'Улыбка' }, { id: 'pixel', name: 'Пиксели' }, { id: 'grille', name: 'Решётка' }, { id: 'slot', name: 'Щель' },
+  { id: 'wave', name: 'Волна' }, { id: 'speaker', name: 'Динамик' }, { id: 'o', name: 'Удивление' },
+];
+export const R_TOPS = [
+  { id: null, name: 'Ничего' }, { id: 'beacon', name: 'Мигалка' }, { id: 'antenna', name: 'Антенна' }, { id: 'twin', name: 'Две антенны' },
+  { id: 'dish', name: 'Локатор' }, { id: 'bolt', name: 'Болт' }, { id: 'fin', name: 'Гребень' },
+];
 // Премиум-детали: примерить можно, сохранить пока нельзя
-export const PREMIUM = { hat: ['peaked'], bg: ['ocean', 'depot'], mazut: true };
+export const PREMIUM = { hat: ['peaked'], bg: ['ocean', 'depot'], mazut: true, chars: ['robot'] };
 
 // ── Геометрия ────────────────────────────────────────────────────
 function smooth(p, closed = true) {
@@ -214,7 +230,7 @@ const LINES = {
   middle: [[.84, -.4], [.5, -.52], [.15, -.64], [0, -.72], [-.15, -.64], [-.5, -.52], [-.84, -.4]],
   recede: [[.6, -.8], [.34, -.66], [0, -.6], [-.34, -.66], [-.6, -.8]],
 };
-function findHair(a) { return [...HAIR_M, ...HAIR_F].find(h => h.id === a.hair) || HAIR_M[2]; }
+function findHair(a) { return a.sex === 'robot' ? HAIR_M[0] : [...HAIR_M, ...HAIR_F].find(h => h.id === a.hair) || HAIR_M[2]; }
 
 function hairParts(a, g, hc, u, clip) {
   const S = findHair(a), out = { back: '', mid: '', front: '' };
@@ -236,9 +252,8 @@ function hairParts(a, g, hc, u, clip) {
     const W = hw(cy) + side + 3, yb = len === 'chin' ? cy + ry * .78 : len === 'shoulder' ? 166 : 202, nw = buildOf(a).nw - 1;
     const sideP = s => { const r = []; for (let i = 0; i <= 6; i++) { const y = cy - ry * .2 + (yb - 6 - (cy - ry * .2)) * i / 6; r.push([cx + s * (W + (curl ? curl * 3 * Math.sin(i * 1.7) : i * .6)), y]); } return s > 0 ? r : r.reverse(); };
     const top = []; for (let i = 0; i <= 10; i++) { const t = Math.PI + .25 + i / 10 * (Math.PI - .5); top.push(g.grow(t, d(t) + 1)); }
-    const outer = [...sideP(-1), [cx - W + 4, yb], ...top.reverse().reverse()];
-    const pts = [[cx - W * .96 + 3, yb], ...sideP(-1).reverse(), ...top, ...sideP(1), [cx + W * .96 - 3, yb]];
-    void outer;
+    // контур: снизу слева вверх, через макушку и вниз справа (sideP(-1) уже идёт снизу вверх)
+    const pts = [[cx - W * .96 + 3, yb], ...sideP(-1), ...top, ...sideP(1), [cx + W * .96 - 3, yb]];
     const path = smooth(pts, false) + `L${f1(cx + nw)},${f1(yb)}L${f1(cx + nw)},${cy}L${f1(cx - nw)},${cy}L${f1(cx - nw)},${f1(yb)}Z`;
     out.back += `<g clip-path="url(#${clip})">${cel(u + 'hb', path, dk(hc, .12), dk(hc, .34), -3, -3)}</g>`;
   }
@@ -307,7 +322,8 @@ function clothes(a, u) {
   const { sw, nw } = buildOf(a), o = OUTFITS.find(x => x.id === a.outfit) || OUTFITS[0];
   const c = o.vest ? '#2c323e' : CLOTH_C[a.outfitC ?? o.def] || CLOTH_C[o.def];
   const L = 100 - sw, R = 100 + sw, A = 100 - nw - 3, B = 100 + nw + 3;
-  const seams = col => `<path d="M${L + 17},158 Q${L + 11},180 ${L + 13},206 M${R - 17},158 Q${R - 11},180 ${R - 13},206" stroke="${col}" stroke-width="1.4" fill="none" opacity=".55"/>`;
+  // боковые швы — только внутри силуэта, чтобы не торчали над плечами
+  const seams = col => `<clipPath id="${u}sm"><path d="${torso(sw, nw, 'crew', 0)}"/></clipPath><g clip-path="url(#${u}sm)"><path d="M${L + 17},164 Q${L + 11},182 ${L + 13},206 M${R - 17},164 Q${R - 11},182 ${R - 13},206" stroke="${col}" stroke-width="1.4" fill="none" opacity=".55"/></g>`;
   let back = '', s = '';
   if (o.id === 'hoodie') back = `<path d="M${A - 16},158 C${A - 22},128 ${B + 22},128 ${B + 16},158Z" fill="${dk(c, .3)}"/>`;
   if (o.id === 'jacket') {
@@ -352,8 +368,8 @@ function clothes(a, u) {
     };
     const vp = panel(-1) + panel(1);
     s += `<clipPath id="${u}vs"><path d="${vp}"/></clipPath>` + `<path d="${vp}" fill="${dk(v, .2)}"/><g clip-path="url(#${u}vs)"><path d="${vp}" fill="${v}" transform="translate(-4 -3)"/>` +
-      `<rect y="178" width="200" height="8" fill="#b9c1ca"/><rect y="179" width="200" height="2.4" fill="#eef3f7"/><rect y="194" width="200" height="8" fill="#b9c1ca"/><rect y="195" width="200" height="2.4" fill="#eef3f7"/></g>` +
-      `<path d="M${100 - sw + 18},157 Q${100 - sw + 10},178 ${100 - sw + 12},206 M${100 + sw - 18},157 Q${100 + sw - 10},178 ${100 + sw - 12},206" stroke="${dk(v, .3)}" stroke-width="1.2" fill="none"/>`;
+      `<rect y="178" width="200" height="8" fill="#b9c1ca"/><rect y="179" width="200" height="2.4" fill="#eef3f7"/><rect y="194" width="200" height="8" fill="#b9c1ca"/><rect y="195" width="200" height="2.4" fill="#eef3f7"/>` +
+      `<path d="M${100 - sw + 18},157 Q${100 - sw + 10},178 ${100 - sw + 12},206 M${100 + sw - 18},157 Q${100 + sw - 10},178 ${100 + sw - 12},206" stroke="${dk(v, .3)}" stroke-width="2" fill="none"/></g>`;
   }
   return { back, s };
 }
@@ -597,20 +613,106 @@ function wrinkles(a, g, skin, E) {
   return r;
 }
 
+// ── Робот (Премиум) ──────────────────────────────────────────────
+// Металлическая голова той же формы, что выбрана для человека; глаза и рот светятся.
+const glowDot = (x, y, r, c) => `<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(r * 1.9)}" fill="${c}" opacity=".22"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(r)}" fill="${c}"/>`;
+function robotNeck(a, g, m) {
+  const { nw } = buildOf(a), y0 = g.cy + g.ry * .4;
+  let r = `<path d="M${100 - nw},${f1(y0)} L${100 - nw},158 Q100,163 ${100 + nw},158 L${100 + nw},${f1(y0)}Z" fill="${dk(m, .32)}"/>`;
+  for (let y = y0 + 8; y < 156; y += 6) r += `<path d="M${100 - nw},${f1(y)} Q100,${f1(y + 3)} ${100 + nw},${f1(y)}" stroke="${dk(m, .5)}" stroke-width="1.6" fill="none"/>`;
+  return r;
+}
+function robotEars(a, g, m, u) {
+  const { E, y, x } = earPos(a, g), R = E.h * .8; let r = '';
+  for (const s of [-1, 1]) {
+    const ex = g.cx + s * (x - 1);
+    r += cel(u + 're' + s, circ(ex, y, R), dk(m, .1), dk(m, .38), s * -1.5, -1.5) +
+      `<circle cx="${f1(ex)}" cy="${f1(y)}" r="${f1(R * .45)}" fill="${dk(m, .3)}"/><path d="M${f1(ex - R * .3)},${f1(y)} H${f1(ex + R * .3)}" stroke="${dk(m, .55)}" stroke-width="1.3" stroke-linecap="round"/>`;
+  }
+  return r;
+}
+function robotHead(a, g, m, u) {
+  const { cx, cy, rx, ry } = g, sy = cy - ry * .5;
+  let r = cel(u + 'hd', g.path, m, dk(m, .2), -5, -3);
+  r += `<clipPath id="${u}rc"><path d="${g.path}"/></clipPath><g clip-path="url(#${u}rc)">` +
+    `<path d="M0,${f1(sy)} Q${cx},${f1(sy - 4)} 200,${f1(sy)}" stroke="${dk(m, .3)}" stroke-width="1.4" fill="none"/>` +
+    `<path d="M${f1(cx - rx * .62)},${f1(cy - ry * .9)} Q${f1(cx - rx * .8)},${f1(cy - ry * .3)} ${f1(cx - rx * .7)},${f1(cy + ry * .1)}" stroke="${lt(m, .65)}" stroke-width="4" fill="none" stroke-linecap="round" opacity=".55"/></g>`;
+  for (const s of [-1, 1]) for (const k of [.3, .62]) { const x = cx + s * (g.hw(sy) - 5) * k * 1.4; if (Math.abs(x - cx) < g.hw(sy) - 3) r += `<circle cx="${f1(x)}" cy="${f1(sy + 4)}" r="1.5" fill="${dk(m, .32)}"/><circle cx="${f1(x - .4)}" cy="${f1(sy + 3.6)}" r=".6" fill="${lt(m, .6)}"/>`; }
+  for (const s of [-1, 1]) { const y = cy + ry * .55; r += `<circle cx="${f1(cx + s * (g.hw(y) - 5))}" cy="${f1(y)}" r="1.4" fill="${dk(m, .32)}"/>`; }
+  return r;
+}
+function robotTop(a, g, m, u) {
+  if (!a.rTop || a.hat) return '';
+  const { cx } = g, t = g.top, gl = GLOW_C[a.glow] || GLOW_C[0];
+  switch (a.rTop) {
+    case 'antenna': return `<path d="M${cx},${f1(t + 6)} V${f1(t - 16)}" stroke="${dk(m, .35)}" stroke-width="2.4"/>` + glowDot(cx, t - 18, 3.6, gl);
+    case 'twin': return [-1, 1].map(s => `<path d="M${cx + s * 8},${f1(t + 6)} L${cx + s * 15},${f1(t - 13)}" stroke="${dk(m, .35)}" stroke-width="2"/>` + glowDot(cx + s * 15.6, t - 15, 2.8, gl)).join('');
+    case 'beacon': return `<rect x="${cx - 9}" y="${f1(t - 4)}" width="18" height="8" rx="2" fill="${dk(m, .35)}"/>` +
+      `<circle cx="${cx}" cy="${f1(t - 6)}" r="16" fill="${gl}" opacity=".16"/><path d="M${cx - 7},${f1(t - 4)} V${f1(t - 9)} A7,8 0 0 1 ${cx + 7},${f1(t - 9)} V${f1(t - 4)}Z" fill="${gl}"/>` +
+      `<path d="M${cx - 7},${f1(t - 8)} H${cx + 7} M${cx - 6},${f1(t - 12)} H${cx + 6}" stroke="${dk(gl, .25)}" stroke-width="1"/><path d="M${cx - 3.5},${f1(t - 14)} q1.5,-2 3.5,-2" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" opacity=".8"/>`;
+    case 'dish': return `<path d="M${cx},${f1(t + 6)} V${f1(t - 8)}" stroke="${dk(m, .35)}" stroke-width="2.6"/><path d="M${cx - 13},${f1(t - 18)} Q${cx},${f1(t - 2)} ${cx + 13},${f1(t - 18)} Z" fill="${lt(m, .2)}" stroke="${dk(m, .3)}" stroke-width="1.2"/>` + glowDot(cx, t - 13, 2, gl);
+    case 'bolt': return `<rect x="${cx - 4}" y="${f1(t - 5)}" width="8" height="9" fill="${dk(m, .3)}"/><path d="M${cx - 10},${f1(t - 5)} L${cx - 6},${f1(t - 13)} H${cx + 6} L${cx + 10},${f1(t - 5)}Z" fill="${dk(m, .15)}"/><path d="M${cx - 6},${f1(t - 13)} L${cx - 3},${f1(t - 5)} M${cx + 6},${f1(t - 13)} L${cx + 3},${f1(t - 5)}" stroke="${dk(m, .4)}" stroke-width="1"/>`;
+    default: return `<path d="M${cx - 5},${f1(t + 8)} C${cx - 6},${f1(t - 10)} ${cx - 2},${f1(t - 20)} ${cx + 6},${f1(t - 22)} C${cx + 4},${f1(t - 10)} ${cx + 6},${f1(t)} ${cx + 5},${f1(t + 8)}Z" fill="${dk(m, .25)}"/>`;
+  }
+}
+function robotEyes(a, g, u) {
+  const s = a.eyeS ?? 1, ey = g.cy + 1, ex = Math.min(g.rx * .42 * (a.eyeGap ?? 1), g.hw(ey) - 11 * s);
+  const gl = GLOW_C[a.glow] || GLOW_C[0], m = METAL_C[a.metal] || METAL_C[0], frame = dk(m, .45), glass = '#141a24';
+  let r = '';
+  if (a.rEyes === 'visor') {
+    const w = ex + 11 * s, h = 7 * s;
+    return { r: `<rect x="${f1(g.cx - w)}" y="${f1(ey - h)}" width="${f1(2 * w)}" height="${f1(2 * h)}" rx="${f1(h)}" fill="${glass}" stroke="${frame}" stroke-width="2"/>` +
+      `<rect x="${f1(g.cx - w + 4)}" y="${f1(ey - 2.2 * s)}" width="${f1(2 * w - 8)}" height="${f1(4.4 * s)}" rx="${f1(2.2 * s)}" fill="${gl}" opacity=".9"/>` +
+      `<rect x="${f1(g.cx - w + 2)}" y="${f1(ey - h * 1.6)}" width="${f1(2 * w - 4)}" height="${f1(h * 3.2)}" rx="${f1(h * 1.6)}" fill="${gl}" opacity=".12"/>`, ey, ex, s };
+  }
+  if (a.rEyes === 'cyclops') {
+    const R = 10 * s;
+    return { r: `<circle cx="${g.cx}" cy="${f1(ey)}" r="${f1(R + 3)}" fill="${frame}"/><circle cx="${g.cx}" cy="${f1(ey)}" r="${f1(R)}" fill="${glass}"/>` + glowDot(g.cx, ey, R * .55, gl) +
+      `<circle cx="${f1(g.cx - R * .35)}" cy="${f1(ey - R * .35)}" r="${f1(R * .16)}" fill="#fff" opacity=".9"/>`, ey, ex, s };
+  }
+  for (const fl of [-1, 1]) {
+    const x = g.cx + fl * ex;
+    switch (a.rEyes) {
+      case 'big': r += `<circle cx="${f1(x)}" cy="${f1(ey)}" r="${f1(9.5 * s)}" fill="${frame}"/><circle cx="${f1(x)}" cy="${f1(ey)}" r="${f1(7.4 * s)}" fill="${glass}"/>` + glowDot(x, ey, 4.4 * s, gl) + `<circle cx="${f1(x - 2.6 * s)}" cy="${f1(ey - 2.6 * s)}" r="${f1(1.4 * s)}" fill="#fff"/>`; break;
+      case 'led': r += glowDot(x, ey, 2.8 * s, gl); break;
+      case 'square': r += `<rect x="${f1(x - 7.5 * s)}" y="${f1(ey - 6.5 * s)}" width="${f1(15 * s)}" height="${f1(13 * s)}" rx="${f1(3 * s)}" fill="${glass}" stroke="${frame}" stroke-width="2"/><rect x="${f1(x - 4.5 * s)}" y="${f1(ey - 3.5 * s)}" width="${f1(9 * s)}" height="${f1(7 * s)}" rx="1.5" fill="${gl}"/>`; break;
+      case 'happy': r += `<path d="M${f1(x - 6 * s)},${f1(ey + 2 * s)} Q${f1(x)},${f1(ey - 7 * s)} ${f1(x + 6 * s)},${f1(ey + 2 * s)}" stroke="${gl}" stroke-width="5" opacity=".25" fill="none" stroke-linecap="round"/><path d="M${f1(x - 6 * s)},${f1(ey + 2 * s)} Q${f1(x)},${f1(ey - 7 * s)} ${f1(x + 6 * s)},${f1(ey + 2 * s)}" stroke="${gl}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`; break;
+      default: {
+        r += `<circle cx="${f1(x)}" cy="${f1(ey)}" r="${f1(7.6 * s)}" fill="${frame}"/><circle cx="${f1(x)}" cy="${f1(ey)}" r="${f1(5.6 * s)}" fill="${glass}"/>` + glowDot(x, ey, 3.2 * s, gl) + `<circle cx="${f1(x - 2 * s)}" cy="${f1(ey - 2 * s)}" r="${f1(1.1 * s)}" fill="#fff"/>`;
+        if (a.rEyes === 'sleepy') r += `<path d="M${f1(x - 8.2 * s)},${f1(ey + .5)} A${f1(8.2 * s)},${f1(8.2 * s)} 0 0 1 ${f1(x + 8.2 * s)},${f1(ey + .5)}Z" fill="${dk(m, .08)}"/><path d="M${f1(x - 8.2 * s)},${f1(ey + .5)} H${f1(x + 8.2 * s)}" stroke="${dk(m, .45)}" stroke-width="1.5"/>`;
+      }
+    }
+  }
+  return { r, ey, ex, s };
+}
+function robotMouth(a, g) {
+  const cx = g.cx, my = g.cy + g.ry * .55, mw = 9 * (a.faceW ?? 1), gl = GLOW_C[a.glow] || GLOW_C[0], m = METAL_C[a.metal] || METAL_C[0];
+  const slot = (w, h) => `<rect x="${f1(cx - w)}" y="${f1(my - h)}" width="${f1(2 * w)}" height="${f1(2 * h)}" rx="${f1(h)}" fill="#141a24" stroke="${dk(m, .45)}" stroke-width="1.6"/>`;
+  switch (a.rMouth) {
+    case 'pixel': return [[-3, -1], [-2, 0], [-1, 1], [0, 1], [1, 1], [2, 0], [3, -1]].map(([i, j]) => `<rect x="${f1(cx + i * 3.2 - 1.4)}" y="${f1(my + j * 3 - 1.4)}" width="2.8" height="2.8" fill="${gl}"/>`).join('');
+    case 'grille': return slot(mw + 2, 5) + [-2, -1, 0, 1, 2].map(i => `<path d="M${f1(cx + i * mw * .38)},${f1(my - 2.6)} V${f1(my + 2.6)}" stroke="${dk(m, .1)}" stroke-width="1.6" stroke-linecap="round"/>`).join('');
+    case 'slot': return slot(mw, 1.8);
+    case 'wave': return slot(mw + 2, 5) + `<path d="M${f1(cx - mw)},${f1(my)} q${f1(mw / 4)},-4 ${f1(mw / 2)},0 t${f1(mw / 2)},0 t${f1(mw / 2)},0 t${f1(mw / 2)},0" stroke="${gl}" stroke-width="1.7" fill="none"/>`;
+    case 'speaker': { let r = `<circle cx="${cx}" cy="${f1(my)}" r="7" fill="#141a24" stroke="${dk(m, .45)}" stroke-width="1.6"/>`; for (const [i, j] of [[0, 0], [-2.6, 0], [2.6, 0], [0, -2.6], [0, 2.6], [-1.8, -1.8], [1.8, 1.8], [-1.8, 1.8], [1.8, -1.8]]) r += `<circle cx="${f1(cx + i)}" cy="${f1(my + j)}" r=".75" fill="${gl}"/>`; return r; }
+    case 'o': return `<circle cx="${cx}" cy="${f1(my + 1)}" r="7" fill="${gl}" opacity=".2"/><circle cx="${cx}" cy="${f1(my + 1)}" r="4.2" fill="none" stroke="${gl}" stroke-width="2.4"/>`;
+    default: return `<path d="M${f1(cx - mw)},${f1(my - 1)} Q${cx},${f1(my + 8)} ${f1(cx + mw)},${f1(my - 1)}" stroke="${gl}" stroke-width="5.5" opacity=".22" fill="none" stroke-linecap="round"/><path d="M${f1(cx - mw)},${f1(my - 1)} Q${cx},${f1(my + 8)} ${f1(cx + mw)},${f1(my - 1)}" stroke="${gl}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+  }
+}
+
 // ── Проверка и очистка параметров ────────────────────────────────
 const has = (list, v) => list.some((x) => x.id === v);
 const pick = (v, list, def) => (v != null && has(list, v) ? v : def);
 const idx = (v, arr, def) => (Number.isInteger(v) && v >= 0 && v < arr.length ? v : def);
 const num = (v, lo, hi, def) => (typeof v === 'number' && Number.isFinite(v) ? clamp(Math.round(v * 100) / 100, lo, hi) : def);
 export const RANGES = { age: [18, 55], faceW: [.88, 1.12], eyeS: [.85, 1.2], eyeGap: [.88, 1.12], noseS: [.8, 1.25] };
-export const hairsOf = (sex) => (sex === 'f' ? HAIR_F : HAIR_M);
+export const hairsOf = (sex) => (sex === 'f' ? HAIR_F : sex === 'robot' ? [] : HAIR_M);
 export const isPremiumHat = (id) => PREMIUM.hat.includes(id);
 export const isPremiumBg = (id) => PREMIUM.bg.includes(id);
 
 // Только известные значения; всё неизвестное — по умолчанию. premium: false — премиум-детали снимаются.
 export function normalizeAvatar(src, { premium = false } = {}) {
   const a = src && typeof src === 'object' && !Array.isArray(src) ? src : {};
-  const sex = a.sex === 'f' ? 'f' : 'm';
+  const sex = a.sex === 'f' || a.sex === 'robot' ? a.sex : 'm';
   const r = (k, def) => num(a[k], RANGES[k][0], RANGES[k][1], def);
   const o = {
     v: 1, sex, age: Math.round(r('age', 30)), skin: idx(a.skin, SKIN, 3),
@@ -618,8 +720,9 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     eyes: pick(a.eyes, EYES, 'almond'), eyeC: idx(a.eyeC, EYE_C, 0), eyeS: r('eyeS', 1), eyeGap: r('eyeGap', 1),
     brows: pick(a.brows, BROWS, 'straight'), nose: pick(a.nose, NOSES, 'button'), noseS: r('noseS', 1),
     mouth: pick(a.mouth, MOUTHS, 'smile'), lips: idx(a.lips, LIP_C, 0),
-    hair: pick(a.hair, hairsOf(sex), sex === 'f' ? 'long' : 'short'), hairC: idx(a.hairC, HAIR_C, 2),
-    mous: sex === 'm' ? pick(a.mous, MOUS, null) : null, beard: sex === 'm' ? pick(a.beard, BEARDS, null) : null,
+    // у робота причёска человека сохраняется (не рисуется), чтобы вернуться к ней
+    hair: pick(a.hair, sex === 'robot' ? [...HAIR_M, ...HAIR_F] : hairsOf(sex), sex === 'f' ? 'long' : 'short'), hairC: idx(a.hairC, HAIR_C, 2),
+    mous: sex !== 'f' ? pick(a.mous, MOUS, null) : null, beard: sex !== 'f' ? pick(a.beard, BEARDS, null) : null,
     beardC: a.beardC == null ? null : idx(a.beardC, HAIR_C, null),
     marks: Array.isArray(a.marks) ? MARKS.filter((m) => a.marks.includes(m.id)).map((m) => m.id) : [],
     outfit: pick(a.outfit, OUTFITS, 'vestO'), outfitC: a.outfitC == null ? null : idx(a.outfitC, CLOTH_C, null),
@@ -628,8 +731,11 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     goggles: a.goggles === true, defenders: a.defenders === true,
     earrings: pick(a.earrings, EARRINGS, null), piercing: pick(a.piercing, PIERCING, null),
     mazut: a.mazut === true, bg: pick(a.bg, BG, 'mist'),
+    metal: idx(a.metal, METAL_C, 0), glow: idx(a.glow, GLOW_C, 0), rEyes: pick(a.rEyes, R_EYES, 'lens'),
+    rMouth: pick(a.rMouth, R_MOUTHS, 'smile'), rTop: a.rTop === null ? null : pick(a.rTop, R_TOPS, 'beacon'),
   };
   if (!premium) {
+    if (o.sex === 'robot') { o.sex = has(HAIR_F, o.hair) ? 'f' : 'm'; if (o.sex === 'f') { o.mous = null; o.beard = null; } }
     if (isPremiumHat(o.hat)) o.hat = null;
     if (isPremiumBg(o.bg)) o.bg = 'mist';
     o.mazut = false;
@@ -640,6 +746,7 @@ export function normalizeAvatar(src, { premium = false } = {}) {
 // Какие премиум-детали сейчас надеты (для плашки «Примерка» и окна при сохранении)
 export function premiumParts(a) {
   const r = [];
+  if (a.sex === 'robot') r.push('робот');
   if (isPremiumHat(a.hat)) r.push('фуражка');
   if (a.mazut) r.push('мазут');
   if (isPremiumBg(a.bg)) r.push(`фон «${BG.find((b) => b.id === a.bg).name}»`);
@@ -666,6 +773,15 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
   const neckSvg = `<clipPath id="${u}nk"><path d="${neck}"/></clipPath><path d="${neck}" fill="${dk(skin, .1)}"/><g clip-path="url(#${u}nk)"><path d="${g.path}" fill="${dk(skin, .3)}" transform="translate(0 6)"/></g>`;
   const head = cel(u + 'hd', g.path, skin, dk(skin, .14), -5, -3) +
     `<ellipse cx="${f1(g.cx - g.rx * .5)}" cy="${f1(g.cy - g.ry * .52)}" rx="${f1(g.rx * .28)}" ry="${f1(g.ry * .14)}" fill="${lt(skin, .4)}" opacity=".45" transform="rotate(-20 ${f1(g.cx - g.rx * .5)} ${f1(g.cy - g.ry * .52)})"/>`;
+  if (a.sex === 'robot') {
+    const m = METAL_C[a.metal], R = robotEyes(a, g, u);
+    const rb = [
+      bg ? background(a.bg, u) : '', robotTop(a, g, m, u), cl.back, robotNeck(a, g, m), cl.s,
+      robotEars(a, g, m, u), robotHead(a, g, m, u), R.r, robotMouth(a, g), mazut(a, g),
+      glasses(a, R, g), hat(a, g, u), goggles(a, g), defenders(a, g),
+    ].join('');
+    return wrap(rb, size, crop, cls);
+  }
   const body = [
     bg ? background(a.bg, u) : '', hairClip,
     H.back, cl.back, neckSvg, cl.s, H.braids || '',
@@ -675,14 +791,25 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
     H.mid, H.front, jewelry(a, g, skin), mazut(a, g),
     glasses(a, E, g), hat(a, g, u), goggles(a, g), defenders(a, g),
   ].join('');
+  return wrap(body, size, crop, cls);
+}
+function wrap(body, size, crop, cls) {
   const px = Math.round(Number(size)) || 200;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${CROPS[crop] || CROPS.full}" width="${px}" height="${px}"${cls ? ` class="${cls.replace(/[^\w -]/g, '')}"` : ''} aria-hidden="true" focusable="false">${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${CROPS[crop] || CROPS.full}" width="${px}" height="${px}"${cls ? ` class="${String(cls).replace(/[^\w -]/g, '')}"` : ''} aria-hidden="true" focusable="false">${body}</svg>`;
 }
 export const bgSvg = (id) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" aria-hidden="true" focusable="false">${background(pick(id, BG, 'mist'), 'bg' + (++U) + '_')}</svg>`;
 
 // ── Случайный персонаж (без Премиума). keep — что оставить как есть (например, пол).
+// Робот остаётся роботом (его примеряют), остальные детали — без Премиума.
 export function randomAvatar(rnd = Math.random, keep = {}) {
   const any = (arr) => arr[Math.floor(rnd() * arr.length)], ch = (p) => rnd() < p;
+  if (keep.sex === 'robot') {
+    const h = randomAvatar(rnd, { sex: 'm' });
+    return normalizeAvatar({
+      ...h, sex: 'robot', hair: keep.hair ?? h.hair, metal: Math.floor(rnd() * METAL_C.length), glow: Math.floor(rnd() * GLOW_C.length),
+      rEyes: any(R_EYES).id, rMouth: any(R_MOUTHS).id, rTop: any(R_TOPS).id,
+    }, { premium: true });
+  }
   const sex = keep.sex === 'm' || keep.sex === 'f' ? keep.sex : ch(.5) ? 'm' : 'f';
   const o = any(OUTFITS);
   const hat = ch(.22) ? any(HATS.filter((h) => h.id && !h.premium)).id : null;
