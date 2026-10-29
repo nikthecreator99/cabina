@@ -179,6 +179,14 @@ export async function adminStats() {
   return r?.ok ? { ok: true, data: r.data } : { ok: false, error: errorText(r) };
 }
 
+// Новое приглашение (только администратор): сервер возвращает код один раз, у себя хранит лишь его хеш
+export async function createInvite() {
+  const r = await rpc('admin_create_invite');
+  const code = r?.ok && typeof r.data === 'string' ? normInvite(r.data) : '';
+  if (/^[0-9A-Z]{6,32}$/.test(code)) return { ok: true, code };
+  return { ok: false, error: r?.ok ? errorText({ status: 500 }) : errorText(r) };
+}
+
 // Отметка «заходил сегодня» для статистики: не чаще раза в день, только дата, платформа и версия
 export async function touch(version, today = new Date().toISOString().slice(0, 10)) {
   const s = session();

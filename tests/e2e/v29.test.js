@@ -65,6 +65,10 @@ async function mockServer(context, { role = 'user', offline = false } = {}) {
       if (role !== 'admin') return send(400, { code: '42501', message: 'cabina: forbidden' });
       return send(200, { today: '2026-10-20', total: 2, confirmed: 2, active_1: 1, active_7: 2, active_30: 2, platforms: { web: 2 }, versions: { '2.9.0': 2 }, daily: [{ day: '2026-10-19', signup: 2, confirmed: 2, deleted: null }] });
     }
+    if (path === '/rest/v1/rpc/admin_create_invite' && bearer) {
+      if (role !== 'admin') return send(400, { code: '42501', message: 'cabina: forbidden' });
+      return send(200, '7F3A9C21B4');
+    }
     return send(401, { code: '42501', message: 'permission denied' });
   });
   return log;
@@ -182,6 +186,7 @@ test('вход, отметка «заходил сегодня» раз в де�
   await toastHas(page, /Вы вошли в аккаунт/);
   assert.match(await page.locator('.screen').innerText(), /ivan@example\.com[\s\S]*Вы вошли в аккаунт CABINA[\s\S]*На сервере о вас только/);
   assert.equal(await page.locator('[data-act=acc-stats]').count(), 0, 'обычный человек статистику не видит');
+  assert.equal(await page.locator('[data-act=acc-invite-new]').count(), 0, 'обычный человек приглашения не создаёт');
   // строка в профиле показывает почту
   await page.locator('[data-act=back]').click();
   assert.match(await page.locator('[data-page=account]').innerText(), /Вы вошли: ivan@example\.com/);
@@ -253,6 +258,25 @@ test('администратор видит статистику (только �
   const st = await sheet(page).innerText();
   assert.match(st, /2\s*аккаунта[\s\S]*подтвердили почту[\s\S]*Сайт[\s\S]*2\.9\.0[\s\S]*19\.10\.2026/);
   assert.doesNotMatch(st, /@/, 'почт в статистике нет');
+  await sheet(page).locator('button[data-close]').first().click();
+  await waitNoLayers(page);
+  // приглашение: код показывается один раз, «Скопировать» кладёт готовый текст с адресом и кодом
+  await page.evaluate(() => { window.__copied = null; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__copied = t; } } }); navigator.share = async (d) => { window.__shared = d; }; });
+  await page.locator('[data-act=acc-invite-new]').click();
+  await sheet(page).locator('.acc-code').waitFor();
+  assert.equal((await sheet(page).locator('.acc-code').innerText()).replace(/\s/g, ''), '7F3A9C21B4');
+  assert.match(await sheet(page).innerText(), /14 дней[\s\S]*одного человека/);
+  assert.equal(log.filter((r) => r.path === '/rest/v1/rpc/admin_create_invite').length, 1);
+  assert.equal(log.find((r) => r.path === '/rest/v1/rpc/admin_create_invite').auth, `Bearer ${ACCESS}`);
+  await sheet(page).locator('[data-act=inv-share]').click();
+  await page.waitForFunction(() => !!window.__shared);
+  assert.match((await page.evaluate(() => window.__shared)).text, /Код приглашения: 7F3A9C21B4/);
+  await sheet(page).locator('[data-act=inv-copy]').click();
+  await toastHas(page, /Приглашение скопировано/);
+  const copied = await page.evaluate(() => window.__copied);
+  assert.match(copied, /https:\/\/nikthecreator99\.github\.io\/cabina\/[\s\S]*Код приглашения: 7F3A9C21B4/);
+  assert.doesNotMatch(copied, /ivan@example\.com/, 'почты администратора в приглашении нет');
+  assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('7F3A9C21B4'), 'код в телефоне не сохраняется');
   await sheet(page).locator('button[data-close]').first().click();
   await waitNoLayers(page);
   // удаление: сначала вопрос, «Отмена» ничего не делает

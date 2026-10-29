@@ -187,3 +187,19 @@ test('согласие и политика: оператор указан, бе�
   assert.match(p, /больничные/);
   assert.match(OPERATOR.inn, /^\d{12}$/);
 });
+
+test('приглашение: только по входу администратора, странный ответ сервера кодом не считается', async () => {
+  assert.equal((await auth.createInvite()).ok, false, 'без входа');
+  assert.equal(calls.length, 0, 'без входа на сервер ничего не уходит');
+  mem.set('cabina-account', JSON.stringify(auth.fromAuth(authReply(Math.floor(Date.now() / 1000) + 3600))));
+  reply = () => ({ status: 200, body: '7F3A9C21B4' });
+  assert.deepEqual(await auth.createInvite(), { ok: true, code: '7F3A9C21B4' });
+  assert.equal(calls.at(-1).url, 'https://api.cabina-app.ru/rest/v1/rpc/admin_create_invite');
+  assert.match(calls.at(-1).headers.Authorization, /^Bearer /);
+  for (const body of ['<b>x</b>', '', null, { code: '7F3A9C21B4' }, '12']) {
+    reply = () => ({ status: 200, body });
+    assert.equal((await auth.createInvite()).ok, false, JSON.stringify(body));
+  }
+  reply = () => ({ status: 400, body: { code: '42501', message: 'cabina: forbidden' } });
+  assert.deepEqual(await auth.createInvite(), { ok: false, error: 'Нет доступа.' });
+});

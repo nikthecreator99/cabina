@@ -879,6 +879,7 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .acc-btns { display: grid; gap: 10px; }
 .acc-err:empty { display: none; }
 .acc-email { overflow-wrap: anywhere; }
+.acc-code { margin: 4px 0 16px; padding: 18px 12px; text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 0.08em; border-radius: 16px; background: color-mix(in srgb, var(--ok) 12%, transparent); border: 1px dashed color-mix(in srgb, var(--ok) 45%, transparent); user-select: all; overflow-wrap: anywhere; }
 .legal { display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.45; color: var(--text-2); }
 .legal p, .legal ul { margin: 0; }
 .legal ul { padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }

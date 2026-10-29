@@ -3,7 +3,7 @@
 // Аккаунт не обязателен: без него CABINA работает как раньше, записи из телефона на сервер не уходят.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
 import { legalReady, consentHtml, policyHtml } from './legal.js';
-import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats,
+import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite,
   emailOk, normInvite, PASS_MIN, linkErrorText } from './auth.js';
 
 // mode: menu | signup | login | reset | sent | reset-sent | newpass. Пароль в состоянии не храним.
@@ -52,7 +52,8 @@ function signedInHtml(s) {
         <button class="row" data-act="acc-policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>
       </div></div>
     ${A.role === 'admin' ? `<div class="group"><div class="group-title">Администратор</div>
-      <div class="panel"><button class="row" data-act="acc-stats"><span class="ico" style="--c:var(--warn)">${I.chart}</span><div class="grow"><div class="t1">Статистика</div><div class="t2">Сколько аккаунтов и заходов — только числа</div></div>${small(I.right, 18)}</button></div></div>` : ''}
+      <div class="panel"><button class="row" data-act="acc-stats"><span class="ico" style="--c:var(--warn)">${I.chart}</span><div class="grow"><div class="t1">Статистика</div><div class="t2">Сколько аккаунтов и заходов — только числа</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="acc-invite-new"><span class="ico" style="--c:var(--ok)">${I.plus}</span><div class="grow"><div class="t1">Создать приглашение</div><div class="t2">Код для одного человека, действует 14 дней</div></div>${small(I.right, 18)}</button></div></div>` : ''}
     <div class="acc-btns">
       <button class="btn btn-plain" data-act="acc-logout">Выйти из аккаунта</button>
       <button class="btn btn-danger" data-act="acc-delete">${small(I.trash, 18)} Удалить аккаунт</button>
@@ -134,6 +135,28 @@ function showStats(d) {
     <div class="hint">Только числа: почта и идентификаторы людей в статистику не попадают.</div>` }));
 }
 
+const SITE = 'https://nikthecreator99.github.io/cabina/';
+// Код показываем один раз: в телефоне его не сохраняем, на сервере остаётся только хеш
+function showInvite(code) {
+  const nice = code.replace(/(.{5})(?=.)/g, '$1 ');
+  const text = `Приглашение в CABINA.\n1. Откройте ${SITE}\n2. Профиль → «Аккаунт CABINA» → «Создать аккаунт».\n3. Код приглашения: ${code}\nКод действует 14 дней и только для одного человека.`;
+  const canShare = typeof navigator.share === 'function';
+  const el = openLayer(sheet({ title: 'Приглашение', body: `
+    <div class="acc-code num" aria-label="Код приглашения">${esc(nice)}</div>
+    <div class="notice ok">${I.shield}<div>Код действует <b>14 дней</b> и только для <b>одного человека</b>. Он показывается один раз: на сервере хранится только его зашифрованный отпечаток. Отправьте его тому, кого приглашаете.</div></div>
+    <div class="hint">Человеку нужно открыть CABINA, зайти в Профиль → «Аккаунт CABINA» → «Создать аккаунт» и ввести этот код.</div>`,
+  foot: `${canShare ? `<button class="btn btn-primary" data-act="inv-share">${small(I.share, 18)} Отправить</button>` : ''}<button class="btn ${canShare ? 'btn-plain' : 'btn-primary'}" data-act="inv-copy">Скопировать</button>` }));
+  el.querySelector('[data-act="inv-share"]')?.addEventListener('click', async () => {
+    try { await navigator.share({ title: 'Приглашение в CABINA', text }); } catch (err) { if (err?.name !== 'AbortError') toast('Не удалось открыть «Поделиться»', { error: true }); }
+  });
+  el.querySelector('[data-act="inv-copy"]').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(text); toast('Приглашение скопировано'); } catch { toast('Не удалось скопировать. Перепишите код вручную', { error: true, ms: 5000 }); }
+  });
+  return el;
+}
+
+let inviting = false;
+
 export async function accountClick(act, b, ctx) {
   if (!act.startsWith('acc-')) return false;
   switch (act) {
@@ -172,6 +195,15 @@ export async function accountClick(act, b, ctx) {
     case 'acc-stats': {
       const r = await adminStats();
       if (r.ok) showStats(r.data || {}); else toast(r.error, { error: true, ms: 5000 });
+      break;
+    }
+    case 'acc-invite-new': {
+      if (inviting) break;
+      inviting = true;
+      try {
+        const r = await createInvite();
+        if (r.ok) showInvite(r.code); else toast(r.error, { error: true, ms: 5000 });
+      } finally { inviting = false; }
       break;
     }
     case 'acc-logout': {
