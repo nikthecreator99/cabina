@@ -255,7 +255,8 @@ function hairParts(a, g, hc, u, clip) {
     // контур: снизу слева вверх, через макушку и вниз справа (sideP(-1) уже идёт снизу вверх)
     const pts = [[cx - W * .96 + 3, yb], ...sideP(-1), ...top, ...sideP(1), [cx + W * .96 - 3, yb]];
     const path = smooth(pts, false) + `L${f1(cx + nw)},${f1(yb)}L${f1(cx + nw)},${cy}L${f1(cx - nw)},${cy}L${f1(cx - nw)},${f1(yb)}Z`;
-    out.back += `<g clip-path="url(#${clip})">${cel(u + 'hb', path, dk(hc, .12), dk(hc, .34), -3, -3)}</g>`;
+    // тень без сдвига вбок: иначе с одной стороны пряди и у шеи появлялась тёмная полоска, а с другой нет
+    out.back += `<g clip-path="url(#${clip})">${cel(u + 'hb', path, dk(hc, .12), dk(hc, .34), 0, -3)}</g>`;
   }
   // элементы позади шапки волос
   if (S.extra === 'bun') { const r = a.sex === 'f' ? 13 : 10, y = g.top - vol - r * .55; out.mid += `<g clip-path="url(#${clip})">${cel(u + 'bn', circ(cx + 1, y, r), hc, sh)}<path d="M${cx - r * .7},${f1(y + r * .75)} Q${cx},${f1(y + r * 1.05)} ${cx + r * .7},${f1(y + r * .75)}" stroke="${dk(hc, .45)}" stroke-width="2.4" fill="none" stroke-linecap="round"/></g>`; }
