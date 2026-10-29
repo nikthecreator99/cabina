@@ -58,6 +58,8 @@ test('ответы настоящего сервера понятны челов
   const e = (status, body) => auth.errorText({ status, data: body });
   assert.match(e(500, { code: 'P0001', message: 'cabina: invite required' }), /Код приглашения неверный/);
   assert.match(e(500, { code: 'P0001', message: 'cabina: consent required' }), /Без согласия/);
+  assert.match(e(422, { code: 422, error_code: 'same_password', msg: 'New password should be different from the old password.' }), /уже был/);
+  assert.match(e(422, { msg: 'New password should be different from the old password.' }), /уже был/);
   assert.match(e(422, { code: 422, error_code: 'weak_password', msg: 'Password should be at least 10 characters.' }), /не меньше 10/);
   assert.match(e(400, { error_code: 'invalid_credentials', msg: 'Invalid login credentials' }), /Неверная почта или пароль/);
   assert.match(e(400, { error_code: 'email_not_confirmed' }), /не подтверждена/);

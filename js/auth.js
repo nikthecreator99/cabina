@@ -75,11 +75,12 @@ export function errorText(res) {
   if (/invite required/.test(msg)) return 'Код приглашения неверный, уже использован или устарел.';
   if (/consent required/.test(msg)) return 'Без согласия на обработку данных аккаунт создать нельзя.';
   if (/Database error saving new user/i.test(msg)) return 'Не удалось создать аккаунт. Проверьте код приглашения.';
+  // «New password should be different…» тоже начинается с «password should» — поэтому раньше проверки длины
+  if (code === 'same_password' || /different from the old password/i.test(msg)) return 'Этот пароль у вас уже был. Придумайте другой.';
   if (code === 'weak_password' || /Password should/i.test(msg)) return `Пароль слишком простой: нужно не меньше ${PASS_MIN} символов.`;
   if (code === 'user_already_exists' || code === 'email_exists' || /already registered/i.test(msg)) return 'Эта почта уже зарегистрирована. Войдите или восстановите пароль.';
   if (code === 'invalid_credentials' || /Invalid login credentials/i.test(msg)) return 'Неверная почта или пароль.';
-  if (code === 'email_not_confirmed' || /Email not confirmed/i.test(msg)) return 'Почта ещё не подтверждена. Откройте письмо от CABINA и нажмите ссылку.';
-  if (code === 'same_password') return 'Новый пароль совпадает со старым.';
+  if (code === 'email_not_confirmed' || /Email not confirmed/i.test(msg)) return 'Почта ещё не подтверждена. Введите код из письма от CABINA.';
   if (code === 'email_address_invalid' || /invalid.*email|email.*invalid/i.test(msg)) return 'Проверьте адрес почты.';
   if (res.status === 429 || /rate.?limit/i.test(code + msg)) return 'Слишком много попыток. Подождите несколько минут и попробуйте снова.';
   if (code === 'signup_disabled') return 'Регистрация сейчас закрыта.';
