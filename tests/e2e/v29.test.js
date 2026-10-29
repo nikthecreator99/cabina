@@ -191,7 +191,9 @@ test('вход, отметка «заходил сегодня» раз в де�
   await page.locator('[data-act=back]').click();
   assert.match(await page.locator('[data-page=account]').innerText(), /Вы вошли: ivan@example\.com/);
   // перезапуск: вход сохранился, «заходил сегодня» — один раз в день
-  for (let i = 0; i < 2; i++) { await page.reload(); await page.waitForSelector('.screen'); await page.waitForTimeout(300); }
+  await page.reload(); await page.waitForSelector('.screen');
+  await page.waitForFunction(() => !!localStorage.getItem('cabina-account-touch'));
+  await page.reload(); await page.waitForSelector('.screen'); await page.waitForTimeout(500);
   const touches = log.filter((r) => r.path === '/rest/v1/rpc/touch');
   assert.equal(touches.length, 1);
   assert.deepEqual(touches[0].body, { p_platform: 'web', p_version: VERSION });

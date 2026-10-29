@@ -266,9 +266,9 @@ export async function accountSubmit(e, ctx) {
     return true;
   }
   if (A.mode === 'signup') { A.invite = ''; A.mode = r.signedIn ? 'menu' : 'sent'; }
-  else if (A.mode === 'login') { A.mode = 'menu'; toast('Вы вошли в аккаунт'); await accountEnter(); }
+  else if (A.mode === 'login') { A.mode = 'menu'; toast('Вы вошли в аккаунт'); ctx.rerender(); window.scrollTo(0, 0); await accountEnter(); }
   else if (A.mode === 'reset') A.mode = 'reset-sent';
-  else if (A.mode === 'newpass') { A.mode = 'menu'; toast('Пароль изменён'); await accountEnter(); }
+  else if (A.mode === 'newpass') { A.mode = 'menu'; toast('Пароль изменён'); ctx.rerender(); window.scrollTo(0, 0); await accountEnter(); }
   ctx.rerender(); window.scrollTo(0, 0);
   return true;
 }
