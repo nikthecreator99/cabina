@@ -1,6 +1,7 @@
 // Экран «Аккаунт» (Профиль → Аккаунт CABINA): регистрация по приглашению с согласием, вход, сброс пароля,
 // «Скачать мои данные с сервера», выход и удаление аккаунта; для администратора — статистика (только числа).
 // Аккаунт не обязателен: без него CABINA работает как раньше, записи из телефона на сервер не уходят.
+// С аккаунтом можно включить «Коллеги» (colleagues.js): тогда на сервер уходят карточка и статус — только по выбору человека.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
 import { legalReady, consentHtml, policyHtml } from './legal.js';
 import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
@@ -62,16 +63,16 @@ const modeBtn = (mode, label) => `<button class="link-btn" data-act="acc-mode" d
 const consentBox = (id, text, act, icon, btn) => `<div class="pay-field"><div class="acc-consent"><input type="checkbox" id="${id}"><label for="${id}">${text}</label></div>
           <div class="acc-docs"><button type="button" class="link-btn" data-act="${act}">${small(icon, 16)} ${btn}</button></div></div>`;
 const docsBtns = `<div class="acc-docs"><button type="button" class="link-btn" data-act="acc-consent-doc">${small(I.shield, 16)} Согласие</button><button type="button" class="link-btn" data-act="acc-policy">${small(I.book, 16)} Политика</button></div>`;
-const localNote = `<div class="notice ok">${I.shield}<div><b>Аккаунт не обязателен.</b> Без него CABINA работает как раньше. Поездки, заработок, отвлечения, документы и профиль хранятся только в этом телефоне и на сервер не отправляются — с аккаунтом тоже.</div></div>`;
+const localNote = `<div class="notice ok">${I.shield}<div><b>Аккаунт не обязателен.</b> Без него CABINA работает как раньше. Поездки, заработок, отвлечения и документы хранятся только в этом телефоне и на сервер не отправляются — с аккаунтом тоже.</div></div>`;
 
 function signedInHtml(s) {
   return `<div class="panel"><div class="row"><span class="ico" style="--c:var(--ok)">${I.user}</span>
       <div class="grow"><div class="t1 acc-email">${esc(s.email)}</div><div class="t2">Вы вошли в аккаунт CABINA</div></div></div></div>
-    <div class="notice ok">${I.shield}<div><b>На сервере о вас только:</b> почта, дата регистрации, дата последнего захода, тип устройства и версия приложения. Поездки, заработок, отвлечения, документы и профиль остаются в этом телефоне.</div></div>
+    <div class="notice ok">${I.shield}<div><b>На сервере о вас только:</b> почта, дата регистрации, дата последнего захода, тип устройства и версия приложения. Если вы включили «Коллеги» — ещё имя, должность, то, что вы разрешили в «Приватности», список коллег и текущий статус. Поездки, заработок, отвлечения и документы остаются в этом телефоне.</div></div>
     <div class="group"><div class="group-title">Мои данные</div>
       <div class="panel">
         <button class="row" data-act="acc-export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Скачать мои данные с сервера</div><div class="t2">Всё, что сервер знает о вас, одним файлом</div></div>${small(I.right, 18)}</button>
-        <button class="row" data-act="acc-consent-doc"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Согласие на обработку данных</div><div class="t2">Которое вы дали при регистрации</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="acc-consent-doc"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Согласие на обработку данных</div><div class="t2">Действующая редакция</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="acc-policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>
       </div></div>
     ${A.role === 'admin' ? `<div class="group"><div class="group-title">Администратор</div>
@@ -116,7 +117,7 @@ function formHtml() {
       <div class="acc-docs"><button class="link-btn" data-act="acc-resend">Отправить код ещё раз</button>${modeBtn('login', 'Ко входу')}</div>`;
     default: return `${localNote}
       <div class="panel"><div class="row"><span class="ico" style="--c:var(--night)">${I.info}</span><div class="grow"><div class="t1">Зачем аккаунт</div>
-        <div class="t2">Сейчас идёт закрытое испытание. Позже через аккаунт можно будет по вашему выбору общаться с коллегами.</div></div></div></div>
+        <div class="t2">Сейчас идёт закрытое испытание. С аккаунтом можно найти коллег и по вашему выбору показывать им свой статус.</div></div></div></div>
       <div class="acc-btns"><button class="btn btn-primary" data-act="acc-mode" data-mode="signup">Создать аккаунт</button>
         <button class="btn btn-ghost" data-act="acc-mode" data-mode="login">Войти</button></div>
       ${docsBtns}`;
@@ -246,7 +247,7 @@ export async function accountClick(act, b, ctx) {
     case 'acc-delete': {
       const ok = await confirmDialog({
         title: 'Удалить аккаунт?',
-        text: 'С сервера сразу удалится всё, что он о вас знает: почта, согласие, даты входа. Из резервных копий сервера — не позднее чем через 14 дней. Это и есть отзыв согласия. Записи в этом телефоне не пострадают.',
+        text: 'С сервера сразу удалится всё, что он о вас знает: почта, согласие, даты входа, а также карточка, статус и список коллег. Из резервных копий сервера — не позднее чем через 14 дней. Это и есть отзыв согласия. Записи в этом телефоне не пострадают.',
         ok: 'Удалить аккаунт',
       });
       if (!ok) break;

@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -26,9 +26,10 @@ import { careerSub, renderCareer, careerClick, careerChange, loyaltyReminder, re
 import { medReminder, medBannerHtml, medClick } from './med.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion } from './account.js';
 import { consumeAuthRedirect, touch } from './auth.js';
+import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake } from './colleagues.js';
 import { legalReady, policyHtml } from './legal.js';
 
-export const VERSION = '2.14.1';
+export const VERSION = '2.15.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -413,7 +414,7 @@ function renderSettings() {
         <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные будут заменены</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
         <div class="row"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Локальное хранение</div>
           <div class="t2">${isMemoryMode() ? 'Хранилище браузера недоступно — данные пропадут после закрытия. Откройте CABINA в обычном (не приватном) окне.'
-            : `${legalReady() ? 'Записи хранятся только в этом телефоне и по сети не передаются. Аккаунт — по желанию: на сервере в России только почта и даты входа.' : 'Без регистрации и серверов. Данные не передаются по сети.'}${storageInfo ? ` Занято ${fmtSize(storageInfo.usage)}${storageInfo.persisted ? ' · защищено от автоочистки' : ''}.` : ''}`}</div></div></div>
+            : `${legalReady() ? 'Записи хранятся только в этом телефоне и по сети не передаются. Аккаунт — по желанию: на сервере в России почта и даты входа, а если вы включили «Коллеги» — имя, коллеги и текущий статус.' : 'Без регистрации и серверов. Данные не передаются по сети.'}${storageInfo ? ` Занято ${fmtSize(storageInfo.usage)}${storageInfo.persisted ? ' · защищено от автоочистки' : ''}.` : ''}`}</div></div></div>
       </div>
     </div>
     <div class="group"><div class="group-title">Производственный календарь</div>
@@ -441,7 +442,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, account: renderAccount };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, account: renderAccount, colleagues: renderColleagues };
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
 let tabFace = { key: null, icon: null };
 function renderTabbar() {
@@ -466,7 +467,7 @@ function render({ still = false } = {}) {
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
-  else app.innerHTML = `<div class="screen">${renderProfile()}</div>`;
+  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml())}</div>`;
   renderTabbar();
   scheduleTours();
 }
@@ -496,6 +497,7 @@ function go(name) {
   if (name === 'search') { V.tripQ = ''; setTimeout(() => app.querySelector('#trip-q')?.focus(), 50); }
   if (name === 'settings') refreshStorage().then(() => page() === 'settings' && rerender());
   if (name === 'account') accountEnter().then(() => page() === 'account' && rerender());
+  if (name === 'colleagues') setTimeout(() => app.querySelector('#col-name:placeholder-shown')?.focus(), 50);
   V.pages.push(name);
   render();
   window.scrollTo(0, 0);
@@ -519,15 +521,17 @@ function scheduleTours() {
     else if (p === 'profile-edit') profileEditTour();
     else if (p === 'avatar') { avatarTour(); avatarCharsTour(); }
     else if (p === 'career') careerTour();
+    else if (p === 'colleagues') { if (app.querySelector('#col-form')) colleaguesPageTour(); }
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
-    else if (V.tab === 'profile') { profileTour(); if (legalReady()) accountTileTour(); }
+    else if (V.tab === 'profile') { profileTour(); if (legalReady()) accountTileTour(); if (app.querySelector('.col-search')) colleaguesTour(); }
   }, 500);
 }
 export { scheduleTours };
 // Изменения данных: поле поиска не перерисовываем, чтобы не сбивать набор текста
 onChange(() => rerender());
+initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.length) || page() === 'colleagues' });
 
 function openTariffsPage() { go('work'); V.pages.push('tariffs'); render(); }
 setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => (document.getElementById(id) || document.getElementById('pay-avg'))?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
@@ -589,6 +593,8 @@ app.addEventListener('click', async (e) => {
   if (!b) return;
   const { act, id } = b.dataset;
   if (await workClick(act, b, ctx)) return;
+  // «Меня можно найти» и «Статус» — с согласием и сервером, поэтому раньше обычных переключателей профиля
+  if (await colleaguesClick(act, b)) return;
   if (await profileClick(act, b, ctx)) return;
   if (await avatarClick(act, b, ctx)) return;
   if (await careerClick(act, b, ctx)) return;
@@ -671,7 +677,7 @@ app.addEventListener('click', async (e) => {
     default: break;
   }
 });
-app.addEventListener('submit', (e) => { accountSubmit(e, ctx); });
+app.addEventListener('submit', (e) => { if (e.target.id === 'col-form') colleaguesSubmit(e); else accountSubmit(e, ctx); });
 
 // карточка итогов — тоже кнопка (клавиатура)
 app.addEventListener('keydown', (e) => {
@@ -680,6 +686,7 @@ app.addEventListener('keydown', (e) => {
 
 app.addEventListener('input', (e) => {
   if (avatarInput(e.target)) return;
+  if (colleaguesInput(e.target)) return;
   if (fixInput(e.target)) return;
   if (e.target.id === 'trip-q') {
     V.tripQ = e.target.value;
@@ -761,12 +768,14 @@ async function start() {
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
   // аккаунт: отметка «заходил сегодня» для статистики (раз в день; без аккаунта ничего не отправляется)
   touch(VERSION).catch(() => {});
+  // коллеги: свежий список и статус для них (только с аккаунтом и только то, что человек включил)
+  colleaguesWake();
   // обновление календаря отдельно от приложения
   fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); rerender(); } }).catch(() => {});
   // обновлять «сейчас» (поездка «в пути», статус отдыха) раз в минуту
   // раз в минуту: время «в пути», остаток отдыха и статус в профиле
-  setInterval(() => { if ((V.tab === 'home' || V.tab === 'profile') && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); }, 60000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !layerCount()) rerender(); });
+  setInterval(() => { if ((V.tab === 'home' || V.tab === 'profile') && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); colleaguesTick(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { colleaguesWake(); if (!layerCount()) rerender(); } });
   registerSW();
 }
 

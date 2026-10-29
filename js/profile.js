@@ -1,4 +1,4 @@
-// Профиль (основа будущей сети). Пока всё хранится только в этом телефоне и никому не показывается.
+// Профиль. Хранится в этом телефоне; коллегам (с 2.15, colleagues.js) уходит только то, что человек включил в «Приватности».
 // Экран «Профиль» — просмотр; изменить персонажа, имя, должность, депо и приватность — «Редактировать профиль».
 // С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
 import { I, esc, small, pageHead, toast, confirmDialog, plural, whenShort, dayMonth, MONTHS_PREP } from './ui.js';
@@ -13,21 +13,25 @@ import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { premiumOk, hasAvatar } from './avatar-edit.js';
 
 const CLASSES = ['3', '2', '1'];
+// Должность в профиле: для расчёта заработка важны только помощник и машинист, «Другая» — для поиска коллег
+export const PROFILE_ROLES = { ...ROLES, other: 'Другая' };
 const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 
 const safePhoto = (v) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(String(v || ''));
 
-// Что коллеги смогут увидеть, когда в CABINA появится общение. По умолчанию — ничего.
+// Что видят коллеги (раздел «Коллеги», нужен аккаунт). По умолчанию — ничего.
+// «Меня можно найти» и «Статус» включаются в colleagues.js: там согласие и связь с сервером.
 export const PRIVACY = [
-  { k: 'status', label: 'Статус', hint: 'В пути, на отдыхе, на выходном или на отвлечении.' },
+  { k: 'find', label: 'Меня можно найти', hint: 'Коллеги найдут вас по имени и смогут предложить стать коллегами. Нужен аккаунт CABINA и отдельное согласие.' },
+  { k: 'status', label: 'Статус', hint: 'Только коллегам: в пути, на отдыхе, на выходном или на отвлечении. Без точного времени явки и номера поезда.' },
   { k: 'depot', label: 'Депо', hint: 'Чтобы вас могли найти коллеги из вашего депо.' },
   { k: 'avatar', label: 'Персонаж', hint: 'Без этого коллеги увидят только первые буквы имени.' },
-  { k: 'phone', label: 'Номер телефона', hint: 'Только тем коллегам, кого вы сами добавите. Без этого номер не увидит никто.' },
+  { k: 'phone', label: 'Номер телефона', hint: 'Пока номер никому не передаётся, даже коллегам.' },
 ];
 // До 2.12 вместо персонажа было фото: прежний выбор «показывать фото» переходит к персонажу
 export function privacyOf(p = S.profile) {
   const { photo, ...pv } = p.privacy || {};
-  return { status: false, depot: false, avatar: photo === true, phone: false, ...pv };
+  return { find: false, status: false, depot: false, avatar: photo === true, phone: false, ...pv };
 }
 
 export function avatarHtml(p = S.profile, size = 96) {
@@ -36,38 +40,55 @@ export function avatarHtml(p = S.profile, size = 96) {
     : initials(p.name) ? `<span class="ava-txt">${esc(initials(p.name))}</span>` : I.user;
 }
 
-const subLine = (p) => [ROLES[p.role] + (p.role === 'driver' && p.klass ? `, ${p.klass} класс` : ''), p.depot ? `депо ${p.depot}` : ''].filter(Boolean).join(' · ');
+const subLine = (p) => [ROLES[p.role] ? ROLES[p.role] + (p.role === 'driver' && p.klass ? `, ${p.klass} класс` : '') : '', p.depot ? `депо ${p.depot}` : ''].filter(Boolean).join(' · ');
 
 // Статус: в пути → на отвлечении → на выходном → на отдыхе в пункте оборота / жду явку → между поездками.
+// statusFacts — что происходит (без текста); из этого строится строка в профиле и то, что увидят коллеги (colleagues.js).
 // null — пока нечего показать. Причину отвлечения статус не называет: больничный — это сведения о здоровье.
-// Станцию пишем как есть, без склонения («На отдыхе · Сумский Посад»): склонять названия станций надёжно нельзя.
-// «до 15:00», а не «до сегодня, 15:00»
-const when = (ms, now) => whenShort(ms, now).replace(/^сегодня, /, '');
-export function profileStatus(now = nowLocal()) {
+export function statusFacts(now = nowLocal()) {
   const live = liveTrip();
-  // «В пути: Сумский Посад → Малошуйка · с 05:40» — откуда и куда
-  const path = (t) => { const e = routeEnds(t); return e ? `${e.from} → ${e.to}` : routeOf(t); };
-  if (live && isPending(live, now)) return { kind: 'soon', label: 'Скоро явка', sub: [whenShort(statsOf(live).start, now), path(live)].filter(Boolean).join(' · ') };
-  if (live) return { kind: 'trip', label: 'В пути', sub: [path(live), `с\u00a0${when(statsOf(live).start, now)}`].filter(Boolean).join(' · ') };
+  if (live && isPending(live, now)) return { kind: 'soon', trip: live, start: statsOf(live).start };
+  if (live) return { kind: 'trip', trip: live, start: statsOf(live).start };
   const today = dateKeyOf(now);
   const abs = S.absences.find((a) => a.start <= today && a.end >= today);
-  if (abs) return { kind: 'abs', label: 'На отвлечении', sub: `до ${dayMonth(parseLocal(`${abs.end}T00:00`))} включительно` };
+  if (abs) return { kind: 'abs', end: abs.end };
   const off = dayOffIntervals().find((x) => x.s <= now && now < x.e);
-  if (off) return { kind: 'dayoff', label: 'На выходном', sub: `до ${when(off.e, now)}` };
+  if (off) return { kind: 'dayoff', until: off.e };
   if (!S.trips.length) return null;
   // после поездки с отдыхом в пункте оборота: «На отдыхе», а когда отдых вышел — «Жду явку» (до 48 ч)
   let last = null;
   for (const t of S.trips) { const st = statsOf(t); if (st.end <= now && (!last || st.end > statsOf(last).end)) last = t; }
   if (last?.restType === 'turnaround') {
     const r = chosenRest(last);
-    if (r && now < r.until) return { kind: 'rest', label: 'На отдыхе', sub: [r.house, `до ${when(r.until, now)}`].filter(Boolean).join(' · ') };
-    if (r && now - statsOf(last).end <= OVERREST_MAX) return { kind: 'wait', label: 'Жду явку', sub: r.house || '' };
+    if (r && now < r.until) return { kind: 'rest', house: r.house || '', until: r.until };
+    if (r && now - statsOf(last).end <= OVERREST_MAX) return { kind: 'wait', house: r.house || '' };
   }
   const rest = currentRest(now);
-  return { kind: 'between', label: 'Между поездками', sub: rest ? `${rest.label.toLowerCase()} · до ${when(rest.until, now)}` : '' };
+  return { kind: 'between', rest: rest ? { kind: rest.kind, label: rest.label, until: rest.until } : null };
 }
 
-export function renderProfile() {
+// Станцию пишем как есть, без склонения («На отдыхе · Сумский Посад»): склонять названия станций надёжно нельзя.
+// «до 15:00», а не «до сегодня, 15:00»
+const when = (ms, now) => whenShort(ms, now).replace(/^сегодня, /, '');
+export function profileStatus(now = nowLocal()) {
+  const f = statusFacts(now);
+  if (!f) return null;
+  // «В пути: Сумский Посад → Малошуйка · с 05:40» — откуда и куда
+  const path = (t) => { const e = routeEnds(t); return e ? `${e.from} → ${e.to}` : routeOf(t); };
+  const st = (label, sub = '') => ({ kind: f.kind, label, sub });
+  switch (f.kind) {
+    case 'soon': return st('Скоро явка', [whenShort(f.start, now), path(f.trip)].filter(Boolean).join(' · '));
+    case 'trip': return st('В пути', [path(f.trip), `с\u00a0${when(f.start, now)}`].filter(Boolean).join(' · '));
+    case 'abs': return st('На отвлечении', `до ${dayMonth(parseLocal(`${f.end}T00:00`))} включительно`);
+    case 'dayoff': return st('На выходном', `до ${when(f.until, now)}`);
+    case 'rest': return st('На отдыхе', [f.house, `до ${when(f.until, now)}`].filter(Boolean).join(' · '));
+    case 'wait': return st('Жду явку', f.house);
+    default: return st('Между поездками', f.rest ? `${f.rest.label.toLowerCase()} · до ${when(f.rest.until, now)}` : '');
+  }
+}
+
+// colleagues — раздел «Коллеги» (colleagues.js собирает его в app.js: так модули не зависят друг от друга по кругу)
+export function renderProfile(colleagues = '') {
   const p = S.profile;
   const st = profileStatus();
   const now = new Date(nowLocal());
@@ -92,8 +113,9 @@ export function renderProfile() {
       <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.edit, 16)} Редактировать профиль</button>
     </section>
     ${accountRowHtml()}
+    ${colleagues}
     ${tiles}
-    <div class="notice ok">${I.shield}<div><b>Профиль хранится только в этом телефоне</b> и никому не показывается. Он попадает в резервную копию — не пересылайте её другим людям.</div></div>`;
+    <div class="notice ok">${I.shield}<div><b>Профиль хранится в этом телефоне.</b> Коллеги видят только то, что вы сами включили в «Приватности». Профиль попадает в резервную копию — не пересылайте её другим людям.</div></div>`;
 }
 
 export function renderProfileEdit() {
@@ -108,24 +130,24 @@ export function renderProfileEdit() {
     <div class="panel pay-panel">
       <div class="pay-field"><label for="pr-name">Имя</label><input class="input" id="pr-name" maxlength="60" autocomplete="name" placeholder="Например, Иван" value="${esc(p.name)}"></div>
       <div class="pay-field"><div class="label">Должность</div>
-        <div class="seg" id="pr-role">${Object.entries(ROLES).map(([k, v]) => `<button data-act="pr-role" data-role="${k}" aria-pressed="${p.role === k}">${v}</button>`).join('')}</div>
+        <div class="seg" id="pr-role">${Object.entries(PROFILE_ROLES).map(([k, v]) => `<button data-act="pr-role" data-role="${k}" aria-pressed="${p.role === k}">${v}</button>`).join('')}</div>
         <div class="hint">Машинисту можно указать класс — от него считается надбавка за класс.</div></div>
       ${p.role === 'driver' ? `<div class="pay-field"><div class="label">Класс</div>
         <div class="seg" id="pr-klass">${CLASSES.map((k) => `<button data-act="pr-klass" data-klass="${k}" aria-pressed="${p.klass === k}">${k} класс</button>`).join('')}</div></div>` : ''}
       <div class="pay-field"><label for="pr-depot">Депо</label><input class="input" id="pr-depot" maxlength="60" autocomplete="off" placeholder="Название вашего депо" value="${esc(p.depot)}"></div>
       <div class="pay-field"><label for="pr-phone">Номер телефона</label><input class="input" id="pr-phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" placeholder="+7 900 000-00-00" value="${esc(p.phone)}">
-        <div class="hint">Хранится только в этом телефоне. Коллеги увидят его, только если вы разрешите ниже.</div></div>
+        <div class="hint">Хранится только в этом телефоне и никому не передаётся.</div></div>
     </div>
     <div class="group-title">Приватность: что увидят коллеги</div>
     <div class="panel" id="pr-privacy">
       ${PRIVACY.map((f) => `<div class="row"><div class="grow"><div class="t1">${f.label}</div><div class="t2">${f.hint}</div></div>
         <button class="switch" role="switch" data-act="pr-priv" data-k="${f.k}" aria-checked="${pv[f.k]}" aria-label="Показывать коллегам: ${f.label.toLowerCase()}"></button></div>`).join('')}
     </div>
-    <div class="notice ok">${I.shield}<div><b>Сейчас коллеги не видят ничего</b>: профиль хранится только в этом телефоне. Эти настройки начнут действовать, когда в CABINA появится общение. Причину отвлечения — больничный, отпуск или медкомиссия — коллеги не увидят никогда, только «На отвлечении».</div></div>`;
+    <div class="notice ok">${I.shield}<div><b>Коллеги — только с аккаунтом и только по вашему выбору.</b> На наш сервер в России уходят имя, должность и то, что вы включили выше. Поездки, заработок, номер поезда и локомотива, точное время явки и телефон не уходят. Причину отвлечения — больничный, отпуск или медкомиссия — коллеги не увидят никогда, только «На отвлечении».</div></div>`;
 }
 
 export async function profileClick(act, b) {
-  if (act === 'pr-role') { await saveProfile({ role: b.dataset.role }); return true; }
+  if (act === 'pr-role') { await saveProfile({ role: PROFILE_ROLES[b.dataset.role] ? b.dataset.role : 'assistant' }); return true; }
   if (act === 'pr-klass') { await saveProfile({ klass: S.profile.klass === b.dataset.klass ? '' : b.dataset.klass }); return true; }
   if (act === 'pr-priv') {
     const pv = privacyOf();

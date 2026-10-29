@@ -190,7 +190,7 @@ test('профиль: имя, должность, класс, старое фо�
   assert.match(await text(page, '.profile-card'), /Иван[\s\S]*Машинист, 2 класс · депо Тестовое/);
   const src = await page.locator('.avatar.view img').getAttribute('src');
   assert.match(src, /^data:image\/jpeg;base64,/);
-  assert.match(await text(page, '.notice.ok'), /только в этом телефоне/);
+  assert.match(await text(page, '.notice.ok'), /Профиль хранится в этом телефоне[\s\S]*только то, что вы сами включили/);
   // 2.6: набор ставок один, без выбора должности; машинисту видна надбавка за класс
   await workPage(page, 'tariffs');
   assert.equal(await page.locator('[data-act=pay-role]').count(), 0);

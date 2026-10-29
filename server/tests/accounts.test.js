@@ -4,6 +4,10 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startDb } from './db.js';
 
+// Текущая редакция согласия (с шагом 2 «Коллеги» — privacy-2) и прошлая, которая для регистрации уже не подходит
+const CONSENT = 'privacy-2';
+const OLD = 'privacy-1';
+
 let db;
 before(async () => { db = await startDb(); });
 after(async () => { await db?.stop(); });
@@ -31,7 +35,7 @@ const invite = () => {
 const signup = (email, meta) => db.sql(
   `insert into auth.users (email, raw_user_meta_data) values ('${email}', '${JSON.stringify(meta)}'::jsonb) returning id`, 'auth');
 const register = (email, extra = {}) => {
-  const r = signup(email, { consent: 'privacy-1', invite: invite(), platform: 'web', version: '2.8.0', ...extra });
+  const r = signup(email, { consent: CONSENT, invite: invite(), platform: 'web', version: '2.8.0', ...extra });
   assert.ok(r.ok, r.err);
   return r.rows[0];
 };
@@ -40,31 +44,31 @@ test('без согласия аккаунт не создаётся', () => {
   const r = signup('a1@example.test', { invite: invite(), platform: 'web' });
   assert.ok(!r.ok);
   assert.match(r.err, /consent required/);
-  const r2 = signup('a1@example.test', { consent: 'privacy-0', invite: invite() });
+  const r2 = signup('a1@example.test', { consent: OLD, invite: invite() });
   assert.match(r2.err, /consent required/, 'старая редакция согласия не подходит');
   assert.deepEqual(q(`select count(*) from auth.users where email = 'a1@example.test'`), ['0']);
 });
 
 test('в закрытом режиме без живого приглашения аккаунт не создаётся', () => {
-  assert.match(signup('a2@example.test', { consent: 'privacy-1' }).err, /invite required/);
-  assert.match(signup('a2@example.test', { consent: 'privacy-1', invite: 'NOSUCHCODE' }).err, /invite required/);
+  assert.match(signup('a2@example.test', { consent: CONSENT }).err, /invite required/);
+  assert.match(signup('a2@example.test', { consent: CONSENT, invite: 'NOSUCHCODE' }).err, /invite required/);
   const code = invite();
   q(`update private.invites set expires_at = now() - interval '1 minute' where code_hash = private.hash_code('${code}')`);
-  assert.match(signup('a2@example.test', { consent: 'privacy-1', invite: code }).err, /invite required/, 'просроченное');
+  assert.match(signup('a2@example.test', { consent: CONSENT, invite: code }).err, /invite required/, 'просроченное');
   assert.deepEqual(q(`select count(*) from auth.users where email = 'a2@example.test'`), ['0']);
 });
 
 test('регистрация по приглашению: профиль и согласие созданы, лишнее не сохранено, код одноразовый', () => {
   const code = invite();
-  const r = signup('a3@example.test', { consent: 'privacy-1', invite: code.toLowerCase(), platform: 'android', version: '2.8.0', depot: 'лишнее' });
+  const r = signup('a3@example.test', { consent: CONSENT, invite: code.toLowerCase(), platform: 'android', version: '2.8.0', depot: 'лишнее' });
   assert.ok(r.ok, r.err);
   const id = r.rows[0];
   assert.deepEqual(q(`select role, platform, app_version, last_seen is not null from public.profiles where id = '${id}'`), ['user|android|2.8.0|t']);
-  assert.deepEqual(q(`select document from public.consents where user_id = '${id}'`), ['privacy-1']);
+  assert.deepEqual(q(`select document from public.consents where user_id = '${id}'`), [CONSENT]);
   assert.deepEqual(q(`select raw_user_meta_data from auth.users where id = '${id}'`), ['{}'], 'код и прочее не хранятся');
   assert.deepEqual(q(`select used_by from private.invites where code_hash = private.hash_code('${code}')`), [id]);
   assert.deepEqual(q(`select count(*) from private.invites where code_hash = '${code}'`), ['0'], 'сам код не хранится');
-  assert.match(signup('a4@example.test', { consent: 'privacy-1', invite: code }).err, /invite required/, 'второй раз тем же кодом');
+  assert.match(signup('a4@example.test', { consent: CONSENT, invite: code }).err, /invite required/, 'второй раз тем же кодом');
 });
 
 test('странная платформа и версия не сохраняются', () => {
@@ -97,7 +101,7 @@ test('напрямую в таблицы писать нельзя: ни себ�
   const other = register('c2@example.test');
   denied(`update public.profiles set role = 'admin' where id = '${me}'`, me);
   denied(`delete from public.profiles where id = '${other}'`, me);
-  denied(`insert into public.consents (user_id, document) values ('${other}', 'privacy-1')`, me);
+  denied(`insert into public.consents (user_id, document) values ('${other}', '${CONSENT}')`, me);
   denied(`delete from public.consents where user_id = '${me}'`, me);
   denied('select * from private.invites', me);
   denied('select * from private.stats_daily', me);
@@ -124,7 +128,7 @@ test('выгрузка своих данных: всё о себе и ничег
   const data = JSON.parse(q('select public.export_my_data()', me)[0]);
   assert.equal(data.email, 'e1@example.test');
   assert.equal(data.consents.length, 1);
-  assert.equal(data.consents[0].document, 'privacy-1');
+  assert.equal(data.consents[0].document, CONSENT);
   assert.ok(!JSON.stringify(data).includes('e2@example.test'));
 });
 

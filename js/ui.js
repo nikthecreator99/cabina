@@ -51,6 +51,7 @@ export const I = {
   wallet: sv('<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16.5" height="11" rx="2.5"/><path d="M16 13.5h1.5"/>'),
   menu: sv('<path d="M4 7h16M4 12h16M4 17h16"/>'),
   user: sv('<circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/>'),
+  users: sv('<circle cx="9" cy="8.5" r="3.3"/><path d="M2.8 19.5c1-3.2 3.3-4.9 6.2-4.9s5.2 1.7 6.2 4.9"/><path d="M15.5 5.4a3.3 3.3 0 0 1 0 6.3M17.6 14.8c1.8.6 3 2.1 3.6 4.7"/>'),
   chart: sv('<path d="M4 20h16"/><rect x="6" y="11" width="3" height="7" rx="1"/><rect x="11" y="6" width="3" height="12" rx="1"/><rect x="16" y="13" width="3" height="5" rx="1"/>'),
   search: sv('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
   camera: sv('<path d="M4 8.5A2 2 0 0 1 6 6.5h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/>'),

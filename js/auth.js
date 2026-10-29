@@ -1,6 +1,7 @@
 // Связь с сервером аккаунтов CABINA (Supabase на сервере в России, api.cabina-app.ru).
 // На сервер уходят только почта, пароль (сервер хранит лишь его хеш), согласие, код приглашения,
-// тип устройства и версия приложения. Поездки, заработок, отвлечения, документы и профиль — никогда.
+// тип устройства и версия приложения, а если человек сам включил «Коллеги» — ещё карточка и статус (colleagues.js).
+// Поездки, заработок, отвлечения, документы и телефон — никогда.
 // Вход хранится в localStorage, а не в базе приложения: так он не попадает в резервную копию.
 import { CONSENT_VERSION } from './legal.js';
 
@@ -12,6 +13,8 @@ export const PLATFORM = 'web';
 export const PASS_MIN = 10;
 const KEY = 'cabina-account';
 const TOUCH_KEY = 'cabina-account-touch';
+// отпечатки того, что уже отправлено коллегам (colleagues.js): при выходе тоже стираются
+const COLLEAGUES_KEY = 'cabina-colleagues';
 
 // ---------------------------------------------------------------- вход в этом телефоне
 
@@ -33,7 +36,7 @@ export function session() {
 function store(s) {
   try {
     if (s) localStorage.setItem(KEY, JSON.stringify(s));
-    else { localStorage.removeItem(KEY); localStorage.removeItem(TOUCH_KEY); }
+    else { localStorage.removeItem(KEY); localStorage.removeItem(TOUCH_KEY); localStorage.removeItem(COLLEAGUES_KEY); }
   } catch {}
 }
 export const forget = () => store(null);
@@ -115,6 +118,8 @@ async function withToken(path, opts = {}) {
   return call(path, { ...opts, token });
 }
 export const rpc = (name, args = {}) => withToken(`/rest/v1/rpc/${name}`, { body: args });
+// Чтение своих строк из таблиц (что видно — решают правила базы, RLS): 'links?select=id,state'
+export const restGet = (path) => withToken(`/rest/v1/${path}`, { method: 'GET' });
 
 // ---------------------------------------------------------------- действия
 
@@ -137,11 +142,14 @@ export async function signIn({ email, password }) {
   return { ok: false, error: r?.ok ? errorText({ status: 500 }) : errorText(r), code: errorCode(r) };
 }
 
-// Выход: в телефоне — сразу, на сервере — по возможности
+// Выход: в телефоне — сразу, на сервере — по возможности. Статус для коллег стираем до выхода:
+// без входа приложение уже не сможет его обновлять, и коллеги видели бы устаревший.
 export async function signOut() {
-  const token = session()?.access;
+  const token = session() ? await accessToken().catch(() => null) || session()?.access : null;
   forget();
-  if (token) await call('/auth/v1/logout', { token, timeout: 5000 });
+  if (!token) return;
+  await call('/rest/v1/rpc/clear_status', { token, body: {}, timeout: 5000 });
+  await call('/auth/v1/logout', { token, timeout: 5000 });
 }
 
 export async function recover(email) {

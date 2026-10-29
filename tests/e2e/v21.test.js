@@ -132,7 +132,7 @@ test('приватность: по умолчанию всё скрыто, пе�
   await tab(page, 'profile');
   await page.locator('[data-page=profile-edit]').click();
   const sw = page.locator('#pr-privacy [data-act=pr-priv]');
-  assert.deepEqual(await sw.evaluateAll((a) => a.map((b) => b.getAttribute('aria-checked'))), ['false', 'false', 'false', 'false'], 'статус, депо, фото, номер телефона');
+  assert.deepEqual(await sw.evaluateAll((a) => a.map((b) => b.getAttribute('aria-checked'))), ['false', 'false', 'false', 'false', 'false'], 'меня можно найти, статус, депо, персонаж, номер телефона');
   assert.match(await text(page, '.screen'), /Причину отвлечения[\s\S]*не увидят никогда/);
   await page.locator('[data-act=pr-priv][data-k=depot]').click();
   await page.waitForFunction(() => document.querySelector('[data-k=depot]')?.getAttribute('aria-checked') === 'true');

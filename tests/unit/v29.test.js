@@ -2,9 +2,9 @@
 // Сервер подменён: настоящие запросы не отправляются. Все данные — выдуманные.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as auth from '../../js/auth.js';
-import { CONSENT_VERSION, OPERATOR, legalReady, consentHtml, policyHtml } from '../../js/legal.js';
+import { CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, legalReady, consentHtml, policyHtml } from '../../js/legal.js';
 
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const jwt = (claims) => `${b64u({ alg: 'HS256', typ: 'JWT' })}.${b64u(claims)}.c2ln`;
@@ -36,8 +36,12 @@ test('ключ в приложении — только публичный (anon
 });
 
 test('редакция согласия совпадает с той, которую требует сервер', () => {
-  const sql = readFileSync(new URL('../../server/migrations/0001_accounts.sql', import.meta.url), 'utf8');
-  assert.match(sql, new RegExp(`\\('consent_version', '${CONSENT_VERSION}'\\)`));
+  // последняя миграция, где задана редакция, побеждает
+  const dir = new URL('../../server/migrations/', import.meta.url);
+  const sql = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(new URL(f, dir), 'utf8')).join('\n');
+  const last = (key) => [...sql.matchAll(new RegExp(`\\('${key}', '([\\w-]+)'\\)|set value = '([\\w-]+)' where key = '${key}'`, 'g'))].map((m) => m[1] || m[2]).at(-1);
+  assert.equal(last('consent_version'), CONSENT_VERSION);
+  assert.equal(last('publish_version'), PUBLISH_VERSION, 'согласие на распространение (поиск коллег)');
   assert.equal(auth.PASS_MIN, 10, 'как GOTRUE_PASSWORD_MIN_LENGTH на сервере');
 });
 
@@ -50,7 +54,7 @@ test('регистрация отправляет только почту, па�
   assert.equal(c.url, 'https://api.cabina-app.ru/auth/v1/signup');
   assert.equal(c.headers.apikey, auth.ANON_KEY);
   assert.equal(c.headers.Authorization, undefined);
-  assert.deepEqual(c.body, { email: 'ivan@example.com', password: 'Probnyj-parol-1', data: { consent: 'privacy-1', invite: '7F3A9C21B4', platform: 'web', version: '2.9.0' } });
+  assert.deepEqual(c.body, { email: 'ivan@example.com', password: 'Probnyj-parol-1', data: { consent: CONSENT_VERSION, invite: '7F3A9C21B4', platform: 'web', version: '2.9.0' } });
   assert.equal(auth.session(), null, 'до подтверждения почты вход не появляется');
 });
 
