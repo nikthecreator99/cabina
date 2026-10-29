@@ -71,6 +71,7 @@ export function errorText(res) {
   const d = res.data && typeof res.data === 'object' ? res.data : {};
   const code = String(d.error_code || d.code || d.error || '');
   const msg = String(d.msg || d.message || d.error_description || '');
+  if (code === 'otp_expired' || /Token has expired or is invalid/i.test(msg)) return 'Код неверный или устарел. Проверьте цифры или запросите новое письмо.';
   if (/invite required/.test(msg)) return 'Код приглашения неверный, уже использован или устарел.';
   if (/consent required/.test(msg)) return 'Без согласия на обработку данных аккаунт создать нельзя.';
   if (/Database error saving new user/i.test(msg)) return 'Не удалось создать аккаунт. Проверьте код приглашения.';
@@ -150,6 +151,17 @@ export async function recover(email) {
 export async function resend(email) {
   const r = await call('/auth/v1/resend', { body: { type: 'signup', email: email.trim() } });
   return r?.ok ? { ok: true } : { ok: false, error: errorText(r) };
+}
+
+// Код из письма (подтверждение почты или новый пароль): цифры без пробелов
+export const normCode = (s) => String(s || '').replace(/\D/g, '');
+
+// type: 'signup' — подтвердить почту, 'recovery' — войти, чтобы задать новый пароль
+export async function verifyCode({ email, code, type }) {
+  const r = await call('/auth/v1/verify', { body: { type, email: email.trim(), token: normCode(code) } });
+  const s = r?.ok ? fromAuth(r.data) : null;
+  if (s) { store(s); return { ok: true }; }
+  return { ok: false, error: r?.ok ? errorText({ status: 500 }) : errorText(r) };
 }
 
 export async function setPassword(password) {

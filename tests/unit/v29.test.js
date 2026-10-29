@@ -203,3 +203,18 @@ test('приглашение: только по входу администра�
   reply = () => ({ status: 400, body: { code: '42501', message: 'cabina: forbidden' } });
   assert.deepEqual(await auth.createInvite(), { ok: false, error: 'Нет доступа.' });
 });
+
+test('код из письма: на сервер уходят только тип, почта и цифры; неверный код — понятная ошибка', async () => {
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  reply = () => ({ status: 403, body: { code: 403, error_code: 'otp_expired', msg: 'Token has expired or is invalid' } });
+  const bad = await auth.verifyCode({ email: ' ivan@example.com ', code: '12 34 56', type: 'signup' });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /Код неверный или устарел/);
+  assert.equal(auth.session(), null);
+  assert.equal(calls[0].url, 'https://api.cabina-app.ru/auth/v1/verify');
+  assert.deepEqual(calls[0].body, { type: 'signup', email: 'ivan@example.com', token: '123456' });
+  reply = () => ({ status: 200, body: authReply(exp) });
+  assert.deepEqual(await auth.verifyCode({ email: 'ivan@example.com', code: '123456', type: 'recovery' }), { ok: true });
+  assert.equal(auth.session().email, 'ivan@example.com');
+  assert.equal(auth.normCode(' 1-2 3a456 '), '123456');
+});

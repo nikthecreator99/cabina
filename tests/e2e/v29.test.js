@@ -56,6 +56,10 @@ async function mockServer(context, { role = 'user', offline = false } = {}) {
     if (path === '/auth/v1/token?grant_type=refresh_token') return send(200, authReply);
     if (path === '/auth/v1/logout') return send(204);
     if (path === '/auth/v1/recover' || path === '/auth/v1/resend') return send(200, {});
+    if (path === '/auth/v1/verify') {
+      if (body?.token === '123456' && ['signup', 'recovery'].includes(body.type)) return send(200, authReply);
+      return send(403, { code: 403, error_code: 'otp_expired', msg: 'Token has expired or is invalid' });
+    }
     if (path === '/auth/v1/user' && bearer) return send(200, { email: 'ivan@example.com' });
     if (path === '/rest/v1/profiles?select=role' && bearer) return send(200, [{ role }]);
     if (path === '/rest/v1/rpc/touch' && bearer) return send(204);
@@ -156,7 +160,7 @@ test('регистрация: проверки формы, согласие, п�
   assert.equal(await page.locator('#acc-pass').inputValue(), 'Probnyj-parol-1', 'после ошибки сервера пароль не стирается');
   await page.locator('#acc-invite').fill(' goodcode01 ');
   await page.locator('#acc-submit').click();
-  await page.locator('.screen', { hasText: 'Письмо отправлено на ivan@example.com' }).waitFor();
+  await page.locator('.screen', { hasText: 'Мы отправили код на ivan@example.com' }).waitFor();
   const sent = log.filter((r) => r.path === '/auth/v1/signup');
   assert.equal(sent.length, 2);
   const last = sent.at(-1);
@@ -168,7 +172,7 @@ test('регистрация: проверки формы, согласие, п�
   for (const secret of ['Сосновка', 'Ольховка', 'Иван Тестовый', 'Сосновка-депо']) assert.ok(!everything.includes(secret), `«${secret}» не ушло на сервер`);
   // письмо ещё раз
   await page.locator('[data-act=acc-resend]').click();
-  await toastHas(page, /Письмо отправлено ещё раз/);
+  await toastHas(page, /Новый код отправлен/);
   assert.deepEqual(log.at(-1), { path: '/auth/v1/resend', method: 'POST', body: { type: 'signup', email: 'ivan@example.com' }, apikey: last.apikey, auth: null });
   assert.equal(await page.evaluate(() => localStorage.getItem('cabina-account')), null, 'до подтверждения почты входа нет');
   assert.deepEqual(realErrors(errors), []);
@@ -234,7 +238,7 @@ test('почта не подтверждена — экран с письмом;
   await openAccount(one.page);
   await login(one.page, 'new@example.com', 'Probnyj-parol-1');
   await one.page.locator('.screen', { hasText: 'Почта ещё не подтверждена' }).waitFor();
-  assert.match(await one.page.locator('.screen').innerText(), /Письмо отправлено на new@example\.com/);
+  assert.match(await one.page.locator('.screen').innerText(), /Мы отправили код на new@example\.com/);
   assert.deepEqual(realErrors(one.errors), []);
   await one.context.close();
 
@@ -296,6 +300,65 @@ test('администратор видит статистику (только �
   assert.equal(await page.evaluate(() => localStorage.getItem('cabina-account')), null);
   await tab(page, 'home');
   assert.equal(await page.locator('.trip').count(), 1, 'поездка в телефоне на месте');
+  assert.deepEqual(realErrors(errors), []);
+  await context.close();
+});
+
+test('код из письма: подтверждение почты и новый пароль, неверный код, шаг помнится после перезапуска', async () => {
+  const { context, page, errors } = await openApp(env);
+  const log = await mockServer(context);
+  await openAccount(page);
+  // почта не подтверждена → поле для кода
+  await login(page, 'new@example.com', 'Probnyj-parol-1');
+  await page.locator('#acc-code').waitFor();
+  assert.equal(await page.locator('#acc-code').getAttribute('inputmode'), 'numeric');
+  assert.equal(await page.locator('#acc-code').getAttribute('autocomplete'), 'one-time-code');
+  const size = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('acc-code')).fontSize));
+  assert.ok(size >= 28, `цифры кода крупные (${size}px)`);
+  await page.locator('#acc-submit').click();
+  assert.match(await errBox(page).innerText(), /6 цифр/);
+  assert.equal(log.filter((r) => r.path === '/auth/v1/verify').length, 0, 'пустой код на сервер не уходит');
+  // перезапуск (например, ушли в почту) — снова поле для кода, та же почта
+  await page.reload(); await page.waitForSelector('.screen');
+  await openAccount(page);
+  await page.locator('#acc-code').waitFor();
+  assert.match(await page.locator('.screen').innerText(), /Мы отправили код на new@example\.com/);
+  await page.locator('#acc-code').fill('111 111');
+  await page.locator('#acc-submit').click();
+  await page.waitForFunction(() => /Код неверный или устарел/.test(document.getElementById('acc-err')?.innerText || ''));
+  assert.equal(await page.evaluate(() => localStorage.getItem('cabina-account')), null);
+  await page.locator('#acc-code').fill('123 456');
+  await page.locator('#acc-submit').click();
+  await toastHas(page, /Почта подтверждена/);
+  const v = log.filter((r) => r.path === '/auth/v1/verify').at(-1);
+  assert.deepEqual(v.body, { type: 'signup', email: 'new@example.com', token: '123456' });
+  assert.ok(await page.evaluate(() => !!localStorage.getItem('cabina-account')));
+  assert.equal(await page.evaluate(() => localStorage.getItem('cabina-account-pending')), null, 'шаг с кодом забыт');
+  await page.locator('[data-act=acc-logout]').click();
+  await sheet(page).getByRole('button', { name: 'Выйти' }).click();
+  await waitNoLayers(page);
+  // забыли пароль → код + новый пароль сразу
+  await page.locator('[data-act=acc-mode][data-mode=login]').first().click();
+  await page.locator('[data-act=acc-mode][data-mode=reset]').click();
+  await page.locator('#acc-email').fill('ivan@example.com');
+  await page.locator('#acc-submit').click();
+  await page.locator('#acc-code').waitFor();
+  assert.deepEqual(log.at(-1).body, { email: 'ivan@example.com' });
+  await page.locator('[data-act=acc-resend]').click();
+  await toastHas(page, /Новый код отправлен/);
+  assert.equal(log.at(-1).path, '/auth/v1/recover', 'новый код для пароля — через восстановление');
+  await page.locator('#acc-code').fill('123456');
+  await page.locator('#acc-pass').fill('короткий');
+  await page.locator('#acc-submit').click();
+  assert.match(await errBox(page).innerText(), /не меньше 10/);
+  await page.locator('#acc-pass').fill('Novyj-parol-12345');
+  await page.locator('#acc-submit').click();
+  await toastHas(page, /Пароль изменён/);
+  assert.deepEqual(log.filter((r) => r.path === '/auth/v1/verify').at(-1).body, { type: 'recovery', email: 'ivan@example.com', token: '123456' });
+  const put = log.filter((r) => r.path === '/auth/v1/user').at(-1);
+  assert.deepEqual(put.body, { password: 'Novyj-parol-12345' });
+  assert.equal(put.auth, `Bearer ${ACCESS}`);
+  assert.match(await page.locator('.screen').innerText(), /Вы вошли в аккаунт CABINA/);
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });

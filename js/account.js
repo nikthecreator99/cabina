@@ -3,16 +3,38 @@
 // Аккаунт не обязателен: без него CABINA работает как раньше, записи из телефона на сервер не уходят.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
 import { legalReady, consentHtml, policyHtml } from './legal.js';
-import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite,
+import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
   emailOk, normInvite, PASS_MIN, linkErrorText } from './auth.js';
 
 // mode: menu | signup | login | reset | sent | reset-sent | newpass. Пароль в состоянии не храним.
+// sent — ввести код из письма, чтобы подтвердить почту; reset-sent — код из письма и новый пароль.
 const A = { mode: 'menu', email: '', invite: '', role: null, busy: false, note: '' };
 let VERSION = '';
 export const setAccountVersion = (v) => { VERSION = v; };
 
+// Ждём код из письма: помним почту и шаг час (столько живёт код), чтобы после ухода в почту
+// и перезапуска приложения человек вернулся к полю для кода. Пароль и код не храним.
+const PENDING = 'cabina-account-pending';
+function setPending(on) {
+  try {
+    if (on) localStorage.setItem(PENDING, JSON.stringify({ mode: A.mode, email: A.email, at: Date.now() }));
+    else localStorage.removeItem(PENDING);
+  } catch {}
+}
+function pending() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PENDING) || 'null');
+    if (p && ['sent', 'reset-sent'].includes(p.mode) && emailOk(p.email) && Date.now() - p.at < 3600e3) return p;
+  } catch {}
+  setPending(false);
+  return null;
+}
+
 export function accountEnter() {
-  if (A.mode !== 'newpass') { A.mode = 'menu'; A.note = ''; }
+  if (A.mode !== 'newpass') {
+    const p = !session() && pending();
+    if (p) { A.mode = p.mode; A.email = p.email; } else { A.mode = 'menu'; A.note = ''; }
+  }
   A.busy = false;
   A.role = null;
   if (!session()) return Promise.resolve();
@@ -32,6 +54,7 @@ const field = (id, label, input, hint = '') => `<div class="pay-field"><label fo
 const emailInput = () => `<input class="input" id="acc-email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="254" placeholder="name@yandex.ru" value="${esc(A.email)}">`;
 const passInput = (auto) => `<div class="acc-pass"><input class="input" id="acc-pass" type="password" autocomplete="${auto}" maxlength="72" placeholder="${auto === 'new-password' ? `Не меньше ${PASS_MIN} символов` : 'Пароль'}">
   <button type="button" class="acc-eye" data-act="acc-eye" aria-label="Показать пароль" aria-pressed="false">Показать</button></div>`;
+const codeInput = () => `<input class="input acc-code-in num" id="acc-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" placeholder="••••••" aria-label="Код из письма">`;
 const errBox = '<div id="acc-err" class="acc-err" role="alert" aria-live="assertive"></div>';
 const submitBtn = (label) => `<button class="btn btn-primary" type="submit" form="acc-form" id="acc-submit" data-label="${esc(label)}">${esc(label)}</button>`;
 const modeBtn = (mode, label) => `<button class="link-btn" data-act="acc-mode" data-mode="${mode}">${label}</button>`;
@@ -75,17 +98,22 @@ function formHtml() {
         ${field('acc-pass', 'Пароль', passInput('current-password'))}
       </form>${errBox}${submitBtn('Войти')}
       <div class="acc-docs">${modeBtn('reset', 'Забыли пароль?')}${modeBtn('signup', 'Создать аккаунт')}</div>`;
-    case 'reset': return `<div class="hint">Пришлём на почту ссылку. Откройте её на этом телефоне и придумайте новый пароль.</div>
+    case 'reset': return `<div class="hint">Пришлём на почту код. Введёте его здесь и придумаете новый пароль.</div>
       <form class="panel pay-panel" id="acc-form" novalidate>${field('acc-email', 'Почта', emailInput())}</form>
       ${errBox}${submitBtn('Отправить письмо')}${modeBtn('login', 'Вспомнил пароль')}`;
     case 'newpass': return `<div class="hint">Придумайте новый пароль для аккаунта.</div>
       <form class="panel pay-panel" id="acc-form" novalidate>${field('acc-pass', 'Новый пароль', passInput('new-password'), `Не меньше ${PASS_MIN} символов.`)}</form>
       ${errBox}${submitBtn('Сохранить пароль')}`;
-    case 'sent': return `<div class="notice ok">${I.mail}<div>${A.note ? `<b>${esc(A.note)}</b><br>` : ''}Письмо отправлено на <b>${esc(A.email)}</b>. Откройте его и нажмите ссылку — почта будет подтверждена. Если письма нет, проверьте папку «Спам».</div></div>
-      ${errBox}<button class="btn btn-primary" data-act="acc-mode" data-mode="login">Войти</button>
-      <button class="link-btn" data-act="acc-resend">Отправить письмо ещё раз</button>`;
-    case 'reset-sent': return `<div class="notice ok">${I.mail}<div>Если почта <b>${esc(A.email)}</b> зарегистрирована, на неё придёт письмо со ссылкой для нового пароля. Откройте его на этом телефоне. Если письма нет, проверьте папку «Спам».</div></div>
-      ${modeBtn('login', 'Ко входу')}`;
+    case 'sent': return `<div class="notice ok">${I.mail}<div>${A.note ? `<b>${esc(A.note)}</b><br>` : ''}Мы отправили код на <b class="acc-email">${esc(A.email)}</b>. Введите его здесь. Письма нет — проверьте папку «Спам».</div></div>
+      <form class="panel pay-panel" id="acc-form" novalidate>${field('acc-code', 'Код из письма', codeInput())}</form>
+      ${errBox}${submitBtn('Подтвердить')}
+      <div class="acc-docs"><button class="link-btn" data-act="acc-resend">Отправить код ещё раз</button>${modeBtn('login', 'Ко входу')}</div>`;
+    case 'reset-sent': return `<div class="notice ok">${I.mail}<div>Если почта <b class="acc-email">${esc(A.email)}</b> зарегистрирована, на неё придёт код. Письма нет — проверьте папку «Спам».</div></div>
+      <form class="panel pay-panel" id="acc-form" novalidate>
+        ${field('acc-code', 'Код из письма', codeInput())}
+        ${field('acc-pass', 'Новый пароль', passInput('new-password'), `Не меньше ${PASS_MIN} символов.`)}
+      </form>${errBox}${submitBtn('Сохранить пароль')}
+      <div class="acc-docs"><button class="link-btn" data-act="acc-resend">Отправить код ещё раз</button>${modeBtn('login', 'Ко входу')}</div>`;
     default: return `${localNote}
       <div class="panel"><div class="row"><span class="ico" style="--c:var(--night)">${I.info}</span><div class="grow"><div class="t1">Зачем аккаунт</div>
         <div class="t2">Сейчас идёт закрытое испытание. Позже через аккаунт можно будет по вашему выбору общаться с коллегами.</div></div></div></div>
@@ -161,7 +189,7 @@ export async function accountClick(act, b, ctx) {
   if (!act.startsWith('acc-')) return false;
   switch (act) {
     case 'acc-mode':
-      A.mode = b.dataset.mode; A.note = '';
+      A.mode = b.dataset.mode; A.note = ''; setPending(false);
       ctx.rerender(); window.scrollTo(0, 0);
       setTimeout(() => document.getElementById(A.mode === 'newpass' ? 'acc-pass' : 'acc-email')?.focus({ preventScroll: true }), 50);
       break;
@@ -178,8 +206,8 @@ export async function accountClick(act, b, ctx) {
     case 'acc-consent-doc': openDoc('Согласие на обработку персональных данных', consentHtml()); break;
     case 'acc-policy': openDoc('Политика обработки персональных данных', policyHtml()); break;
     case 'acc-resend': {
-      const r = await resend(A.email);
-      if (r.ok) toast('Письмо отправлено ещё раз'); else showError(r.error);
+      const r = A.mode === 'reset-sent' ? await recover(A.email) : await resend(A.email);
+      if (r.ok) toast('Новый код отправлен. Старый больше не подходит'); else showError(r.error);
       break;
     }
     case 'acc-export': {
@@ -238,11 +266,14 @@ export async function accountSubmit(e, ctx) {
   if (e.target.id !== 'acc-form') return false;
   e.preventDefault();
   if (A.busy) return true;
-  const email = val('acc-email').trim();
+  const byCode = A.mode === 'sent' || A.mode === 'reset-sent';
+  const email = byCode ? A.email : val('acc-email').trim();
   const pass = val('acc-pass');
+  const code = normCode(val('acc-code'));
   if (A.mode !== 'newpass') A.email = email;
-  if (A.mode !== 'newpass' && !emailOk(email)) { showError('Проверьте адрес почты.', 'acc-email'); return true; }
-  if (['signup', 'newpass'].includes(A.mode) && pass.length < PASS_MIN) { showError(`Пароль слишком короткий: нужно не меньше ${PASS_MIN} символов.`, 'acc-pass'); return true; }
+  if (A.mode !== 'newpass' && !emailOk(email)) { showError('Проверьте адрес почты.', byCode ? null : 'acc-email'); return true; }
+  if (byCode && code.length < 6) { showError('Введите код из письма: 6 цифр.', 'acc-code'); return true; }
+  if (['signup', 'newpass', 'reset-sent'].includes(A.mode) && pass.length < PASS_MIN) { showError(`Пароль слишком короткий: нужно не меньше ${PASS_MIN} символов.`, 'acc-pass'); return true; }
   if (A.mode === 'login' && !pass) { showError('Введите пароль.', 'acc-pass'); return true; }
   if (A.mode === 'signup') {
     A.invite = normInvite(val('acc-invite'));
@@ -258,17 +289,26 @@ export async function accountSubmit(e, ctx) {
     else if (A.mode === 'login') r = await signIn({ email, password: pass });
     else if (A.mode === 'reset') r = await recover(email);
     else if (A.mode === 'newpass') r = await setPassword(pass);
+    else if (A.mode === 'sent') r = await verifyCode({ email, code, type: 'signup' });
+    else if (A.mode === 'reset-sent') {
+      r = await verifyCode({ email, code, type: 'recovery' });
+      // код подошёл — вход есть, теперь новый пароль; не сохранился — просим ещё раз на экране нового пароля
+      if (r.ok) { r = await setPassword(pass); if (!r.ok) { A.mode = 'newpass'; setPending(false); ctx.rerender(); } }
+    }
   } finally { setBusy(false); }
   if (!r) return true;
   if (!r.ok) {
-    if (A.mode === 'login' && r.code === 'email_not_confirmed') { A.mode = 'sent'; A.note = 'Почта ещё не подтверждена.'; ctx.rerender(); return true; }
+    if (A.mode === 'login' && r.code === 'email_not_confirmed') { A.mode = 'sent'; A.note = 'Почта ещё не подтверждена.'; setPending(true); ctx.rerender(); return true; }
     showError(r.error, A.mode === 'signup' && /приглашени/.test(r.error) ? 'acc-invite' : null);
     return true;
   }
+  const signedIn = (text) => { A.mode = 'menu'; A.note = ''; toast(text); ctx.rerender(); window.scrollTo(0, 0); return accountEnter(); };
   if (A.mode === 'signup') { A.invite = ''; A.mode = r.signedIn ? 'menu' : 'sent'; }
-  else if (A.mode === 'login') { A.mode = 'menu'; toast('Вы вошли в аккаунт'); ctx.rerender(); window.scrollTo(0, 0); await accountEnter(); }
+  else if (A.mode === 'login') await signedIn('Вы вошли в аккаунт');
   else if (A.mode === 'reset') A.mode = 'reset-sent';
-  else if (A.mode === 'newpass') { A.mode = 'menu'; toast('Пароль изменён'); ctx.rerender(); window.scrollTo(0, 0); await accountEnter(); }
+  else if (A.mode === 'sent') await signedIn('Почта подтверждена. Вы вошли в аккаунт');
+  else if (A.mode === 'newpass' || A.mode === 'reset-sent') await signedIn('Пароль изменён. Вы вошли в аккаунт');
+  setPending(A.mode === 'sent' || A.mode === 'reset-sent');
   ctx.rerender(); window.scrollTo(0, 0);
   return true;
 }
@@ -277,6 +317,7 @@ export async function accountSubmit(e, ctx) {
 export function accountRedirect(r) {
   if (!r) return null;
   if (r.error) { toast(linkErrorText(r.error), { error: true, ms: 6000 }); return null; }
+  setPending(false);
   if (r.type === 'recovery') { A.mode = 'newpass'; return 'account'; }
   A.mode = 'menu';
   toast(r.type === 'signup' ? 'Почта подтверждена. Вы вошли в аккаунт' : 'Вы вошли в аккаунт', { ms: 4000 });
