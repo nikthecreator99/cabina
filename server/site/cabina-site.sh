@@ -16,10 +16,11 @@ WWW=${CABINA_WWW:-/opt/beget/supabase/volumes/proxy/caddy/www}    # внутри
 RUN=${CABINA_RUN-runuser -u cabina-site -- env HOME=/srv/cabina-site}
 FILES="index.html manifest.webmanifest sw.js css js fonts icons data"
 
-cd "$WWW"
+# git работает из папки пользователя cabina-site: в папку сайта ему заходить нельзя
+cd "$(dirname "$SRC")"
 head=$($RUN git ls-remote "$REPO" refs/heads/main | cut -f1)
 [ -n "$head" ] || { echo "нет ответа от GitHub" >&2; exit 1; }
-[ "$head" = "$(cat rev 2>/dev/null || true)" ] && exit 0
+[ "$head" = "$(cat "$WWW/rev" 2>/dev/null || true)" ] && exit 0
 
 [ -d "$SRC/.git" ] || $RUN git clone -q --depth 1 --branch main "$REPO" "$SRC"
 $RUN git -C "$SRC" fetch -q --depth 1 origin main
@@ -27,6 +28,7 @@ rev=$($RUN git -C "$SRC" rev-parse FETCH_HEAD)
 $RUN git -C "$SRC" checkout -q --force --detach "$rev"
 $RUN git -C "$SRC" clean -qfdx
 
+cd "$WWW"
 mkdir -p releases
 tmp="releases/$rev.tmp"
 rm -rf "$tmp"
