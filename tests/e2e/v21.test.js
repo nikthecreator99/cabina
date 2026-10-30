@@ -3,6 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { ready, openPrivacy } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -128,20 +129,21 @@ test('профиль: статус по порядку — в пути, на о�
 });
 
 test('приватность: по умолчанию всё скрыто, переключатели сохраняются', async () => {
+  // с 2.16 «Приватность» — в Настройках аккаунта (нужен вход); сервер подменён
   const { context, page, errors } = await openApp(env);
-  await tab(page, 'profile');
-  await page.locator('[data-page=profile-edit]').click();
-  const sw = page.locator('#pr-privacy [data-act=pr-priv]');
-  assert.deepEqual(await sw.evaluateAll((a) => a.map((b) => b.getAttribute('aria-checked'))), ['false', 'false', 'false', 'false', 'false'], 'меня можно найти, статус, депо, персонаж, номер телефона');
-  assert.match(await text(page, '.screen'), /Причину отвлечения[\s\S]*не увидят никогда/);
+  await ready(context, page, { consents: [{ document: 'privacy-2', withdrawn_at: null }] });
+  await openPrivacy(page);
+  const sw = page.locator('#pv-card [data-act=pr-priv]');
+  assert.deepEqual(await sw.evaluateAll((a) => a.map((b) => b.getAttribute('aria-checked'))), ['false', 'false', 'false'], 'меня можно найти, депо, персонаж');
+  assert.match(await text(page, '#pv-access'), /Мой статус[\s\S]*Видят: Никто[\s\S]*Где я[\s\S]*Видят: Никто/);
+  assert.match(await text(page, '.screen'), /причину отвлечения и телефон коллеги не видят никогда/);
   await page.locator('[data-act=pr-priv][data-k=depot]').click();
   await page.waitForFunction(() => document.querySelector('[data-k=depot]')?.getAttribute('aria-checked') === 'true');
   await page.reload();
   await page.waitForSelector('.screen');
-  await tab(page, 'profile');
-  await page.locator('[data-page=profile-edit]').click();
+  await openPrivacy(page);
   assert.equal(await page.locator('[data-k=depot]').getAttribute('aria-checked'), 'true');
-  assert.equal(await page.locator('[data-k=status]').getAttribute('aria-checked'), 'false');
-  assert.deepEqual(errors, []);
+  assert.equal(await page.locator('[data-k=find]').getAttribute('aria-checked'), 'false');
+  assert.deepEqual(errors.filter((e) => !/Failed to load resource/.test(e)), []);
   await context.close();
 });

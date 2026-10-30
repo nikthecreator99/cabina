@@ -179,7 +179,8 @@ test('«Телефоны»: добавить, позвонить, найти, и
   await page.fill('#pr-phone', '+7 900 000-00-09');
   await page.locator('#pr-phone').blur();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.phone === '+7 900 000-00-09');
-  assert.equal(await page.locator('[data-k=phone]').getAttribute('aria-checked'), 'false');
+  assert.match(await text(page, '.screen'), /Хранится только в этом телефоне и никому не передаётся/);
+  assert.equal(await page.evaluate(async () => (await import('./js/profile.js')).privacyOf().phone), false);
   await tab(page, 'profile');
   assert.match(await text(page, '.profile-card'), /\+7 900 000-00-09/);
   assert.deepEqual(errors, []);

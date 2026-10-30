@@ -63,8 +63,8 @@ async function mockServer(context, { role = 'user', offline = false } = {}) {
     if (path === '/auth/v1/user' && bearer) return send(200, { email: 'ivan@example.com' });
     if (path === '/rest/v1/profiles?select=role' && bearer) return send(200, [{ role }]);
     if (path === '/rest/v1/rpc/touch' && bearer) return send(204);
-    // «Коллеги» (2.15): у этого человека их нет
-    if (/^\/rest\/v1\/(consents|links|cards|statuses)\?select=/.test(path) && bearer) return send(200, path.startsWith('/rest/v1/consents') ? [{ document: 'privacy-2', withdrawn_at: null }] : []);
+    // «Коллеги» (2.15–2.16): у этого человека их нет
+    if (/^\/rest\/v1\/(consents|links|cards|statuses|status_places|access)\?select=/.test(path) && bearer) return send(200, path.startsWith('/rest/v1/consents') ? [{ document: 'privacy-2', withdrawn_at: null }] : []);
     if (path === '/rest/v1/rpc/export_my_data' && bearer) return send(200, { email: 'ivan@example.com', email_confirmed: true, created_on: '2026-10-19', last_seen: '2026-10-20', platform: 'web', app_version: '2.9.0', consents: [{ document: 'privacy-1', given_at: '2026-10-19T10:00:00+00:00' }] });
     if (path === '/rest/v1/rpc/delete_my_account' && bearer) return send(204);
     if (path === '/rest/v1/rpc/admin_stats' && bearer) {
@@ -80,10 +80,12 @@ async function mockServer(context, { role = 'user', offline = false } = {}) {
   return log;
 }
 
+// с 2.16 — Профиль → ⚙ Настройки → «Настройки аккаунта»
 async function openAccount(page) {
   await tab(page, 'profile');
-  await page.locator('[data-page=account]').click();
-  await page.locator('.page-head h1', { hasText: 'Аккаунт CABINA' }).waitFor();
+  await page.locator('.screen [data-page=settings]').click();
+  await page.locator('.screen [data-page=account]').click();
+  await page.locator('.page-head h1', { hasText: 'Настройки аккаунта' }).waitFor();
 }
 async function login(page, email = 'ivan@example.com', password = 'Probnyj-parol-1') {
   await page.locator('[data-act=acc-mode][data-mode=login]').first().click();
@@ -96,8 +98,9 @@ test('без аккаунта приложение ничего не отпра�
   const { context, page, errors } = await openApp(env);
   const log = await mockServer(context);
   await tab(page, 'profile');
-  const row = page.locator('[data-page=account]');
-  assert.match(await row.innerText(), /Аккаунт CABINA[\s\S]*Не обязателен/);
+  await page.locator('.screen [data-page=settings]').click();
+  const row = page.locator('.screen [data-page=account]');
+  assert.match(await row.innerText(), /Настройки аккаунта[\s\S]*не обязателен/);
   await row.click();
   assert.match(await page.locator('.screen').innerText(), /Аккаунт не обязателен[\s\S]*только в этом телефоне/);
   await page.locator('[data-act=acc-policy]').first().click();
@@ -111,7 +114,7 @@ test('без аккаунта приложение ничего не отпра�
   await waitNoLayers(page);
   // политика доступна и из Настроек; текст о хранении данных честный
   await page.locator('[data-act=back]').click();
-  await page.locator('.screen [data-page=settings]').click();
+  await page.locator('.page-head h1', { hasText: 'Настройки' }).waitFor();
   assert.match(await page.locator('.screen').innerText(), /Записи хранятся только в этом телефоне[\s\S]*Аккаунт — по желанию/);
   await page.locator('[data-act=policy]').click();
   assert.match(await sheet(page).innerText(), /Григорьев Никита Сергеевич/);
@@ -193,9 +196,9 @@ test('вход, отметка «заходил сегодня» раз в де�
   assert.match(await page.locator('.screen').innerText(), /ivan@example\.com[\s\S]*Вы вошли в аккаунт CABINA[\s\S]*На сервере о вас только/);
   assert.equal(await page.locator('[data-act=acc-stats]').count(), 0, 'обычный человек статистику не видит');
   assert.equal(await page.locator('[data-act=acc-invite-new]').count(), 0, 'обычный человек приглашения не создаёт');
-  // строка в профиле показывает почту
+  // строка в Настройках показывает почту
   await page.locator('[data-act=back]').click();
-  assert.match(await page.locator('[data-page=account]').innerText(), /Вы вошли: ivan@example\.com/);
+  assert.match(await page.locator('.screen [data-page=account]').innerText(), /Настройки аккаунта[\s\S]*Вы вошли: ivan@example\.com/);
   // перезапуск: вход сохранился, «заходил сегодня» — один раз в день
   await page.reload(); await page.waitForSelector('.screen');
   await page.waitForFunction(() => !!localStorage.getItem('cabina-account-touch'));
@@ -204,26 +207,34 @@ test('вход, отметка «заходил сегодня» раз в де�
   assert.equal(touches.length, 1);
   assert.deepEqual(touches[0].body, { p_platform: 'web', p_version: VERSION });
   assert.equal(touches[0].auth, `Bearer ${ACCESS}`);
-  // скачать мои данные
+  // мои данные на сервере: сначала понятный экран, файл — отдельной кнопкой
   await openAccount(page);
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('[data-act=acc-export]').click()]);
+  await page.locator('[data-act=acc-export]').click();
+  await sheet(page).getByText('Что сервер знает о вас').waitFor();
+  const shown = await sheet(page).innerText();
+  assert.match(shown, /ivan@example\.com[\s\S]*подтверждена[\s\S]*19 октября 2026[\s\S]*20 октября 2026[\s\S]*Сайт \(браузер\) · CABINA 2\.9\.0/);
+  assert.match(shown, /Согласие на обработку персональных данных[\s\S]*редакция 1 · принято 19 октября 2026, 13:00 · прежняя редакция/);
+  assert.match(shown, /Вы не включали «Коллеги»/);
+  assert.match(shown, /Не на сервере:[\s\S]*поездки, заработок, отвлечения/);
+  const [dl] = await Promise.all([page.waitForEvent('download'), sheet(page).locator('[data-act=my-file]').click()]);
   assert.match(dl.suggestedFilename(), /^cabina-account-data-\d{4}-\d{2}-\d{2}\.json$/);
   const dir = await mkdtemp(join(tmpdir(), 'cabina-'));
   await dl.saveAs(join(dir, 'acc.json'));
   const mine = JSON.parse(await readFile(join(dir, 'acc.json'), 'utf8'));
   assert.equal(mine.kind, 'account-data');
   assert.equal(mine.data.email, 'ivan@example.com');
+  await sheet(page).getByRole('button', { name: 'Понятно' }).click();
+  await waitNoLayers(page);
   // резервная копия приложения не содержит данных входа
   await page.locator('[data-act=back]').click();
-  await page.locator('.screen [data-page=settings]').click();
   await page.locator('[data-act=export]').click();
   const [bk] = await Promise.all([page.waitForEvent('download'), sheet(page).getByRole('button', { name: 'Сохранить копию' }).click()]);
   await bk.saveAs(join(dir, 'bk.json'));
   const backup = await readFile(join(dir, 'bk.json'), 'utf8');
   assert.ok(!backup.includes('refresh-secret-1') && !backup.includes(ACCESS) && !backup.includes('ivan@example.com'), 'данных входа в копии нет');
   // выход
-  await page.locator('[data-act=back]').click();
-  await page.locator('[data-page=account]').click();
+  await waitNoLayers(page);
+  await page.locator('.screen [data-page=account]').click();
   await page.locator('[data-act=acc-logout]').click();
   await sheet(page).getByRole('button', { name: 'Выйти' }).click();
   await toastHas(page, /Вы вышли из аккаунта/);

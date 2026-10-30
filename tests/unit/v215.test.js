@@ -2,7 +2,7 @@
 // Все имена, станции и идентификаторы — выдуманные.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { statusPayload, payloadStatus, colleagueLine, cleanCard, cleanStatus, buildSnapshot, cardPayload, cleanText, partOf, partStart, updatedText, colError, ROLE_NAMES } from '../../js/colleagues.js';
+import { statusPayload, payloadStatus, colleagueLine, cleanCard, cleanStatus, buildSnapshot, cardPayload, cleanText, partOf, partStart, updatedText, colError, ROLE_NAMES, myDataHtml } from '../../js/colleagues.js';
 import { CONSENT_VERSION, PUBLISH_VERSION } from '../../js/legal.js';
 
 const H = 3600e3;
@@ -145,4 +145,55 @@ test('отказы сервера понятны человеку', () => {
   assert.match(e('cabina: publish consent required'), /отдельное согласие/);
   assert.match(e('cabina: consent required'), /новую редакцию/);
   assert.match(e('cabina: name required'), /имя/);
+});
+
+test('«Что сервер знает о вас»: выгрузка понятным языком, всё с сервера экранировано', () => {
+  const now = real('2026-10-20T12:00');
+  const d = {
+    email: 'ivan<b>@example.com', email_confirmed: false, created_on: '2026-10-19', last_seen: '2026-10-20', platform: 'web', app_version: '2.15.1',
+    consents: [
+      { document: 'privacy-1', given_at: '2026-10-19T10:00:00+00:00', withdrawn_at: null },
+      { document: CONSENT_VERSION, given_at: '2026-10-20T07:05:00+00:00', withdrawn_at: null },
+      { document: PUBLISH_VERSION, given_at: '2026-10-20T07:06:00+00:00', withdrawn_at: '2026-10-20T08:00:00+00:00' },
+      { document: '<img src=x onerror=alert(1)>', given_at: 'не дата' },
+    ],
+    colleagues_card: { name: 'Иван <script>', role: 'driver', depot: 'Сосновка', avatar: null, searchable: false, updated_at: '2026-10-20T07:06:00+00:00' },
+    colleagues_status: { kind: 'rest', place: 'Ольховка', until_at: new Date(real('2026-10-20T14:30')).toISOString(), after_kind: 'wait',
+      updated_at: new Date(real('2026-10-20T09:10')).toISOString(), expires_at: new Date(real('2026-10-22T09:10')).toISOString() },
+    colleagues: [
+      { with: ANNA, state: 'accepted', offered_by_me: true }, { with: OLEG, state: 'accepted', offered_by_me: false },
+      { with: PETR, state: 'pending', offered_by_me: true }, { with: ME, state: 'declined', offered_by_me: false }, null,
+    ],
+  };
+  const html = myDataHtml(d, now, OFF);
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.ok(!/<script|<img|<b>@/.test(html), 'текст с сервера экранирован');
+  assert.match(text, /ivan&lt;b&gt;@example\.com не подтверждена/);
+  assert.match(text, /Аккаунт создан 19 октября 2026/);
+  assert.match(text, /Последний заход 20 октября 2026 только дата, без времени/);
+  assert.match(text, /Сайт \(браузер\) · CABINA 2\.15\.1/);
+  assert.match(text, /обработку персональных данных редакция 1 · принято 19 октября 2026, 13:00 · прежняя редакция/);
+  assert.match(text, /обработку персональных данных редакция 2 · принято 20 октября 2026, 10:05 Согласие на распространение/);
+  assert.match(text, /поиск коллег редакция 1 · принято 20 октября 2026, 10:06 · отозвано 20 октября 2026, 11:00/);
+  assert.match(text, /Согласие &lt;img src=x onerror=alert\(1\)&gt; Коллеги/, 'неизвестный документ — как есть, без «прежней редакции»');
+  assert.match(text, /Иван &lt;script&gt; Машинист · депо Сосновка/);
+  assert.match(text, /В поиске Нет найти вас нельзя/);
+  assert.match(text, /На отдыхе Ольховка · до 14:30 обновлено в 09:10 · сотрётся сам 22 октября 2026, 09:10/);
+  assert.match(text, /Коллеги 2 /);
+  assert.match(text, /Ваши предложения без ответа стираются через 30 дней 1/);
+  assert.match(text, /Отказы и удалённые коллеги стираются через 30 дней 1/);
+  assert.ok(!/Предложения вам/.test(text), 'нулевые строки не показываем');
+  assert.ok(!html.includes(ANNA) && !html.includes(OLEG), 'идентификаторы коллег не показываем');
+  assert.match(text, /Не на сервере: поездки, заработок, отвлечения/);
+});
+
+test('«Что сервер знает о вас»: без «Коллег» и с пустым ответом — не падает и говорит прямо', () => {
+  const t1 = myDataHtml({ email: 'a@example.com', email_confirmed: true, consents: [], colleagues: [] }, Date.now(), OFF);
+  assert.match(t1, /Вы не включали «Коллеги»/);
+  assert.ok(!t1.includes('Согласия'), 'пустой раздел не показываем');
+  for (const bad of [null, undefined, 'строка', [], { consents: 'x', colleagues: {}, colleagues_card: 'x', colleagues_status: [], created_on: '2026-13-01', platform: 'toString' }]) {
+    const h = myDataHtml(bad, Date.now(), OFF);
+    assert.match(h, /Вы не включали «Коллеги»/);
+    assert.ok(!/undefined|NaN|function/.test(h));
+  }
 });

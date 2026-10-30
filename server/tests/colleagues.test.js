@@ -42,6 +42,10 @@ const accept = (me, from) => q(`select public.answer_colleague('${from}', true)`
 const find = (who, name, depot = null, role = null) => json(`select public.find_colleagues(${lit(name)}, ${lit(depot)}, ${lit(role)})`, who);
 const status = (who, kind, { place = null, dest = null, part = null, note = null, until = null } = {}) =>
   q(`select public.set_status(${lit(kind)}, ${lit(place)}, ${lit(dest)}, ${lit(part)}, ${lit(note)}, ${until ? `${lit(until)}::timestamptz` : 'null'})`, who);
+// Кому показывать статус ('status') или станции ('place'): всем коллегам (true) или выбранным (список)
+const share = (who, item, to = true) => q(`select public.set_access(${lit(item)}, ${to === true}, ${Array.isArray(to) && to.length ? `array[${to.map((x) => `'${x}'`).join(',')}]::uuid[]` : 'null'})`, who);
+// Статус вместе со станциями (они хранятся отдельно, со своим правилом доступа)
+const ST = (id) => `public.statuses s left join public.status_places p on p.user_id = s.user_id where s.user_id = '${id}'`;
 // Двое — коллеги
 function pair(nameA = 'Никита', nameB = 'Анна') {
   const a = account();
@@ -204,7 +208,7 @@ test('ответить на предложение может только то�
   assert.deepEqual(q(`select count(*) from public.links`, c), ['0']);
 });
 
-test('статус видят только коллеги; пока предложение без ответа — не видно; без коллег статус не хранится', () => {
+test('статус видят только коллеги, которым разрешено; пока предложение без ответа — не видно; без коллег статус не хранится', () => {
   const a = account();
   const b = account();
   const stranger = account();
@@ -216,7 +220,16 @@ test('статус видят только коллеги; пока предло
   assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`), 0, 'предложение без ответа — ещё не коллеги');
   accept(b, a);
   status(a, 'trip', { place: 'Сосновка', dest: 'Ольховка', part: 'morning' });
-  assert.deepEqual(q(`select kind, place, dest, part from public.statuses where user_id = '${a}'`, b), ['trip|Сосновка|Ольховка|morning']);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`), 0, 'никому не разрешено показывать — на сервере ничего');
+  share(a, 'status');
+  status(a, 'trip', { place: 'Сосновка', dest: 'Ольховка', part: 'morning' });
+  assert.deepEqual(q(`select kind, part, place is null, dest is null from public.statuses where user_id = '${a}'`, b), ['trip|morning|t|t'], 'станций в самом статусе нет');
+  assert.equal(count('select count(*) from public.status_places'), 0, '«где я» никому не разрешено — станции не хранятся');
+  share(a, 'place');
+  status(a, 'trip', { place: 'Сосновка', dest: 'Ольховка', part: 'morning' });
+  assert.deepEqual(q(`select place, dest from public.status_places where user_id = '${a}'`, b), ['Сосновка|Ольховка']);
+  assert.equal(count('select count(*) from public.status_places', stranger), 0, 'чужой не видит станций');
+  fails('select * from public.status_places', 'anon', /permission denied/);
   assert.equal(count(`select count(*) from public.statuses`, stranger), 0, 'чужой не видит');
   fails('select * from public.statuses', 'anon', /permission denied/);
   assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`, a), 1, 'свой вижу');
@@ -224,17 +237,18 @@ test('статус видят только коллеги; пока предло
 
 test('статус: сервер хранит только нужное для каждого вида, точного времени явки нет', () => {
   const [a] = pair();
+  share(a, 'status'); share(a, 'place');
   status(a, 'abs', { place: 'Больница', dest: 'x', part: 'night', note: 'queue', until: new Date(Date.now() + 3600e3).toISOString() });
-  assert.deepEqual(q(`select kind, place is null, dest is null, part is null, note is null, until_at is null from public.statuses where user_id = '${a}'`),
+  assert.deepEqual(q(`select s.kind, p.place is null, p.dest is null, s.part is null, s.note is null, s.until_at is null from ${ST(a)}`),
     ['abs|t|t|t|t|t'], 'у отвлечения ни места, ни дат');
   status(a, 'soon', { place: 'Сосновка', dest: 'Ольховка', part: 'evening' });
-  assert.deepEqual(q(`select part, place is null, dest is null from public.statuses where user_id = '${a}'`), ['evening|t|t'], 'скоро явка — только часть суток');
+  assert.deepEqual(q(`select s.part, p.place is null, p.dest is null from ${ST(a)}`), ['evening|t|t'], 'скоро явка — только часть суток');
   const soon = new Date(Math.floor((Date.now() + 20 * 3600e3) / 3600e3) * 3600e3 + 47 * 60e3).toISOString();
   status(a, 'soon', { part: 'evening', until: soon });
   assert.deepEqual(q(`select until_at = date_trunc('hour', until_at) from public.statuses where user_id = '${a}'`), ['t'], 'без минут: точное время явки не хранится');
   const until = new Date(Date.now() + 5 * 3600e3).toISOString();
   status(a, 'rest', { place: 'Ольховка', dest: 'x', until });
-  assert.deepEqual(q(`select place, dest is null, until_at = ${lit(until)}::timestamptz, after_kind from public.statuses where user_id = '${a}'`), ['Ольховка|t|t|wait']);
+  assert.deepEqual(q(`select p.place, p.dest is null, s.until_at = ${lit(until)}::timestamptz, s.after_kind from ${ST(a)}`), ['Ольховка|t|t|wait']);
   status(a, 'dayoff', { until: new Date(Date.now() + 30 * 86400e3).toISOString() });
   assert.deepEqual(q(`select until_at is null, after_kind from public.statuses where user_id = '${a}'`), ['t|between'], 'время дальше 14 дней — не сохраняется');
   status(a, 'between', { note: 'queue', until });
@@ -246,19 +260,24 @@ test('статус: сервер хранит только нужное для �
 
 test('устаревший статус не виден, «выключить» стирает сразу', () => {
   const [a, b] = pair();
+  share(a, 'status'); share(a, 'place');
   status(a, 'wait', { place: 'Ольховка' });
   assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`, b), 1);
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${a}'`, b), 1);
   q(`update public.statuses set expires_at = now() - interval '1 minute' where user_id = '${a}'`);
   assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`, b), 0, 'старше 48 часов — не видно');
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${a}'`, b), 0, 'и станции тоже');
   status(a, 'wait', { place: 'Ольховка' });
   q('select public.clear_status()', a);
   assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`), 0);
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${a}'`), 0, 'станции стёрты вместе со статусом');
   fails('select public.clear_status()', 'anon', /permission denied/);
 });
 
 test('удалить из коллег: удалённый больше ничего не видит и 30 дней не может предложить снова', () => {
   const [a, b] = pair();
   card(a, { name: 'Никита', find: true });
+  share(a, 'status'); share(b, 'status');
   status(a, 'wait', { place: 'Ольховка' });
   status(b, 'wait', { place: 'Сосновка' });
   q(`select public.drop_colleague('${a}')`, b);
@@ -290,6 +309,11 @@ test('напрямую в таблицы писать нельзя: ни себ�
   fails(`update public.cards set searchable = true where user_id = '${b}'`, a, /permission denied/);
   fails(`insert into public.statuses (user_id, kind, expires_at) values ('${b}', 'trip', now() + interval '1 day')`, a, /permission denied/);
   fails('select * from private.limits', a, /permission denied/);
+  fails(`insert into public.access (user_id, item) values ('${b}', 'status')`, a, /permission denied/);
+  fails(`insert into public.access (user_id, item, viewer_id) values ('${a}', 'status', '${b}')`, a, /permission denied/);
+  fails(`insert into public.status_places (user_id, place) values ('${b}', 'Сосновка')`, a, /permission denied/);
+  fails('select * from private.config', a, /permission denied/);
+  fails(`select private.forget_access()`, a, /permission denied|trigger/);
   fails(`select private.spend('${a}', 'search')`, a, /permission denied/);
   fails(`select private.tidy('${b}')`, a, /permission denied/);
   assert.deepEqual(q(`select state from public.links where id = private.pair('${a}', '${b}')`), ['pending']);
@@ -300,9 +324,13 @@ test('выйти из «Коллег» — стираются своя карт�
   const c = account();
   card(c, { name: 'Третий', find: true });
   offer(a, c);
+  share(a, 'status'); share(b, 'status'); share(b, 'place', [a]);
   status(a, 'wait', { place: 'Ольховка' });
   status(b, 'wait', { place: 'Сосновка' });
+  assert.equal(count(`select count(*) from public.statuses where user_id in ('${a}', '${b}')`), 2);
   q('select public.leave_colleagues()', a);
+  assert.equal(count(`select count(*) from public.access where user_id = '${a}'`), 0, 'свои правила «кому видно» стёрты');
+  assert.equal(count(`select count(*) from public.access where viewer_id = '${a}'`), 0, 'и разрешения, которые давали мне');
   assert.equal(count(`select count(*) from public.cards where user_id = '${a}'`), 0);
   assert.equal(count(`select count(*) from public.statuses where user_id in ('${a}', '${b}')`), 0, 'и статус коллеги, у которого больше нет коллег');
   assert.equal(count(`select count(*) from public.links where '${a}' in (from_id, to_id)`), 0);
@@ -312,8 +340,12 @@ test('выйти из «Коллег» — стираются своя карт�
 
 test('выгрузка своих данных показывает карточку, статус и связи; удаление аккаунта стирает всё', () => {
   const [a, b] = pair();
+  share(a, 'status'); share(a, 'place', [b]);
   status(a, 'trip', { place: 'Сосновка', dest: 'Ольховка', part: 'day' });
   const data = json('select public.export_my_data()', a);
+  assert.equal(data.colleagues_status.place, 'Сосновка', 'станции статуса — в выгрузке');
+  assert.equal(data.colleagues_status.dest, 'Ольховка');
+  assert.deepEqual(data.colleagues_access, [{ item: 'place', to: b }, { item: 'status', to: 'all' }], 'и кому что видно');
   assert.equal(data.colleagues_card.name, 'Никита');
   assert.equal(data.colleagues_status.kind, 'trip');
   assert.equal(data.colleagues.length, 1);
@@ -322,7 +354,7 @@ test('выгрузка своих данных показывает карточ
   assert.ok(!JSON.stringify(data).includes('Анна'), 'чужая карточка в мою выгрузку не попадает');
   q(`insert into private.limits (user_id, day, searches) values ('${a}', private.today(), 3) on conflict (user_id, day) do update set searches = 3`);
   q('select public.delete_my_account()', a);
-  for (const [t, col] of [['public.cards', 'user_id'], ['public.statuses', 'user_id'], ['private.limits', 'user_id'], ['public.links', 'from_id'], ['public.links', 'to_id']]) {
+  for (const [t, col] of [['public.cards', 'user_id'], ['public.statuses', 'user_id'], ['public.status_places', 'user_id'], ['public.access', 'user_id'], ['public.access', 'viewer_id'], ['private.limits', 'user_id'], ['public.links', 'from_id'], ['public.links', 'to_id']]) {
     assert.equal(count(`select count(*) from ${t} where ${col} = '${a}'`), 0, t);
   }
   assert.equal(count(`select count(*) from public.links`, b), 0, 'у коллеги связь пропала');
@@ -330,6 +362,7 @@ test('выгрузка своих данных показывает карточ
 
 test('ежедневная очистка: устаревшие статусы, старые отказы и предложения, ненужные карточки, старые счётчики', () => {
   const [a, b] = pair();
+  share(a, 'status'); share(a, 'place');
   status(a, 'wait', { place: 'Ольховка' });
   q(`update public.statuses set expires_at = now() - interval '1 minute' where user_id = '${a}'`);
   const c = account();
@@ -344,8 +377,69 @@ test('ежедневная очистка: устаревшие статусы, 
   q(`insert into private.limits (user_id, day, searches) values ('${e}', private.today() - 5, 1)`);
   q('select private.cleanup_logs()');
   assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`), 0);
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${a}'`), 0, 'станции — вместе со статусом');
   assert.equal(count(`select count(*) from public.links where id = private.pair('${c}', '${d}')`), 0, 'предложение без ответа старше 30 дней');
   assert.equal(count(`select count(*) from public.cards where user_id in ('${c}', '${e}')`), 0, 'карточки без связей и без «можно найти»');
   assert.equal(count(`select count(*) from public.cards where user_id in ('${a}', '${b}', '${d}')`), 3, 'нужные карточки на месте');
   assert.equal(count(`select count(*) from private.limits where user_id = '${e}'`), 0);
+});
+
+test('кому видно: никому, всем коллегам или выбранным; «где я» — только тем, кто видит и статус', () => {
+  const a = account();
+  const [b, c, stranger] = [account(), account(), account()];
+  card(a, { name: 'Никита', find: true });
+  card(b, { name: 'Анна', find: true }); card(c, { name: 'Олег', find: true }); card(stranger, { name: 'Чужой', find: true });
+  offer(b, a); accept(a, b);
+  offer(c, a); accept(a, c);
+  const sees = (who, t = 'statuses') => count(`select count(*) from public.${t} where user_id = '${a}'`, who);
+  // выбранным: Анна видит, Олег — нет
+  share(a, 'status', [b, stranger]);
+  status(a, 'rest', { place: 'Ольховка', until: new Date(Date.now() + 3600e3).toISOString() });
+  assert.equal(sees(b), 1);
+  assert.equal(sees(c), 0, 'коллегу не выбрали — не видит');
+  assert.equal(sees(stranger), 0, 'не коллегу выбрать нельзя: правило не сохранилось');
+  assert.deepEqual(q(`select coalesce(viewer_id::text, 'все') from public.access where user_id = '${a}'`), [b], 'в правилах только коллеги');
+  // «где я» Олегу разрешили, а статус — нет: станций он тоже не видит
+  share(a, 'place', [b, c]);
+  status(a, 'rest', { place: 'Ольховка', until: new Date(Date.now() + 3600e3).toISOString() });
+  assert.equal(sees(b, 'status_places'), 1);
+  assert.equal(sees(c, 'status_places'), 0, 'без статуса и станций не видно');
+  // всем коллегам — и тем, кто появится
+  share(a, 'status');
+  assert.equal(sees(b) + sees(c), 2);
+  assert.equal(sees(stranger), 0, '«все коллеги» — это не все пользователи');
+  const d = account(); card(d, { name: 'Дарья', find: true }); offer(d, a); accept(a, d);
+  assert.equal(sees(d), 1, 'новый коллега видит статус, если выбрано «все коллеги»');
+  assert.equal(sees(d, 'status_places'), 0, 'а станции — нет: их показывают только Анне и Олегу');
+  // никому — статус стирается сразу
+  share(a, 'status', false);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`), 0, 'никому не показываю — не храню');
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${a}'`), 0);
+  fails(`select public.set_access('gps', true, null)`, a, /bad item/);
+  fails(`select public.set_access('status', true, null)`, 'anon', /permission denied/);
+});
+
+test('правила «кому видно» видит только хозяин; удалил из коллег — разрешение пропало и само не вернётся', () => {
+  const [a, b] = pair();
+  share(a, 'status', [b]); share(a, 'place', [b]);
+  assert.equal(count('select count(*) from public.access', b), 0, 'коллега не видит, что я ему разрешил');
+  assert.equal(count('select count(*) from public.access', a), 2);
+  assert.ok(q(`select private.allowed('${a}', 'status')`, b)[0] === 't', 'а проверить «мне можно?» — может');
+  assert.ok(q(`select private.allowed('${a}', 'status')`, account())[0] === 'f');
+  q(`select public.drop_colleague('${b}')`, a);
+  assert.equal(count(`select count(*) from public.access where user_id = '${a}'`), 0, 'разрешения между нами стёрты');
+  card(a, { name: 'Никита' });
+  assert.equal(offer(a, b), 'sent', 'кто удалил, может передумать'); accept(b, a);
+  status(a, 'wait', { place: 'Ольховка' });
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${a}'`, b), 0, 'снова коллеги — но видеть разрешают заново');
+});
+
+test('без согласия разрешить показ нельзя, а убрать — можно', () => {
+  const [a, b] = pair();
+  share(a, 'status', [b]);
+  q(`update public.consents set withdrawn_at = now() where user_id = '${a}' and document = 'privacy-2'`);
+  fails(`select public.set_access('status', true, null)`, a, /consent required/);
+  assert.equal(count(`select count(*) from public.access where user_id = '${a}'`), 1, 'отказ ничего не поменял');
+  share(a, 'status', false);
+  assert.equal(count(`select count(*) from public.access where user_id = '${a}'`), 0);
 });

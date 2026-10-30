@@ -801,13 +801,15 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .col-who { display: flex; align-items: center; gap: 12px; }
 .col-who .grow { min-width: 0; }
 .col-who .t1 { font-weight: 700; overflow-wrap: anywhere; }
+.my-val { overflow-wrap: anywhere; }
 .col-offer .t2 { font-size: 13px; color: var(--text-2); }
 .col-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .col-empty { padding: 0 4px; }
 .col-leave { margin-top: 2px; }
 .col-tag { flex: none; font-size: 13px; font-weight: 700; color: var(--muted); padding: 4px 10px; border-radius: 99px; background: var(--card-2); }
 .col-tag.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
-.col-roles { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+.col-roles { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.col-roles button { padding-left: 4px; padding-right: 4px; }
 .col-card { border: 0; padding: 4px 0 8px; background: none; }
 .col-card .avatar { cursor: default; }
 .col-agree { margin-top: 4px; }
@@ -1040,3 +1042,22 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
   .av-big { width: 150px; height: 150px; border-radius: 30px; }
   .av-top .page-head { min-height: 52px; padding-top: 8px; }
 }
+
+/* Приватность: кому из коллег что видно (2.16) */
+.sheet-body > .panel { flex-shrink: 0; }
+.acc-modes { display: grid; gap: 8px; }
+.acc-modes .radio-row { min-height: 56px; }
+.acc-modes .radio-row .grow { white-space: normal; overflow: visible; }
+.acc-modes .radio-row small { display: block; margin-top: 2px; font-weight: 500; font-size: 13px; color: var(--text-2); }
+.acc-modes .radio-row:disabled { opacity: .55; }
+.acc-who { display: grid; gap: 8px; }
+.acc-who[hidden] { display: none; }
+.pick-row { display: grid; grid-template-columns: 24px 44px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 60px; padding: 8px 14px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); text-align: left; width: 100%; color: var(--text); }
+.pick-row .box { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line-2); display: grid; place-items: center; color: #fff; }
+.pick-row .box svg { width: 15px; height: 15px; opacity: 0; }
+.pick-row[aria-checked="true"] { border-color: var(--accent); }
+.pick-row[aria-checked="true"] .box { background: var(--accent); border-color: var(--accent); }
+.pick-row[aria-checked="true"] .box svg { opacity: 1; }
+.pick-row .t1 { font-weight: 700; overflow-wrap: anywhere; }
+.pv-preview .col-st { vertical-align: middle; }
+.switch:disabled { opacity: .45; cursor: default; }

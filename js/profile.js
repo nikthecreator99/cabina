@@ -1,5 +1,6 @@
 // Профиль. Хранится в этом телефоне; коллегам (с 2.15, colleagues.js) уходит только то, что человек включил в «Приватности».
-// Экран «Профиль» — просмотр; изменить персонажа, имя, должность, депо и приватность — «Редактировать профиль».
+// Экран «Профиль» — просмотр и «Коллеги»; изменить персонажа, имя, должность и депо — «Редактировать профиль».
+// «Приватность» с 2.16 — в Настройках аккаунта (colleagues.js): там же и кому из коллег что видно.
 // С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
 import { I, esc, small, pageHead, toast, confirmDialog, plural, whenShort, dayMonth, MONTHS_PREP } from './ui.js';
 import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf } from './store.js';
@@ -8,7 +9,6 @@ import { ROLES, OVERREST_MAX } from './pay.js';
 import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
 import { careerOf, tenure, tenureText, todayKey } from './career.js';
 import { normPhone } from './phones.js';
-import { accountRowHtml } from './account.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { premiumOk, hasAvatar } from './avatar-edit.js';
 
@@ -19,15 +19,9 @@ const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).ma
 
 const safePhoto = (v) => /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(String(v || ''));
 
-// Что видят коллеги (раздел «Коллеги», нужен аккаунт). По умолчанию — ничего.
-// «Меня можно найти» и «Статус» включаются в colleagues.js: там согласие и связь с сервером.
-export const PRIVACY = [
-  { k: 'find', label: 'Меня можно найти', hint: 'Коллеги найдут вас по имени и смогут предложить стать коллегами. Нужен аккаунт CABINA и отдельное согласие.' },
-  { k: 'status', label: 'Статус', hint: 'Только коллегам: в пути, на отдыхе, на выходном или на отвлечении. Без точного времени явки и номера поезда.' },
-  { k: 'depot', label: 'Депо', hint: 'Чтобы вас могли найти коллеги из вашего депо.' },
-  { k: 'avatar', label: 'Персонаж', hint: 'Без этого коллеги увидят только первые буквы имени.' },
-  { k: 'phone', label: 'Номер телефона', hint: 'Пока номер никому не передаётся, даже коллегам.' },
-];
+// Что видят коллеги (раздел «Коллеги», нужен аккаунт). По умолчанию — ничего. Переключатели — на экране «Приватность»
+// (colleagues.js): «Меня можно найти» — с согласием, статус — кому из коллег (правила на сервере), депо и персонаж — здесь же.
+// phone пока никуда не уходит.
 // До 2.12 вместо персонажа было фото: прежний выбор «показывать фото» переходит к персонажу
 export function privacyOf(p = S.profile) {
   const { photo, ...pv } = p.privacy || {};
@@ -112,7 +106,6 @@ export function renderProfile(colleagues = '') {
       ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
       <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.edit, 16)} Редактировать профиль</button>
     </section>
-    ${accountRowHtml()}
     ${colleagues}
     ${tiles}
     <div class="notice ok">${I.shield}<div><b>Профиль хранится в этом телефоне.</b> Коллеги видят только то, что вы сами включили в «Приватности». Профиль попадает в резервную копию — не пересылайте её другим людям.</div></div>`;
@@ -120,7 +113,6 @@ export function renderProfile(colleagues = '') {
 
 export function renderProfileEdit() {
   const p = S.profile;
-  const pv = privacyOf(p);
   return `${pageHead('Редактировать профиль', { back: true })}
     <section class="profile-card">
       <button class="avatar big" id="pr-avatar" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}<span class="ava-cam">${hasAvatar(p) ? I.edit : I.plus}</span></button>
@@ -138,12 +130,7 @@ export function renderProfileEdit() {
       <div class="pay-field"><label for="pr-phone">Номер телефона</label><input class="input" id="pr-phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" placeholder="+7 900 000-00-00" value="${esc(p.phone)}">
         <div class="hint">Хранится только в этом телефоне и никому не передаётся.</div></div>
     </div>
-    <div class="group-title">Приватность: что увидят коллеги</div>
-    <div class="panel" id="pr-privacy">
-      ${PRIVACY.map((f) => `<div class="row"><div class="grow"><div class="t1">${f.label}</div><div class="t2">${f.hint}</div></div>
-        <button class="switch" role="switch" data-act="pr-priv" data-k="${f.k}" aria-checked="${pv[f.k]}" aria-label="Показывать коллегам: ${f.label.toLowerCase()}"></button></div>`).join('')}
-    </div>
-    <div class="notice ok">${I.shield}<div><b>Коллеги — только с аккаунтом и только по вашему выбору.</b> На наш сервер в России уходят имя, должность и то, что вы включили выше. Поездки, заработок, номер поезда и локомотива, точное время явки и телефон не уходят. Причину отвлечения — больничный, отпуск или медкомиссия — коллеги не увидят никогда, только «На отвлечении».</div></div>`;
+    <div class="notice ok">${I.shield}<div><b>Коллеги — только с аккаунтом и только по вашему выбору.</b> На наш сервер в России уходят имя, должность и то, что вы разрешили в Настройках аккаунта → «Приватность». Поездки, заработок, номер поезда и локомотива, точное время явки и телефон не уходят. Причину отвлечения — больничный, отпуск или медкомиссия — коллеги не увидят никогда, только «На отвлечении».</div></div>`;
 }
 
 export async function profileClick(act, b) {

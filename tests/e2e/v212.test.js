@@ -204,10 +204,10 @@ test('персонаж: испорченные данные из копии не
   assert.equal(await page.locator('#pwn').count(), 0);
   assert.equal(await page.evaluate(() => window.__pwn), undefined);
   // прежнее «показывать фото» стало «показывать персонажа»
-  await page.locator('[data-act=av-close]').click();
-  await page.locator('[data-page=profile-edit]').click();
-  assert.equal(await page.locator('[data-act=pr-priv][data-k=avatar]').getAttribute('aria-checked'), 'true');
-  assert.equal(await page.locator('[data-act=pr-priv][data-k=photo]').count(), 0);
+  // (переключатели с 2.16 — на экране «Приватность» в Настройках аккаунта)
+  const pv = await page.evaluate(async () => (await import('./js/profile.js')).privacyOf());
+  assert.equal(pv.avatar, true);
+  assert.equal('photo' in pv, false);
   assert.deepEqual(errors, []);
   await context.close();
 });

@@ -1,4 +1,5 @@
-// Подменный сервер «Коллег» для браузерных проверок 2.15: ведёт себя как наш Supabase с миграцией 0002.
+// Подменный сервер «Коллег» для браузерных проверок 2.15–2.16: ведёт себя как наш Supabase с миграциями 0002 и 0003
+// (кому из коллег что видно: access; станции статуса — отдельно, status_places). Коллеги в нём свои статусы мне показывают.
 // Все люди, станции и ключи — выдуманные.
 import { NOW, seed } from './helpers.js';
 
@@ -14,7 +15,7 @@ export async function mockServer(context, init = {}) {
   const db = {
     consents: [{ document: 'privacy-1', withdrawn_at: null }],
     cards: { [ANNA]: { user_id: ANNA, name: 'Анна Тестовая', role: 'other', depot: 'Сосновка', avatar: null, searchable: true }, [OLEG]: { user_id: OLEG, name: 'Олег Пробный', role: 'driver', depot: null, avatar: null, searchable: true } },
-    links: [], statuses: {}, ...init,
+    links: [], statuses: {}, access: [], ...init,
   };
   const log = [];
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'apikey, authorization, content-type', 'access-control-allow-methods': 'GET, POST, PUT, OPTIONS' };
@@ -44,14 +45,31 @@ export async function mockServer(context, init = {}) {
       }
       case '/rest/v1/statuses': {
         const seen = new Set([ME, ...db.links.filter((l) => mine(l) && l.state === 'accepted').map(other)]);
-        return send(200, Object.entries(db.statuses).filter(([k]) => seen.has(k)).map(([user_id, s]) => ({ user_id, ...s })));
+        return send(200, Object.entries(db.statuses).filter(([k]) => seen.has(k)).map(([user_id, { place, dest, ...s }]) => ({ user_id, ...s, place: null, dest: null })));
       }
+      case '/rest/v1/status_places': {
+        const seen = new Set([ME, ...db.links.filter((l) => mine(l) && l.state === 'accepted').map(other)]);
+        return send(200, Object.entries(db.statuses).filter(([k, s]) => seen.has(k) && (s.place || s.dest)).map(([user_id, s]) => ({ user_id, place: s.place || null, dest: s.dest || null })));
+      }
+      case '/rest/v1/access': return send(200, db.access.filter((a) => a.user_id === ME));
       default: break;
     }
     if (rpc === 'touch') return send(204);
     if (rpc === 'clear_status') { delete db.statuses[ME]; return send(204); }
-    if (rpc === 'drop_colleague') { db.links = db.links.filter((l) => !(mine(l) && other(l) === body.p_other)); return send(204); }
-    if (rpc === 'leave_colleagues') { db.links = db.links.filter((l) => !mine(l)); delete db.cards[ME]; delete db.statuses[ME]; db.consents.forEach((c) => { if (c.document === 'publish-1') c.withdrawn_at = NOW; }); return send(204); }
+    if (rpc === 'drop_colleague') { db.links = db.links.filter((l) => !(mine(l) && other(l) === body.p_other)); db.access = db.access.filter((a) => a.viewer_id !== body.p_other); return send(204); }
+    if (rpc === 'set_access') {
+      const grant = body.p_all || body.p_ids?.length;
+      if (grant && !main()) return fail('consent required');
+      db.access = db.access.filter((a) => !(a.user_id === ME && a.item === body.p_item));
+      const colleague = (id) => db.links.some((l) => mine(l) && l.state === 'accepted' && other(l) === id);
+      if (body.p_all) db.access.push({ user_id: ME, item: body.p_item, viewer_id: null });
+      else for (const id of body.p_ids || []) if (colleague(id)) db.access.push({ user_id: ME, item: body.p_item, viewer_id: id });
+      const has = (item) => db.access.some((a) => a.user_id === ME && a.item === item);
+      if (!has('status')) delete db.statuses[ME];
+      if (!has('place') && db.statuses[ME]) { db.statuses[ME].place = null; db.statuses[ME].dest = null; }
+      return send(204);
+    }
+    if (rpc === 'leave_colleagues') { db.links = db.links.filter((l) => !mine(l)); db.access = db.access.filter((a) => a.user_id !== ME); delete db.cards[ME]; delete db.statuses[ME]; db.consents.forEach((c) => { if (c.document === 'publish-1') c.withdrawn_at = NOW; }); return send(204); }
     if (rpc === 'give_consent') {
       if (body.p_document === 'publish-1' && !main()) return fail('consent required');
       if (!['privacy-2', 'publish-1'].includes(body.p_document)) return fail('consent required');
@@ -83,8 +101,10 @@ export async function mockServer(context, init = {}) {
       return send(204);
     }
     if (rpc === 'set_status') {
-      if (!db.links.some((l) => mine(l) && l.state === 'accepted')) { delete db.statuses[ME]; return send(204); }
-      db.statuses[ME] = { kind: body.p_kind, place: body.p_place, dest: body.p_dest, part: body.p_part, note: body.p_note, until_at: body.p_until, updated_at: NOW };
+      const has = (item) => db.access.some((a) => a.user_id === ME && a.item === item);
+      if (!db.links.some((l) => mine(l) && l.state === 'accepted') || !has('status')) { delete db.statuses[ME]; return send(204); }
+      const pl = has('place');
+      db.statuses[ME] = { kind: body.p_kind, place: pl ? body.p_place : null, dest: pl ? body.p_dest : null, part: body.p_part, note: body.p_note, until_at: body.p_until, updated_at: NOW };
       return send(204);
     }
     return send(404, { code: 'PGRST202', message: 'not found' });
@@ -110,3 +130,21 @@ export async function ready(context, page, init, tweak) {
   return srv;
 }
 
+
+// Профиль → ⚙ Настройки → «Настройки аккаунта» → «Приватность»
+export async function openPrivacy(page) {
+  await page.locator('.tab[data-tab=profile]').click();
+  await page.locator('.screen [data-page=settings]').click();
+  await page.locator('.screen [data-page=account]').click();
+  await page.locator('.screen [data-page=privacy]').click();
+  await page.locator('#pv-access').waitFor();
+  await page.waitForFunction(() => !/Видят: …/.test(document.querySelector('#pv-access')?.innerText || ''));
+}
+// Выбрать «кому видно» для статуса или «где я»: none | all | some (names — кого отметить)
+export async function chooseAccess(page, item, mode, names = []) {
+  await page.locator(`[data-act=col-access][data-item=${item}]`).click();
+  const sh = page.locator('#layers .layer:not(.closing)').last();
+  await sh.locator(`.radio-row[data-mode=${mode}]`).click();
+  for (const n of names) await sh.locator('.pick-row', { hasText: n }).click();
+  await sh.locator('[data-act=access-save]').click();
+}

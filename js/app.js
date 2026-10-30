@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour, privacyTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -24,12 +24,13 @@ import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
 import { careerSub, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
-import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion } from './account.js';
+import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml } from './account.js';
 import { consumeAuthRedirect, touch } from './auth.js';
-import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake } from './colleagues.js';
+import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
+  colleaguesAccountHtml, renderPrivacy } from './colleagues.js';
 import { legalReady, policyHtml } from './legal.js';
 
-export const VERSION = '2.15.0';
+export const VERSION = '2.16.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -392,6 +393,7 @@ function renderSettings() {
   const themeBtn = (v, label, ic) => `<button data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${small(ic, 16)} ${label}</button>`;
   const lastBk = S.backup.lastAt ? `Последняя копия: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Копия ещё не сохранялась';
   return `${pageHead('Настройки', { back: true })}
+    ${accountRowHtml()}
     <div class="group"><div class="group-title">Оформление</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
     </div>
@@ -442,7 +444,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, account: renderAccount, colleagues: renderColleagues };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues };
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
 let tabFace = { key: null, icon: null };
 function renderTabbar() {
@@ -517,7 +519,8 @@ function scheduleTours() {
     else if (p === 'tariffs') { tariffsTour(); payModeTour(); sickPayTour(); }
     else if (p === 'houses') housesTour();
     else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); if (app.querySelector('.st-locos, [data-act=st-recap]')) statsMoreTour(); }
-    else if (p === 'settings') settingsTour();
+    else if (p === 'settings') { if (legalReady()) accountTileTour(); settingsTour(); }
+    else if (p === 'privacy') { if (app.querySelector('#pv-access')) privacyTour(); }
     else if (p === 'profile-edit') profileEditTour();
     else if (p === 'avatar') { avatarTour(); avatarCharsTour(); }
     else if (p === 'career') careerTour();
@@ -525,13 +528,13 @@ function scheduleTours() {
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
-    else if (V.tab === 'profile') { profileTour(); if (legalReady()) accountTileTour(); if (app.querySelector('.col-search')) colleaguesTour(); }
+    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('.col-search')) colleaguesTour(); }
   }, 500);
 }
 export { scheduleTours };
 // Изменения данных: поле поиска не перерисовываем, чтобы не сбивать набор текста
 onChange(() => rerender());
-initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.length) || page() === 'colleagues' });
+initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.length) || ['colleagues', 'privacy', 'account'].includes(page()) });
 
 function openTariffsPage() { go('work'); V.pages.push('tariffs'); render(); }
 setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => (document.getElementById(id) || document.getElementById('pay-avg'))?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
@@ -568,7 +571,7 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
 
 // ---------------------------------------------------------------- действия
 const swipe = attachSwipe(app);
-const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll(), openAbsenceForm };
+const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll(), openAbsenceForm, myDataHtml };
 
 async function doExport() {
   const ok = await confirmDialog({

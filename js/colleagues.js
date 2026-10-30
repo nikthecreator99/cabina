@@ -6,11 +6,11 @@
 //   статус — одна строка без истории: вид, станции или дом отдыха, часть суток, «до …»; сам стирается через 48 часов.
 // Номер поезда и локомотива, точное время явки, причина и даты отвлечения, телефон на сервер не уходят никогда.
 // Всё, что пришло с сервера, — непроверенное: текст только через esc(), персонаж — через normalizeAvatar.
-import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, whenShort, plural, layerCount, MONTHS_GEN } from './ui.js';
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, whenShort, plural, layerCount, MONTHS_GEN, hm } from './ui.js';
 import { S, saveProfile, nowLocal, onChange } from './store.js';
 import { DAY } from './calc.js';
 import { session, rpc, restGet, errorText } from './auth.js';
-import { CONSENT_VERSION, PUBLISH_VERSION, consentHtml, policyHtml, publishConsentHtml, legalReady } from './legal.js';
+import { CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, consentHtml, policyHtml, publishConsentHtml, legalReady } from './legal.js';
 import { statusFacts, privacyOf } from './profile.js';
 import { routeEnds } from './rest.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
@@ -91,11 +91,14 @@ export function cardPayload(p = S.profile, { findable = false, premium = false }
 const txt = (v, max = 60) => (typeof v === 'string' ? cleanText(v, max) : '');
 const time = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
 
+function cardFields(x) {
+  const av = x.avatar && typeof x.avatar === 'object' && !Array.isArray(x.avatar) ? normalizeAvatar(x.avatar, { premium: true }) : null;
+  return { name: txt(x.name) || 'Без имени', role: own(ROLE_NAMES, x.role) ? x.role : '', depot: txt(x.depot), avatar: av, searchable: x.searchable === true };
+}
 export function cleanCard(x) {
   const id = String(x?.user_id ?? x?.id ?? '');
   if (!x || typeof x !== 'object' || !UUID.test(id)) return null;
-  const av = x.avatar && typeof x.avatar === 'object' && !Array.isArray(x.avatar) ? normalizeAvatar(x.avatar, { premium: true }) : null;
-  return { id: id.toLowerCase(), name: txt(x.name) || 'Без имени', role: own(ROLE_NAMES, x.role) ? x.role : '', depot: txt(x.depot), avatar: av, searchable: x.searchable === true };
+  return { id: id.toLowerCase(), ...cardFields(x) };
 }
 
 export function cleanStatus(x) {
@@ -107,15 +110,36 @@ export function cleanStatus(x) {
   };
 }
 
-// Снимок с сервера: согласия, моя карточка, предложения мне, мои предложения, коллеги со статусом
-export function buildSnapshot(me, { consents, links, cards, statuses }) {
+// Свои правила «кому видно» (чужие сервер не отдаёт): all — всем коллегам, ids — выбранным
+function accessRows(rows, me) {
+  const a = { status: { all: false, ids: [] }, place: { all: false, ids: [] } };
+  for (const r of arr(rows)) {
+    if (!r || typeof r !== 'object' || !own(a, r.item) || (r.user_id != null && String(r.user_id).toLowerCase() !== me)) continue;
+    if (r.viewer_id == null) a[r.item].all = true;
+    else if (UUID.test(String(r.viewer_id))) a[r.item].ids.push(String(r.viewer_id).toLowerCase());
+  }
+  return a;
+}
+
+// Снимок с сервера: согласия, моя карточка, предложения мне, мои предложения, коллеги со статусом, кому что видно.
+// Станции статуса (с 2.16) приходят отдельно — их сервер отдаёт только тем, кому человек показывает, где он.
+export function buildSnapshot(me, { consents, links, cards, statuses, places, access }) {
   me = String(me).toLowerCase();
   const ok = (doc) => arr(consents).some((c) => c && c.document === doc && !c.withdrawn_at);
   const cardOf = new Map();
   for (const c of arr(cards)) { const k = cleanCard(c); if (k) cardOf.set(k.id, k); }
+  const placeOf = new Map();
+  for (const p of arr(places)) if (p && UUID.test(String(p.user_id))) placeOf.set(p.user_id.toLowerCase(), p);
   const statusOf = new Map();
-  for (const s of arr(statuses)) { const v = UUID.test(String(s?.user_id)) && cleanStatus(s); if (v) statusOf.set(s.user_id.toLowerCase(), v); }
-  const out = { consent: { main: ok(CONSENT_VERSION), publish: ok(PUBLISH_VERSION) }, card: cardOf.get(me) || null, myStatus: statusOf.get(me) || null, incoming: [], outgoing: [], colleagues: [] };
+  for (const s of arr(statuses)) {
+    if (!s || !UUID.test(String(s.user_id))) continue;
+    const id = s.user_id.toLowerCase();
+    const p = placeOf.get(id);
+    const v = cleanStatus(p ? { ...s, place: p.place, dest: p.dest } : s);
+    if (v) statusOf.set(id, v);
+  }
+  const out = { consent: { main: ok(CONSENT_VERSION), publish: ok(PUBLISH_VERSION) }, card: cardOf.get(me) || null, myStatus: statusOf.get(me) || null,
+    access: accessRows(access, me), incoming: [], outgoing: [], colleagues: [] };
   const seen = new Set();
   for (const l of arr(links)) {
     if (!l || !UUID.test(String(l.from_id)) || !UUID.test(String(l.to_id))) continue;
@@ -131,6 +155,35 @@ export function buildSnapshot(me, { consents, links, cards, statuses }) {
   const byName = (a, b) => a.card.name.localeCompare(b.card.name, 'ru');
   out.colleagues.sort(byName); out.incoming.sort(byName); out.outgoing.sort(byName);
   return out;
+}
+
+// Кому сейчас виден статус ('status') или «где я» ('place'): none — никому, all — всем коллегам,
+// some — выбранным (только тем, кто и сейчас коллега). Статус выключен в телефоне — никому, «где я» без статуса — тоже.
+export function accessMode(snap, item, pv = privacyOf()) {
+  const none = { mode: 'none', ids: [] };
+  if (!snap) return none;
+  if (item === 'status' && !pv.status) return none;
+  if (item === 'place' && accessMode(snap, 'status', pv).mode === 'none') return none;
+  const a = snap.access?.[item];
+  if (!a) return none;
+  if (a.all) return { mode: 'all', ids: [] };
+  const ids = a.ids.filter((id) => snap.colleagues.some((c) => c.id === id));
+  return ids.length ? { mode: 'some', ids } : none;
+}
+// Видит ли этот коллега: «где я» — только вместе со статусом
+export function sees(snap, item, id, pv = privacyOf()) {
+  if (item === 'place' && !sees(snap, 'status', id, pv)) return false;
+  const m = accessMode(snap, item, pv);
+  return m.mode === 'all' ? snap.colleagues.some((c) => c.id === id) : m.ids.includes(id);
+}
+// «Никто», «Все коллеги», «Анна, Олег», «5 коллег»
+export function accessText(snap, item, pv = privacyOf()) {
+  const m = accessMode(snap, item, pv);
+  if (m.mode === 'none') return 'Никто';
+  if (m.mode === 'all') return item === 'place' && accessMode(snap, 'status', pv).mode === 'some' ? 'Все, кто видит статус' : 'Все коллеги';
+  const names = snap.colleagues.filter((c) => sees(snap, item, c.id, pv)).map((c) => c.card.name);
+  if (!names.length) return 'Никто';
+  return names.length <= 2 ? names.join(', ') : `${names.length} ${plural(names.length, 'коллега', 'коллеги', 'коллег')}`;
 }
 
 // ---------------------------------------------------------------- строка статуса коллеги
@@ -238,7 +291,9 @@ export function loadColleagues({ force = false } = {}) {
       restGet('consents?select=document,withdrawn_at'),
       restGet('links?select=from_id,to_id,state'),
       restGet('cards?select=user_id,name,role,depot,avatar,searchable'),
-      restGet('statuses?select=user_id,kind,place,dest,part,note,until_at,after_kind,updated_at'),
+      restGet('statuses?select=user_id,kind,part,note,until_at,after_kind,updated_at'),
+      restGet('status_places?select=user_id,place,dest'),
+      restGet('access?select=user_id,item,viewer_id'),
     ]);
     if (mine()?.sub?.toLowerCase() !== sub) return null; // за это время вышли из аккаунта
     const bad = rs.find((r) => !r?.ok);
@@ -247,8 +302,8 @@ export function loadColleagues({ force = false } = {}) {
       C.failAt = Date.now();
       return C.snap;
     }
-    const [consents, links, cards, statuses] = rs.map((r) => r.data);
-    C.snap = buildSnapshot(sub, { consents, links, cards, statuses });
+    const [consents, links, cards, statuses, places, access] = rs.map((r) => r.data);
+    C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access });
     C.at = Date.now(); C.err = '';
     return C.snap;
   })().finally(() => { C.loading = null; });
@@ -309,7 +364,11 @@ async function sync() {
         else if (/publish consent required/.test(String(r?.data?.message))) { await saveProfile({ privacy: { ...pv, find: false } }); return; }
       }
     }
-    const st = pv.status && snap.colleagues.length ? statusPayload(statusFacts()) : null;
+    // статус включён, а показывать некому (выбрали «никто» на другом устройстве, удалили всех выбранных) — выключаем
+    if (pv.status && accessMode(snap, 'status', pv).mode === 'none') { await saveProfile({ privacy: { ...pv, status: false } }); return; }
+    let st = pv.status && snap.colleagues.length ? statusPayload(statusFacts()) : null;
+    // «где я» никому не показываем — станции не отправляем вовсе
+    if (st && accessMode(snap, 'place', pv).mode === 'none') st = { ...st, p_place: null, p_dest: null };
     if (st) {
       const m = mark(st);
       if (m !== last.status || Date.now() - last.statusAt > RESEND) {
@@ -353,7 +412,7 @@ function needAccount() {
   const el = openLayer(sheet({ title: 'Нужен аккаунт CABINA', body: `
     <p class="hint">Коллеги работают через аккаунт: так предложения и ваш статус доходят только до тех, кого вы сами добавили.</p>
     <div class="notice ok">${I.shield}<div>Без аккаунта CABINA работает как раньше: все записи остаются в этом телефоне.</div></div>`,
-  foot: '<button class="btn btn-primary" data-act="col-to-account">Аккаунт CABINA</button>' }));
+  foot: '<button class="btn btn-primary" data-act="col-to-account">Настройки аккаунта</button>' }));
   el.querySelector('[data-act="col-to-account"]').addEventListener('click', () => { closeLayer(el); hooks.go('account'); });
 }
 
@@ -397,7 +456,16 @@ async function ensureCard() {
   return true;
 }
 
-// Окно коллеги: персонаж, имя, статус и «Удалить из коллег»
+// Что видит этот коллега: два переключателя в его окне
+function colAccessRows(id) {
+  const st = sees(C.snap, 'status', id);
+  const row = (item, title, sub, on, off = false) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
+    <button class="switch" role="switch" data-item="${item}" aria-checked="${on}" aria-label="${title}" ${off ? 'disabled' : ''}></button></div>`;
+  return row('status', 'Мой статус', 'В пути, на отдыхе, между поездками', st)
+    + row('place', 'Где я', st ? 'Станции и дом отдыха' : 'Сначала включите статус', st && sees(C.snap, 'place', id), !st);
+}
+
+// Окно коллеги: персонаж, имя, статус, что он видит, «Удалить из коллег»
 function openColleague(id) {
   const c = C.snap?.colleagues.find((x) => x.id === id);
   if (!c) return;
@@ -409,8 +477,18 @@ function openColleague(id) {
       ${cardSub(c.card) ? `<div class="profile-sub">${esc(cardSub(c.card))}</div>` : ''}
       ${line ? `${pill(line, 'pr-status')}<div class="hint">${esc(updatedText(c.status.at))}</div>` : '<div class="hint">Статус не показан: коллега его не включил или давно не открывал CABINA.</div>'}
     </section>
+    <div class="group-title">Что видит ${esc(c.card.name)}</div>
+    <div class="panel" id="col-acc">${colAccessRows(c.id)}</div>
     <div class="notice ok">${I.shield}<div>Номер поезда и локомотива, точное время явки и причину отвлечения CABINA коллегам не показывает.</div></div>`,
   foot: `<button class="btn btn-danger" data-act="col-drop">${small(I.trash, 18)} Удалить из коллег</button>` }));
+  el.querySelector('#col-acc').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-item]');
+    if (!b || C.busy) return;
+    C.busy = true;
+    try { await setAccessFor(b.dataset.item, c.id, b.getAttribute('aria-checked') !== 'true'); } finally { C.busy = false; }
+    const box = el.querySelector('#col-acc');
+    if (box) box.innerHTML = colAccessRows(c.id);
+  });
   el.querySelector('[data-act="col-drop"]').addEventListener('click', async () => {
     const ok = await confirmDialog({ title: 'Удалить из коллег?', ok: 'Удалить',
       text: `${c.card.name} перестанет видеть ваш статус, а вы — его. Снова предложить вам стать коллегами этот человек сможет только через 30 дней.` });
@@ -453,8 +531,6 @@ function sentRow(o) {
   return `<div class="row col-row">${avaBox(o.card)}<div class="grow"><div class="t1">${esc(o.card.name)}</div><div class="t2">Ждёт ответа</div></div>
     <button class="btn btn-plain btn-sm" data-act="col-cancel" ${idAttr(o.id)} aria-label="Отменить предложение: ${esc(o.card.name)}">Отменить</button></div>`;
 }
-const switchRow = (k, title, sub, on) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
-  <button class="switch" role="switch" data-act="pr-priv" data-k="${k}" aria-checked="${on}" aria-label="${title}"></button></div>`;
 
 function loadingHtml(head) {
   const body = C.err
@@ -475,28 +551,153 @@ export function colleaguesHtml() {
       <div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились «Коллеги»: поиск коллег и статус для них. Чтобы пользоваться ими, прочитайте и примите согласие.</div></div>
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
-  const pv = privacyOf();
-  const mineLine = colleagueLine(payloadStatus(statusPayload(statusFacts())));
-  const statusSub = !pv.status ? 'Выключено: коллеги не видят, где вы.'
-    : `${snap.colleagues.length ? 'Так вас видят коллеги:' : 'Так вас увидят коллеги:'} ${mineLine ? pill(mineLine) : 'пока нечего показать'}`;
-  const findSub = pv.find ? `Вас найдут по имени «${esc(cleanText(S.profile.name))}».` : 'Выключено: в поиске вас нет, предложить можете только вы.';
-  const linked = snap.colleagues.length + snap.incoming.length + snap.outgoing.length > 0;
   return `<div class="group col-sec" id="col-sec">${head}
     <button class="col-search" data-act="go" data-page="colleagues">${small(I.search, 20)}<span>Найти коллегу</span></button>
     ${snap.incoming.length ? `<div class="panel col-offers">${snap.incoming.map(offerRow).join('')}</div>` : ''}
     ${snap.colleagues.length ? `<div class="panel" id="col-list">${snap.colleagues.map(colleagueRow).join('')}</div>`
       : '<div class="hint col-empty">Пока никого. Найдите коллегу по имени и предложите стать коллегами — когда он согласится, появится здесь.</div>'}
     ${snap.outgoing.length ? `<div class="group-title">Ждут ответа</div><div class="panel">${snap.outgoing.map(sentRow).join('')}</div>` : ''}
-    <div class="panel" id="col-switches">
-      ${switchRow('find', 'Меня можно найти', findSub, pv.find)}
-      ${switchRow('status', 'Показывать мой статус коллегам', statusSub, pv.status)}
-    </div>
-    ${snap.card || linked ? '<button class="link-btn col-leave" data-act="col-leave">Выйти из «Коллег»</button>' : ''}
   </div>`;
 }
 
+// «Настройки аккаунта» → группа «Коллеги»: приватность и «Выйти из „Коллег“»
+export function colleaguesAccountHtml() {
+  if (!legalReady() || !mine()) return '';
+  ensureFresh();
+  const snap = C.snap;
+  const linked = snap && (snap.card || snap.colleagues.length + snap.incoming.length + snap.outgoing.length > 0);
+  return `<div class="group" id="acc-col"><div class="group-title">Коллеги</div>
+    <div class="panel"><button class="row" data-act="go" data-page="privacy"><span class="ico" style="--c:var(--ok)">${I.lock}</span>
+      <div class="grow"><div class="t1">Приватность</div><div class="t2">Кто из коллег что видит: статус, где вы, депо, персонаж, поиск</div></div>${small(I.right, 18)}</button></div>
+    ${linked ? '<button class="link-btn col-leave" data-act="col-leave">Выйти из «Коллег»</button>' : ''}
+  </div>`;
+}
+
+const accessRow = (item, ico, color, snap) => `<button class="row" data-act="col-access" data-item="${item}"><span class="ico" style="--c:var(${color})">${ico}</span>
+  <div class="grow"><div class="t1">${ACCESS_ITEMS[item].what}</div><div class="t2">Видят: <b>${esc(snap ? accessText(snap, item) : '…')}</b></div></div>${small(I.right, 18)}</button>`;
+
+// Экран «Приватность» (Настройки → Настройки аккаунта): что и кому из коллег видно. По умолчанию — ничего.
+export function renderPrivacy() {
+  const head = pageHead('Приватность', { back: true });
+  if (!legalReady() || !mine()) {
+    return `${head}<div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Коллеги работают через аккаунт: так ваш статус доходит только до тех, кого вы выберете.</div></div>
+      <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
+  }
+  ensureFresh();
+  const snap = C.snap;
+  const pv = privacyOf();
+  let mineLine = null;
+  if (snap && accessMode(snap, 'status', pv).mode !== 'none') {
+    let st = statusPayload(statusFacts());
+    if (st && accessMode(snap, 'place', pv).mode === 'none') st = { ...st, p_place: null, p_dest: null };
+    mineLine = colleagueLine(payloadStatus(st));
+  }
+  const findSub = pv.find ? `Включено: вас найдут по имени «${esc(cleanText(S.profile.name))}».` : 'Выключено: в поиске вас нет, предложить стать коллегами можете только вы.';
+  const cardRow = (k, title, sub, on) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
+    <button class="switch" role="switch" data-act="pr-priv" data-k="${k}" aria-checked="${on}" aria-label="${title}"></button></div>`;
+  return `${head}
+    <p class="hint">Что видят коллеги, решаете вы. По умолчанию — ничего. Номер поезда и локомотива, точное время явки, заработок, причину отвлечения и телефон коллеги не видят никогда.</p>
+    ${snap && !snap.consent.main ? `<div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> Чтобы показывать что-то коллегам, прочитайте и примите её.</div></div>
+      <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button>` : ''}
+    <div class="group"><div class="group-title">Статус для коллег</div>
+      <div class="panel" id="pv-access">
+        ${accessRow('status', I.train, '--accent', snap)}
+        ${accessRow('place', I.route, '--night', snap)}
+      </div>
+      ${!snap ? `<div class="hint">${C.err ? esc(C.err === 'server' ? SERVER_OFF : 'Нет связи с сервером — покажем, когда появится интернет.') : 'Загружаем…'}</div>`
+        : mineLine ? `<div class="hint pv-preview">Так вас видят: ${pill(mineLine)}</div>`
+        : accessMode(snap, 'status', pv).mode !== 'none' ? '<div class="hint">Пока нечего показать: добавьте поездку.</div>' : ''}
+      ${snap && accessMode(snap, 'status', pv).mode !== 'none' ? '<div class="hint">CABINA не работает в фоне: статус обновляется, когда приложение открыто.</div>' : ''}
+    </div>
+    <div class="group"><div class="group-title">Поиск и карточка</div>
+      <div class="panel" id="pv-card">
+        ${cardRow('find', 'Меня можно найти', findSub, pv.find)}
+        ${cardRow('depot', 'Депо', 'Видят коллеги, те, с кем есть предложение, и поиск — если вас можно найти.', pv.depot)}
+        ${cardRow('avatar', 'Персонаж', 'Без этого вместо персонажа — первые буквы имени.', pv.avatar)}
+      </div>
+      <div class="hint">Имя и должность видят коллеги и те, с кем есть предложение. Изменить их — «Редактировать профиль».</div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------- «Что сервер знает о вас»
+
+// Выгрузка export_my_data — понятным языком (ст. 14 152-ФЗ: человек вправе знать, что о нём хранится).
+// Всё пришло с сервера — значит, только через esc() и проверенные списки.
+const PLATFORMS = { web: 'Сайт (браузер)', android: 'Android', ios: 'iPhone (iOS)' };
+function dateText(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof v === 'string' ? v : '');
+  return m && +m[2] >= 1 && +m[2] <= 12 ? `${+m[3]} ${MONTHS_GEN[+m[2] - 1]} ${m[1]}` : '';
+}
+function momentText(v, off) {
+  const t = time(v);
+  if (t == null) return '';
+  const x = new Date(t + off);
+  return `${x.getUTCDate()} ${MONTHS_GEN[x.getUTCMonth()]} ${x.getUTCFullYear()}, ${hm(t + off)}`;
+}
+function consentRow(c, off) {
+  const m = /^(privacy|publish)-(\d{1,3})$/.exec(typeof c.document === 'string' ? c.document : '');
+  const title = !m ? 'Согласие' : m[1] === 'privacy' ? 'Согласие на обработку персональных данных' : 'Согласие на распространение: поиск коллег';
+  const current = m && c.document === (m[1] === 'privacy' ? CONSENT_VERSION : PUBLISH_VERSION);
+  const given = momentText(c.given_at, off); const gone = momentText(c.withdrawn_at, off);
+  const sub = [m ? `редакция ${m[2]}` : txt(c.document), given && `принято ${given}`, gone ? `отозвано ${gone}` : m && !current && 'прежняя редакция'].filter(Boolean);
+  return `<div class="row"><div class="grow"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub.join(' · '))}</div></div></div>`;
+}
+const fact = (label, value, note = '') => `<div class="row"><div class="grow"><div class="t2">${esc(label)}</div><div class="t1 my-val">${esc(value)}</div>${note ? `<div class="t2">${esc(note)}</div>` : ''}</div></div>`;
+
+export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
+  d = d && typeof d === 'object' ? d : {};
+  const email = typeof d.email === 'string' ? d.email : '';
+  const where = own(PLATFORMS, d.platform) ? PLATFORMS[d.platform] : '';
+  const ver = txt(d.app_version, 20);
+  const account = [
+    email && fact('Почта', email, d.email_confirmed === true ? 'подтверждена' : 'не подтверждена'),
+    fact('Пароль', 'Только в зашифрованном виде', 'сам пароль не знает никто, даже мы'),
+    dateText(d.created_on) && fact('Аккаунт создан', dateText(d.created_on)),
+    dateText(d.last_seen) && fact('Последний заход', dateText(d.last_seen), 'только дата, без времени'),
+    (where || ver) && fact('Устройство', [where, ver && `CABINA ${ver}`].filter(Boolean).join(' · ')),
+  ].filter(Boolean).join('');
+  const consents = arr(d.consents).filter((c) => c && typeof c === 'object').map((c) => consentRow(c, off)).join('');
+
+  const card = d.colleagues_card && typeof d.colleagues_card === 'object' ? cardFields(d.colleagues_card) : null;
+  const st = d.colleagues_status && typeof d.colleagues_status === 'object' ? cleanStatus(d.colleagues_status) : null;
+  const line = st && colleagueLine(st, nowAbs, off);
+  const links = arr(d.colleagues).filter((l) => l && typeof l === 'object');
+  const count = (f) => links.filter(f).length;
+  const nums = [
+    [count((l) => l.state === 'accepted'), 'Коллеги', ''],
+    [count((l) => l.state === 'pending' && l.offered_by_me === true), 'Ваши предложения без ответа', 'стираются через 30 дней'],
+    [count((l) => l.state === 'pending' && l.offered_by_me !== true), 'Предложения вам', 'стираются через 30 дней'],
+    [count((l) => l.state === 'declined'), 'Отказы и удалённые коллеги', 'стираются через 30 дней'],
+  ].filter(([n]) => n > 0).map(([n, label, note]) => `<div class="row"><div class="grow"><div class="t1">${label}</div>${note ? `<div class="t2">${note}</div>` : ''}</div><b class="num">${n}</b></div>`).join('');
+  const gone = st && momentText(d.colleagues_status.expires_at, off);
+  // кому что видно: без идентификаторов коллег, только «все коллеги» или сколько выбрано
+  const rules = arr(d.colleagues_access).filter((a) => a && typeof a === 'object');
+  const whom = (item) => {
+    const r = rules.filter((a) => a.item === item);
+    if (!r.length) return '';
+    if (r.some((a) => a.to === 'all')) return 'все коллеги';
+    return `${r.length} ${plural(r.length, 'выбранный коллега', 'выбранных коллеги', 'выбранных коллег')}`;
+  };
+  const shown = [['status', 'Статус видят'], ['place', 'Где вы, видят']].filter(([k]) => whom(k)).map(([k, label]) => fact(label, whom(k))).join('');
+  const col = card || st || links.length || rules.length ? `${card ? `<div class="row col-row">${avaBox(card)}<div class="grow"><div class="t1">${esc(card.name)}</div>
+        <div class="t2">${esc(cardSub(card) || 'Должность и депо коллеги не видят')}</div></div></div>
+      ${fact('В поиске', card.searchable ? 'Да' : 'Нет', card.searchable ? 'вас можно найти по имени' : 'найти вас нельзя, предложить можете только вы')}` : ''}
+      ${line ? `<div class="row"><div class="grow"><div class="t2">Статус для коллег</div><div class="t1">${pill(line)}</div>
+        <div class="t2">${esc([updatedText(st.at, nowAbs, off), gone && `сотрётся сам ${gone}`].filter(Boolean).join(' · '))}</div></div></div>` : fact('Статус для коллег', 'Не хранится')}
+      ${shown}
+      ${nums || fact('Коллеги', 'Пока нет')}`
+    : '<div class="row"><div class="grow t2">Вы не включали «Коллеги» — о коллегах на сервере ничего нет.</div></div>';
+
+  return `<p class="hint">Это всё, что хранится о вас на сервере CABINA в России.</p>
+    <div class="group-title">Аккаунт</div><div class="panel">${account}</div>
+    ${consents ? `<div class="group-title">Согласия</div><div class="panel">${consents}</div>` : ''}
+    <div class="group-title">Коллеги</div><div class="panel">${col}</div>
+    <div class="notice ok">${I.shield}<div><b>Не на сервере:</b> поездки, заработок, отвлечения, документы, заметки и телефонная книжка — они только в вашем телефоне.</div></div>
+    <div class="hint">Ещё 30 дней сервер хранит журнал входов (IP-адрес, браузер, время) — для защиты от взлома. Его можно запросить на ${esc(OPERATOR.email)}.</div>`;
+}
+
 // Экран «Найти коллегу»: имя (от 3 букв), депо и должность — по желанию
-const ROLE_FILTER = [['', 'Любая'], ['assistant', 'Помощник'], ['driver', 'Машинист'], ['other', 'Другая']];
+const ROLE_FILTER = [['', 'Любая'], ['driver', 'Машинист'], ['assistant', 'Помощник']];
 function resultRow(c) {
   const snap = C.snap;
   const rel = snap?.colleagues.some((x) => x.id === c.id) ? 'col' : snap?.outgoing.some((x) => x.id === c.id) ? 'sent' : snap?.incoming.some((x) => x.id === c.id) ? 'in' : '';
@@ -518,7 +719,7 @@ export function renderColleagues() {
   else {
     return `${pageHead('Найти коллегу', { back: true })}
       <div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Коллеги работают через аккаунт: так предложения и статус доходят только до тех, кого вы добавили.</div></div>
-      <button class="btn btn-primary" data-act="go" data-page="account">Аккаунт CABINA</button>`;
+      <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
   }
   const q = C.q;
   return `${pageHead('Найти коллегу', { back: true })}
@@ -531,7 +732,7 @@ export function renderColleagues() {
     <div id="col-err" class="acc-err" role="alert" aria-live="assertive"></div>
     <button class="btn btn-primary" type="submit" form="col-form" id="col-submit">${small(I.search, 18)} ${C.searching ? 'Ищем…' : 'Найти'}</button>
     <div id="col-results">${resultsHtml()}</div>
-    <div class="notice ok">${I.shield}<div>В поиске только те, кто сам включил «Меня можно найти». Показываем не больше 20 человек. ${privacyOf().find ? 'Вас тоже можно найти по имени.' : 'Вас в поиске нет — это включается в разделе «Коллеги» в профиле.'}</div></div>`;
+    <div class="notice ok">${I.shield}<div>В поиске только те, кто сам включил «Меня можно найти». Показываем не больше 20 человек. ${privacyOf().find ? 'Вас тоже можно найти по имени.' : 'Вас в поиске нет — это включается в Настройках аккаунта → «Приватность».'}</div></div>`;
 }
 
 // ---------------------------------------------------------------- действия
@@ -606,33 +807,111 @@ async function setFind(on) {
   toast('Теперь вас можно найти по имени');
 }
 
-async function setStatus(on) {
-  const pv = privacyOf();
-  if (on && mine()) {
-    const snap = await snapOrSay();
-    if (!snap) return;
-    if (!snap.consent.main && !(await ensureConsent())) return;
+// Кому показывать статус или «где я»: none — никому, all — всем коллегам, some — выбранным (ids).
+// Сначала сервер, потом телефон: если сервер не принял, ничего не меняется. Дать доступ — только с согласием.
+async function setAccess(item, mode, ids = []) {
+  if (!mine()) { needAccount(); return false; }
+  const snap = await snapOrSay();
+  if (!snap) return false;
+  ids = [...new Set(ids)].filter((id) => snap.colleagues.some((c) => c.id === id));
+  if (mode === 'some' && !ids.length) mode = 'none';
+  if (mode !== 'none' && !(await ensureConsent())) return false;
+  const r = await rpc('set_access', { p_item: item, p_all: mode === 'all', p_ids: mode === 'some' ? ids : null });
+  if (!r?.ok) { toast(colError(r), { error: true, ms: 5000 }); return false; }
+  snap.access[item] = { all: mode === 'all', ids: mode === 'some' ? ids : [] };
+  if (item === 'status') {
+    if (mode === 'none') {
+      // сервер стёр статус сам: никому не показываю — и хранить незачем
+      const last = readSync(C.sub); last.status = ''; last.statusAt = 0; writeSync(last); snap.myStatus = null;
+    }
+    if (privacyOf().status !== (mode !== 'none')) await saveProfile({ privacy: { ...privacyOf(), status: mode !== 'none' } });
   }
-  await saveProfile({ privacy: { ...pv, status: on } });
-  if (!mine()) { if (on) toast('Статус увидят коллеги, когда вы войдёте в аккаунт и добавите их'); return; }
-  if (!on) {
-    const r = await rpc('clear_status');
-    if (r?.ok) { const last = readSync(C.sub); last.status = ''; last.statusAt = 0; writeSync(last); if (C.snap) C.snap.myStatus = null; toast('Коллеги больше не видят ваш статус'); }
-    else toast('Нет связи: статус сотрём с сервера, как только появится интернет', { error: true, ms: 5000 });
-    return;
-  }
-  toast(C.snap?.colleagues.length ? 'Коллеги видят ваш статус' : 'Статус увидят коллеги, когда они появятся');
   scheduleSync(0);
+  hooks.rerender();
+  return true;
+}
+
+// Переключатель в окне коллеги: видит ли именно он. «Все коллеги» без одного — становится «выбранные».
+async function setAccessFor(item, id, on) {
+  const snap = C.snap;
+  if (!snap) return false;
+  if (on && item === 'place' && !sees(snap, 'status', id) && !(await setAccessFor('status', id, true))) return false;
+  const m = accessMode(snap, item);
+  const all = snap.colleagues.map((c) => c.id);
+  if (on) return m.mode === 'all' ? true : setAccess(item, 'some', [...m.ids, id]);
+  const ids = (m.mode === 'all' ? all : m.ids).filter((x) => x !== id);
+  return setAccess(item, ids.length ? 'some' : 'none', ids);
+}
+
+const ACCESS_ITEMS = {
+  status: { title: 'Кто видит мой статус', what: 'Мой статус', sub: '«В пути», «На отдыхе», «Между поездками» — без станций, точного времени явки и номера поезда.' },
+  place: { title: 'Кто видит, где я', what: 'Где я', sub: 'Станции в пути и дом отдыха — в статусе. Только тем, кто видит и сам статус.' },
+};
+
+// Выбор «кому видно» для статуса или «где я»: никому, всем коллегам или выбранным
+async function openAccess(item) {
+  if (!own(ACCESS_ITEMS, item)) return;
+  if (!mine()) { needAccount(); return; }
+  const snap = await snapOrSay();
+  if (!snap) return;
+  if (item === 'place' && accessMode(snap, 'status').mode === 'none') { toast('Сначала выберите, кто видит ваш статус', { ms: 4000 }); return; }
+  const cur = accessMode(snap, item);
+  const pool = item === 'place' ? snap.colleagues.filter((c) => sees(snap, 'status', c.id)) : snap.colleagues;
+  const picked = new Set(cur.mode === 'some' ? cur.ids.filter((id) => pool.some((c) => c.id === id)) : []);
+  let mode = cur.mode === 'some' && !picked.size ? 'none' : cur.mode;
+  const it = ACCESS_ITEMS[item];
+  const opt = (v, label, sub, off = false) => `<button type="button" class="radio-row" data-mode="${v}" aria-pressed="${mode === v}" ${off ? 'disabled' : ''}><span class="dot"></span><span class="grow">${label}<small>${sub}</small></span><span></span></button>`;
+  const allSub = item === 'place' && accessMode(snap, 'status').mode === 'some' ? 'Все, кто видит ваш статус' : 'И те, кто станет коллегой потом';
+  const el = openLayer(sheet({ title: it.title, tall: true, body: `
+    <p class="hint">${it.sub}</p>
+    <div class="acc-modes" role="radiogroup" aria-label="${esc(it.title)}">
+      ${opt('none', 'Никто', 'Не показывать')}
+      ${opt('all', 'Все коллеги', allSub)}
+      ${opt('some', 'Только выбранные', pool.length ? 'Отметьте, кому показывать' : 'Пока некого выбрать', !pool.length)}
+    </div>
+    <div class="acc-who" id="acc-who" ${mode === 'some' ? '' : 'hidden'}>
+      ${pool.map((c) => `<button type="button" class="pick-row" role="checkbox" aria-checked="${picked.has(c.id)}" ${idAttr(c.id)}><span class="box">${I.check}</span>${avaBox(c.card)}<span class="t1">${esc(c.card.name)}</span></button>`).join('')}
+    </div>
+    <div id="acc-err" class="acc-err" role="alert" aria-live="assertive"></div>`,
+  foot: '<button class="btn btn-primary" data-act="access-save">Сохранить</button>' }));
+  el.addEventListener('click', async (e) => {
+    const m = e.target.closest('.radio-row[data-mode]');
+    if (m && !m.disabled) {
+      mode = m.dataset.mode;
+      el.querySelectorAll('.radio-row[data-mode]').forEach((x) => x.setAttribute('aria-pressed', String(x === m)));
+      el.querySelector('#acc-who').hidden = mode !== 'some';
+      el.querySelector('#acc-err').innerHTML = '';
+      return;
+    }
+    const p = e.target.closest('.pick-row');
+    if (p) {
+      const id = p.dataset.id;
+      if (picked.has(id)) picked.delete(id); else picked.add(id);
+      p.setAttribute('aria-checked', String(picked.has(id)));
+      el.querySelector('#acc-err').innerHTML = '';
+      return;
+    }
+    if (!e.target.closest('[data-act="access-save"]') || C.busy) return;
+    if (mode === 'some' && !picked.size) {
+      el.querySelector('#acc-err').innerHTML = `<div class="error-box">${I.alert}<span>Отметьте хотя бы одного коллегу или выберите «Никто».</span></div>`;
+      return;
+    }
+    C.busy = true;
+    try {
+      if (await setAccess(item, mode, [...picked])) { closeLayer(el); toast('Сохранено'); }
+    } finally { C.busy = false; }
+  });
 }
 
 export async function colleaguesClick(act, b) {
-  if (act === 'pr-priv' && (b.dataset.k === 'find' || b.dataset.k === 'status')) {
+  if (act === 'pr-priv' && b.dataset.k === 'find') {
     if (C.busy) return true;
     C.busy = true;
-    try { if (b.dataset.k === 'find') await setFind(!privacyOf().find); else await setStatus(!privacyOf().status); } finally { C.busy = false; }
+    try { await setFind(!privacyOf().find); } finally { C.busy = false; }
     return true;
   }
   if (!act.startsWith('col-')) return false;
+  if (act === 'col-access') { openAccess(b.dataset.item); return true; }
   if (act === 'col-role') {
     C.q.role = own(ROLE_NAMES, b.dataset.role) ? b.dataset.role : '';
     document.querySelectorAll('#col-role button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -650,7 +929,7 @@ export async function colleaguesClick(act, b) {
       case 'col-offer': {
         if (!UUID.test(id) || !(await ensureConsent())) break;
         const ok = await confirmDialog({ title: 'Предложить стать коллегами?', ok: 'Предложить', danger: false,
-          text: `${who?.name || 'Человек'} получит предложение. Если согласится, вы будете видеть статусы друг друга — у кого он включён.` });
+          text: `${who?.name || 'Человек'} получит предложение. Если согласится, вы станете коллегами. Свой статус каждый показывает сам — кому захочет.` });
         if (!ok || !(await ensureCard())) break;
         const r = await rpc('offer_colleague', { p_to: id });
         if (!r?.ok) { toast(colError(r), { error: true, ms: 6000 }); break; }
@@ -662,7 +941,7 @@ export async function colleaguesClick(act, b) {
         if (!UUID.test(id) || !(await ensureConsent()) || !(await ensureCard())) break;
         const r = await rpc('answer_colleague', { p_from: id, p_accept: true });
         if (!r?.ok) { toast(colError(r), { error: true, ms: 5000 }); break; }
-        toast(privacyOf().status ? 'Теперь вы коллеги' : 'Теперь вы коллеги. Ваш статус они увидят, если вы его включите');
+        toast(accessMode(C.snap, 'status').mode === 'all' ? 'Теперь вы коллеги' : 'Теперь вы коллеги. Видит ли он ваш статус — решаете вы в «Приватности»', { ms: 5000 });
         await loadColleagues({ force: true });
         break;
       }

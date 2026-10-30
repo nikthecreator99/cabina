@@ -1,7 +1,8 @@
-// Экран «Аккаунт» (Профиль → Аккаунт CABINA): регистрация по приглашению с согласием, вход, сброс пароля,
-// «Скачать мои данные с сервера», выход и удаление аккаунта; для администратора — статистика (только числа).
+// Экран «Настройки аккаунта» (Профиль → Настройки → «Настройки аккаунта»): регистрация по приглашению с согласием, вход, сброс пароля,
+// «Мои данные на сервере» (посмотреть и скачать файлом), выход и удаление аккаунта; для администратора — статистика (только числа).
 // Аккаунт не обязателен: без него CABINA работает как раньше, записи из телефона на сервер не уходят.
 // С аккаунтом можно включить «Коллеги» (colleagues.js): тогда на сервер уходят карточка и статус — только по выбору человека.
+// Группа «Коллеги» (Приватность, «Выйти из „Коллег“») приходит из colleagues.js через app.js — без круговых импортов.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
 import { legalReady, consentHtml, policyHtml } from './legal.js';
 import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
@@ -43,12 +44,13 @@ export function accountEnter() {
 }
 
 // Строка на экране «Профиль»
+// Строка вверху «Настроек»
 export function accountRowHtml() {
   if (!legalReady()) return '';
   const s = session();
-  return `<div class="panel"><button class="row" data-act="go" data-page="account">
+  return `<div class="group"><div class="group-title">Аккаунт</div><div class="panel"><button class="row" data-act="go" data-page="account">
     <span class="ico" style="--c:var(--night)">${I.user}</span>
-    <div class="grow"><div class="t1">Аккаунт CABINA</div><div class="t2">${s ? `Вы вошли: ${esc(s.email)}` : 'Не обязателен · закрытое испытание'}</div></div>${small(I.right, 18)}</button></div>`;
+    <div class="grow"><div class="t1">Настройки аккаунта</div><div class="t2 acc-email">${s ? `Вы вошли: ${esc(s.email)}` : 'Аккаунт CABINA не обязателен · закрытое испытание'}</div></div>${small(I.right, 18)}</button></div></div>`;
 }
 
 const field = (id, label, input, hint = '') => `<div class="pay-field"><label for="${id}">${label}</label>${input}${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
@@ -65,13 +67,14 @@ const consentBox = (id, text, act, icon, btn) => `<div class="pay-field"><div cl
 const docsBtns = `<div class="acc-docs"><button type="button" class="link-btn" data-act="acc-consent-doc">${small(I.shield, 16)} Согласие</button><button type="button" class="link-btn" data-act="acc-policy">${small(I.book, 16)} Политика</button></div>`;
 const localNote = `<div class="notice ok">${I.shield}<div><b>Аккаунт не обязателен.</b> Без него CABINA работает как раньше. Поездки, заработок, отвлечения и документы хранятся только в этом телефоне и на сервер не отправляются — с аккаунтом тоже.</div></div>`;
 
-function signedInHtml(s) {
+function signedInHtml(s, colHtml) {
   return `<div class="panel"><div class="row"><span class="ico" style="--c:var(--ok)">${I.user}</span>
       <div class="grow"><div class="t1 acc-email">${esc(s.email)}</div><div class="t2">Вы вошли в аккаунт CABINA</div></div></div></div>
     <div class="notice ok">${I.shield}<div><b>На сервере о вас только:</b> почта, дата регистрации, дата последнего захода, тип устройства и версия приложения. Если вы включили «Коллеги» — ещё имя, должность, то, что вы разрешили в «Приватности», список коллег и текущий статус. Поездки, заработок, отвлечения и документы остаются в этом телефоне.</div></div>
+    ${colHtml}
     <div class="group"><div class="group-title">Мои данные</div>
       <div class="panel">
-        <button class="row" data-act="acc-export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Скачать мои данные с сервера</div><div class="t2">Всё, что сервер знает о вас, одним файлом</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="acc-export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Мои данные на сервере</div><div class="t2">Посмотреть, что сервер знает о вас, и скачать файлом</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="acc-consent-doc"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Согласие на обработку данных</div><div class="t2">Действующая редакция</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="acc-policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>
       </div></div>
@@ -124,10 +127,10 @@ function formHtml() {
   }
 }
 
-export function renderAccount() {
+export function renderAccount(colHtml = '') {
   const s = session();
-  return `${pageHead('Аккаунт CABINA', { back: true })}
-    ${s && A.mode !== 'newpass' ? signedInHtml(s) : formHtml()}`;
+  return `${pageHead('Настройки аккаунта', { back: true })}
+    ${s && A.mode !== 'newpass' ? signedInHtml(s, colHtml) : formHtml()}`;
 }
 
 // ---------------------------------------------------------------- действия
@@ -168,12 +171,12 @@ const SITE = 'https://nikthecreator99.github.io/cabina/';
 // Код показываем один раз: в телефоне его не сохраняем, на сервере остаётся только хеш
 function showInvite(code) {
   const nice = code.replace(/(.{5})(?=.)/g, '$1 ');
-  const text = `Приглашение в CABINA.\n1. Откройте ${SITE}\n2. Профиль → «Аккаунт CABINA» → «Создать аккаунт».\n3. Код приглашения: ${code}\nКод действует 14 дней и только для одного человека.`;
+  const text = `Приглашение в CABINA.\n1. Откройте ${SITE}\n2. Профиль → ⚙ Настройки → «Настройки аккаунта» → «Создать аккаунт».\n3. Код приглашения: ${code}\nКод действует 14 дней и только для одного человека.`;
   const canShare = typeof navigator.share === 'function';
   const el = openLayer(sheet({ title: 'Приглашение', body: `
     <div class="acc-code num" aria-label="Код приглашения">${esc(nice)}</div>
     <div class="notice ok">${I.shield}<div>Код действует <b>14 дней</b> и только для <b>одного человека</b>. Он показывается один раз: на сервере хранится только его зашифрованный отпечаток. Отправьте его тому, кого приглашаете.</div></div>
-    <div class="hint">Человеку нужно открыть CABINA, зайти в Профиль → «Аккаунт CABINA» → «Создать аккаунт» и ввести этот код.</div>`,
+    <div class="hint">Человеку нужно открыть CABINA, зайти в Профиль → ⚙ Настройки → «Настройки аккаунта» → «Создать аккаунт» и ввести этот код.</div>`,
   foot: `${canShare ? `<button class="btn btn-primary" data-act="inv-share">${small(I.share, 18)} Отправить</button>` : ''}<button class="btn ${canShare ? 'btn-plain' : 'btn-primary'}" data-act="inv-copy">Скопировать</button>` }));
   el.querySelector('[data-act="inv-share"]')?.addEventListener('click', async () => {
     try { await navigator.share({ title: 'Приглашение в CABINA', text }); } catch (err) { if (err?.name !== 'AbortError') toast('Не удалось открыть «Поделиться»', { error: true }); }
@@ -185,6 +188,21 @@ function showInvite(code) {
 }
 
 let inviting = false;
+let exporting = false;
+
+// Сначала понятный экран (разметка — из colleagues.js через ctx, чтобы не было круговых импортов), файл — отдельной кнопкой
+function showMyData(data, ctx) {
+  const el = openLayer(sheet({ title: 'Что сервер знает о вас', tall: true, body: ctx.myDataHtml(data),
+    foot: `<button class="btn btn-plain" data-act="my-file">${small(I.download, 18)} Скачать файлом</button><button class="btn btn-primary" data-close>Понятно</button>` }));
+  el.querySelector('[data-act="my-file"]').addEventListener('click', async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    const blob = new Blob([JSON.stringify({ app: 'CABINA', kind: 'account-data', exportedAt: new Date().toISOString(), data }, null, 2)], { type: 'application/json' });
+    const res = await saveToDevice(blob, `cabina-account-data-${day}.json`);
+    if (res === 'saved') toast('Файл с вашими данными сохранён');
+    else if (res === 'failed') toast('Не удалось сохранить файл', { error: true });
+  });
+  return el;
+}
 
 export async function accountClick(act, b, ctx) {
   if (!act.startsWith('acc-')) return false;
@@ -212,13 +230,12 @@ export async function accountClick(act, b, ctx) {
       break;
     }
     case 'acc-export': {
-      const r = await exportMyData();
-      if (!r.ok) { toast(r.error, { error: true, ms: 5000 }); break; }
-      const day = new Date().toISOString().slice(0, 10);
-      const blob = new Blob([JSON.stringify({ app: 'CABINA', kind: 'account-data', exportedAt: new Date().toISOString(), data: r.data }, null, 2)], { type: 'application/json' });
-      const res = await saveToDevice(blob, `cabina-account-data-${day}.json`);
-      if (res === 'saved') toast('Файл с вашими данными сохранён');
-      else if (res === 'failed') toast('Не удалось сохранить файл', { error: true });
+      if (exporting) break;
+      exporting = true;
+      try {
+        const r = await exportMyData();
+        if (r.ok) showMyData(r.data, ctx); else toast(r.error, { error: true, ms: 5000 });
+      } finally { exporting = false; }
       break;
     }
     case 'acc-stats': {
@@ -303,7 +320,7 @@ export async function accountSubmit(e, ctx) {
     showError(r.error, A.mode === 'signup' && /приглашени/.test(r.error) ? 'acc-invite' : null);
     return true;
   }
-  const signedIn = (text) => { A.mode = 'menu'; A.note = ''; toast(text); ctx.rerender(); window.scrollTo(0, 0); return accountEnter(); };
+  const signedIn = (text) => { A.mode = 'menu'; A.note = ''; setPending(false); toast(text); ctx.rerender(); window.scrollTo(0, 0); return accountEnter(); };
   if (A.mode === 'signup') { A.invite = ''; A.mode = r.signedIn ? 'menu' : 'sent'; }
   else if (A.mode === 'login') await signedIn('Вы вошли в аккаунт');
   else if (A.mode === 'reset') A.mode = 'reset-sent';
