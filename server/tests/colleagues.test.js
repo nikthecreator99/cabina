@@ -3,6 +3,7 @@
 // Все имена, депо и станции — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { startDb } from './db.js';
 
 let db;
@@ -34,7 +35,7 @@ function account() {
 }
 // find: true — «меня можно найти»; перед этим, как в приложении, — отдельное согласие на распространение
 const card = (who, { name = 'Иван', role = null, depot = null, avatar = null, find = false } = {}) => {
-  if (find) q(`select public.give_consent('publish-1')`, who);
+  if (find) q(`select public.give_consent('publish-2')`, who);
   return q(`select public.save_card(${lit(name)}, ${lit(role)}, ${lit(depot)}, ${avatar ? `'${JSON.stringify(avatar)}'::jsonb` : 'null'}, ${find})`, who);
 };
 const offer = (from, to) => q(`select public.offer_colleague('${to}')`, from)[0];
@@ -78,20 +79,39 @@ test('быть в поиске — только с отдельным согла
   const me = account();
   fails(`select public.save_card('Иван', null, null, null, true)`, me, /publish consent required/);
   q(`update public.consents set document = 'privacy-1' where user_id = '${me}'`);
-  fails(`select public.give_consent('publish-1')`, me, /consent required/, 'сначала основное согласие');
+  fails(`select public.give_consent('publish-2')`, me, /consent required/, 'сначала основное согласие');
   q(`select public.give_consent('privacy-2')`, me);
-  q(`select public.give_consent('publish-1')`, me);
+  q(`select public.give_consent('publish-2')`, me);
   q(`select public.save_card('Иван', null, null, null, true)`, me);
   assert.deepEqual(q(`select searchable from public.cards where user_id = '${me}'`), ['t']);
   q(`select public.save_card('Иван', null, null, null, false)`, me);
-  assert.deepEqual(q(`select withdrawn_at is not null from public.consents where user_id = '${me}' and document = 'publish-1'`), ['t'], 'отзыв записан');
+  assert.deepEqual(q(`select withdrawn_at is not null from public.consents where user_id = '${me}' and document = 'publish-2'`), ['t'], 'отзыв записан');
   fails(`select public.save_card('Иван', null, null, null, true)`, me, /publish consent required/, 'включить снова — снова согласие');
   card(me, { find: true });
-  assert.deepEqual(q(`select count(*) from public.consents where user_id = '${me}' and document = 'publish-1' and withdrawn_at is null`), ['1']);
+  assert.deepEqual(q(`select count(*) from public.consents where user_id = '${me}' and document = 'publish-2' and withdrawn_at is null`), ['1']);
   const data = json('select public.export_my_data()', me);
-  assert.deepEqual(data.consents.map((c) => [c.document, c.withdrawn_at === null]), [['privacy-1', true], ['privacy-2', true], ['publish-1', false], ['publish-1', true]]);
+  assert.deepEqual(data.consents.map((c) => [c.document, c.withdrawn_at === null]), [['privacy-1', true], ['privacy-2', true], ['publish-2', false], ['publish-2', true]]);
   q('select public.leave_colleagues()', me);
-  assert.deepEqual(q(`select count(*) from public.consents where user_id = '${me}' and document = 'publish-1' and withdrawn_at is null`), ['0'], 'выход из «Коллег» тоже отзывает');
+  assert.deepEqual(q(`select count(*) from public.consents where user_id = '${me}' and document = 'publish-2' and withdrawn_at is null`), ['0'], 'выход из «Коллег» тоже отзывает');
+});
+
+test('сайт переехал (шаг 4): прежняя редакция publish-1 больше не держит в поиске', () => {
+  const me = account();
+  const other = account();
+  card(other, { name: 'Пётр' });
+  // как было до шага 4: согласие publish-1, «меня можно найти» включено
+  q(`insert into public.consents (user_id, document) values ('${me}', 'publish-1')`);
+  q(`insert into public.cards (user_id, name, searchable) values ('${me}', 'Евлампий', true)`);
+  // шаг 4 на сервере (повторный запуск ничего не ломает)
+  const step = readFileSync(new URL('../migrations/0004_site.sql', import.meta.url), 'utf8').replace(/^notify .*$/m, '');
+  q(step);
+  q(step);
+  assert.deepEqual(q(`select searchable from public.cards where user_id = '${me}'`), ['f']);
+  assert.deepEqual(find(other, 'Евлампий'), [], 'в поиске его нет');
+  fails(`select public.give_consent('publish-1')`, me, /consent required/, 'старую редакцию принять нельзя');
+  fails(`select public.save_card('Евлампий', null, null, null, true)`, me, /publish consent required/, 'включить — только с новой');
+  card(me, { name: 'Евлампий', find: true });
+  assert.equal(find(other, 'Евлампий').length, 1, 'принял новую — снова в поиске');
 });
 
 test('карточка: только имя, должность, депо, персонаж и «меня можно найти»; лишнее отбрасывается', () => {

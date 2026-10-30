@@ -293,7 +293,7 @@ test('администратор видит статистику (только �
   await sheet(page).locator('[data-act=inv-copy]').click();
   await toastHas(page, /Приглашение скопировано/);
   const copied = await page.evaluate(() => window.__copied);
-  assert.match(copied, /https:\/\/nikthecreator99\.github\.io\/cabina\/[\s\S]*Код приглашения: 7F3A9C21B4/);
+  assert.match(copied, /https:\/\/cabina-app\.ru\/[\s\S]*Код приглашения: 7F3A9C21B4/);
   assert.doesNotMatch(copied, /ivan@example\.com/, 'почты администратора в приглашении нет');
   assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('7F3A9C21B4'), 'код в телефоне не сохраняется');
   await sheet(page).locator('button[data-close]').first().click();

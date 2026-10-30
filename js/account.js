@@ -4,7 +4,7 @@
 // С аккаунтом можно включить «Коллеги» (colleagues.js): тогда на сервер уходят карточка и статус — только по выбору человека.
 // Группа «Коллеги» (Приватность, «Выйти из „Коллег“») приходит из colleagues.js через app.js — без круговых импортов.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
-import { legalReady, consentHtml, policyHtml } from './legal.js';
+import { legalReady, consentHtml, policyHtml, APP_URL } from './legal.js';
 import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
   emailOk, normInvite, PASS_MIN, linkErrorText } from './auth.js';
 
@@ -167,11 +167,10 @@ function showStats(d) {
     <div class="hint">Только числа: почта и идентификаторы людей в статистику не попадают.</div>` }));
 }
 
-const SITE = 'https://nikthecreator99.github.io/cabina/';
 // Код показываем один раз: в телефоне его не сохраняем, на сервере остаётся только хеш
 function showInvite(code) {
   const nice = code.replace(/(.{5})(?=.)/g, '$1 ');
-  const text = `Приглашение в CABINA.\n1. Откройте ${SITE}\n2. Профиль → ⚙ Настройки → «Настройки аккаунта» → «Создать аккаунт».\n3. Код приглашения: ${code}\nКод действует 14 дней и только для одного человека.`;
+  const text = `Приглашение в CABINA.\n1. Откройте ${APP_URL}\n2. Профиль → ⚙ Настройки → «Настройки аккаунта» → «Создать аккаунт».\n3. Код приглашения: ${code}\nКод действует 14 дней и только для одного человека.`;
   const canShare = typeof navigator.share === 'function';
   const el = openLayer(sheet({ title: 'Приглашение', body: `
     <div class="acc-code num" aria-label="Код приглашения">${esc(nice)}</div>

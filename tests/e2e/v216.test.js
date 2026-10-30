@@ -3,7 +3,7 @@
 // все люди и станции — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, waitNoLayers, seed } from './helpers.js';
 import { ME, ANNA, OLEG, ready, openPrivacy, chooseAccess } from './mock-colleagues.js';
 
 let env;
@@ -223,4 +223,38 @@ test('Приватность и выбор коллег — на 320 px в об�
   }
   assert.deepEqual(realErrors(errors), []);
   await context.close();
+});
+
+test('2.16.1: на старом адресе (GitHub) — плашка «CABINA переехала»: сохранить копию и открыть cabina-app.ru; на новом её нет', async () => {
+  const context = await env.browser.newContext({ viewport: { width: 320, height: 700 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+    locale: 'ru-RU', timezoneId: 'Europe/Moscow', serviceWorkers: 'block', acceptDownloads: true });
+  await context.addInitScript(() => { try { localStorage.setItem('cabina-tours-off', '1'); } catch {} });
+  // старый адрес отдаёт те же файлы, что и наш сервер
+  await context.route('https://nikthecreator99.github.io/cabina/**', async (route) => {
+    const u = new URL(route.request().url());
+    await route.fulfill({ response: await route.fetch({ url: env.url + u.pathname.replace(/^\/cabina\//, '') + u.search }) });
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto('https://nikthecreator99.github.io/cabina/');
+  await page.getByRole('button', { name: 'Начать' }).click();
+  await waitNoLayers(page);
+  await seed(page, { trips: [{ id: 'a', start: '2026-10-14T08:00', end: '2026-10-14T12:00' }] });
+  await page.reload(); await page.waitForSelector('.screen');
+  const nag = page.locator('.move-nag');
+  assert.match(await nag.innerText(), /CABINA переехала на cabina-app\.ru[\s\S]*Восстановить из копии/);
+  assert.equal(await nag.locator('a').getAttribute('href'), 'https://cabina-app.ru/');
+  assert.equal(await page.locator('.nag:not(.move-nag)').count(), 0, 'обычного напоминания о копии рядом нет');
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'без горизонтальной прокрутки на 320 px');
+  await nag.getByRole('button', { name: 'Сохранить копию' }).click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), sheet(page).getByRole('button', { name: 'Сохранить копию' }).click()]);
+  assert.match(dl.suggestedFilename(), /^cabina-backup-\d{4}-\d{2}-\d{2}\.json$/);
+  assert.deepEqual(realErrors(errors), []);
+  await context.close();
+  // на новом адресе (здесь — локальный сервер) плашки нет
+  const fresh = await openApp(env);
+  assert.equal(await fresh.page.locator('.move-nag').count(), 0);
+  await fresh.context.close();
 });

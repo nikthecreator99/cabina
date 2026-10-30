@@ -1,0 +1,26 @@
+
+# CABINA: сайт приложения (2.16.1). Файлы выкладывает /usr/local/bin/cabina-site в www/current.
+# Журнал обращений не ведётся: IP-адреса посетителей сайта не записываются.
+cabina-app.ru {
+	root * /etc/caddy/www/current
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+	}
+	# страница, service worker и «Что нового» — всегда свежие, чтобы обновление приходило сразу
+	@fresh path / /index.html /sw.js /manifest.webmanifest /data/*
+	header @fresh Cache-Control "no-cache"
+	@manifest path *.webmanifest
+	header @manifest Content-Type "application/manifest+json"
+	encode gzip
+	file_server
+}
+
+www.cabina-app.ru {
+	redir https://cabina-app.ru{uri} permanent
+}

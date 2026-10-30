@@ -7,9 +7,9 @@ import { esc } from './ui.js';
 export const CONSENT_VERSION = 'privacy-2';
 // Отдельное согласие на распространение (152-ФЗ, ст. 10.1): быть в поиске «Коллег» = имя видно всем пользователям CABINA.
 // Совпадает с private.config publish_version на сервере.
-export const PUBLISH_VERSION = 'publish-1';
+export const PUBLISH_VERSION = 'publish-2';
 export const POLICY_DATE = '30 октября 2026 г.';
-export const APP_URL = 'https://nikthecreator99.github.io/cabina/';
+export const APP_URL = 'https://cabina-app.ru/';
 export const OPERATOR = { name: 'Григорьев Никита Сергеевич', inn: '291802561037', email: 'privacy@cabina-app.ru' };
 export const HOSTING = 'ООО «Бегет»';
 

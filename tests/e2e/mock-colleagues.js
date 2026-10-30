@@ -69,17 +69,17 @@ export async function mockServer(context, init = {}) {
       if (!has('place') && db.statuses[ME]) { db.statuses[ME].place = null; db.statuses[ME].dest = null; }
       return send(204);
     }
-    if (rpc === 'leave_colleagues') { db.links = db.links.filter((l) => !mine(l)); db.access = db.access.filter((a) => a.user_id !== ME); delete db.cards[ME]; delete db.statuses[ME]; db.consents.forEach((c) => { if (c.document === 'publish-1') c.withdrawn_at = NOW; }); return send(204); }
+    if (rpc === 'leave_colleagues') { db.links = db.links.filter((l) => !mine(l)); db.access = db.access.filter((a) => a.user_id !== ME); delete db.cards[ME]; delete db.statuses[ME]; db.consents.forEach((c) => { if (c.document === 'publish-2') c.withdrawn_at = NOW; }); return send(204); }
     if (rpc === 'give_consent') {
-      if (body.p_document === 'publish-1' && !main()) return fail('consent required');
-      if (!['privacy-2', 'publish-1'].includes(body.p_document)) return fail('consent required');
+      if (body.p_document === 'publish-2' && !main()) return fail('consent required');
+      if (!['privacy-2', 'publish-2'].includes(body.p_document)) return fail('consent required');
       db.consents.push({ document: body.p_document, withdrawn_at: null });
       return send(204);
     }
     if (!main()) return fail('consent required');
     if (rpc === 'save_card') {
-      if (body.p_searchable && !db.consents.some((c) => c.document === 'publish-1' && !c.withdrawn_at)) return fail('publish consent required');
-      if (!body.p_searchable) db.consents.forEach((c) => { if (c.document === 'publish-1') c.withdrawn_at = NOW; });
+      if (body.p_searchable && !db.consents.some((c) => c.document === 'publish-2' && !c.withdrawn_at)) return fail('publish consent required');
+      if (!body.p_searchable) db.consents.forEach((c) => { if (c.document === 'publish-2') c.withdrawn_at = NOW; });
       db.cards[ME] = { user_id: ME, name: body.p_name, role: body.p_role, depot: body.p_depot, avatar: body.p_avatar, searchable: body.p_searchable };
       return send(204);
     }

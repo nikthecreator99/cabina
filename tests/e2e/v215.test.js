@@ -169,14 +169,14 @@ test('«Меня можно найти»: отдельное согласие н
   await openPrivacy(page);
   await page.locator('#pv-card [data-k=find]').click();
   const s = sheet(page);
-  assert.match(await s.innerText(), /Меня можно найти[\s\S]*увидят: имя, должность[\s\S]*Редакция publish-1[\s\S]*распространение/);
+  assert.match(await s.innerText(), /Меня можно найти[\s\S]*увидят: имя, должность[\s\S]*Редакция publish-2[\s\S]*распространение/);
   assert.doesNotMatch(await s.innerText(), /увидят:[^.]*депо/, 'депо не разрешено — в поиске его нет');
   await s.locator('[data-act=col-agree-ok]').click();
   await s.getByText('Отметьте галочку').waitFor();
   await s.locator('#col-agree').check();
   await s.locator('[data-act=col-agree-ok]').click();
   await toastHas(page, /Теперь вас можно найти по имени/);
-  assert.deepEqual(srv.calls('give_consent').map((r) => r.body.p_document), ['publish-1']);
+  assert.deepEqual(srv.calls('give_consent').map((r) => r.body.p_document), ['publish-2']);
   assert.equal(srv.calls('save_card').at(-1).body.p_searchable, true);
   assert.equal(await page.locator('#pv-card [data-k=find]').getAttribute('aria-checked'), 'true');
   assert.match(await page.locator('#pv-card').innerText(), /вас найдут по имени «Иван Тестовый»/);
@@ -187,7 +187,7 @@ test('«Меня можно найти»: отдельное согласие н
   await page.locator('#pv-card [data-k=find]').click();
   await toastHas(page, /Вас больше нет в поиске/);
   assert.equal(srv.calls('save_card').at(-1).body.p_searchable, false);
-  assert.ok(srv.db.consents.find((c) => c.document === 'publish-1').withdrawn_at, 'согласие на распространение отозвано');
+  assert.ok(srv.db.consents.find((c) => c.document === 'publish-2').withdrawn_at, 'согласие на распространение отозвано');
   // выйти из «Коллег» — в Настройках аккаунта
   await page.locator('[data-act=back]').click();
   await page.locator('.page-head h1', { hasText: 'Настройки аккаунта' }).waitFor();

@@ -28,9 +28,9 @@ import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedire
 import { consumeAuthRedirect, touch } from './auth.js';
 import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy } from './colleagues.js';
-import { legalReady, policyHtml } from './legal.js';
+import { legalReady, policyHtml, APP_URL } from './legal.js';
 
-export const VERSION = '2.16.0';
+export const VERSION = '2.16.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -170,9 +170,17 @@ function departBanner(t, now) {
 function loyaltyBanner() { const r = loyaltyReminder(); return r ? reminderHtml(r) : ''; }
 function medBanner() { const r = medReminder(); return r ? medBannerHtml(r) : ''; }
 
+// 2.16.1: сайт переехал с GitHub на наш сервер в России. Записи привязаны к адресу сайта, поэтому переносятся копией.
+const OLD_SITE = location.hostname === 'nikthecreator99.github.io';
+function moveNag() {
+  if (!OLD_SITE) return '';
+  return `<div class="nag move-nag" role="status"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">CABINA переехала на <span class="nowrap">cabina-app.ru</span></div><div class="t2">Этот адрес скоро отключится. Сохраните копию, откройте новый адрес и там: Профиль → ⚙ Настройки → «Восстановить из копии».</div></div>
+    <div class="nag-btns"><button class="btn btn-primary btn-sm" data-act="nag-save">Сохранить копию</button><a class="btn btn-ghost btn-sm" href="${esc(APP_URL)}" target="_blank" rel="noopener">Открыть новый адрес</a></div></div>`;
+}
+
 // Плашка о резервной копии: раз в 2 недели, если есть что терять
 function backupNag(now) {
-  if (!S.trips.length) return '';
+  if (!S.trips.length || OLD_SITE) return '';
   const b = S.backup;
   const ref = b.lastAt || b.since;
   if (!ref || Date.now() < (b.snoozeUntil || 0) || Date.now() - ref < 14 * DAY) return '';
@@ -253,6 +261,7 @@ function renderHome() {
         ${payHtml || linesHtml ? `<div class="hero-foot">${payHtml}${linesHtml}</div>` : ''}
       </section>
     </div>
+    ${moveNag()}
     <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
