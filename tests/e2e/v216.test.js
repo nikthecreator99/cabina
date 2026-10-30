@@ -166,6 +166,39 @@ test('«Мои данные на сервере»: кому что видно �
   await context.close();
 });
 
+test('сервер ещё без шага 3 (миграция 0003): «Коллеги» пишут «не включён», статус не уходит, «Мои данные» открываются', async () => {
+  const { context, page, errors } = await openApp(env);
+  const srv = await ready(context, page, two, meCard);
+  // так отвечает сервер 2.15: новых таблиц ещё нет (последний добавленный обработчик главнее)
+  const json = (status, b) => (route) => route.fulfill({ status, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: JSON.stringify(b) });
+  const missing = json(404, { code: 'PGRST205', message: 'Could not find the table' });
+  await context.route('https://api.cabina-app.ru/rest/v1/status_places**', missing);
+  await context.route('https://api.cabina-app.ru/rest/v1/access**', missing);
+  await context.route('https://api.cabina-app.ru/rest/v1/rpc/export_my_data', json(200, { email: 'ivan@example.com', email_confirmed: true, created_on: '2026-10-19', last_seen: '2026-10-20', platform: 'web', app_version: '2.15.0',
+    consents: [{ document: 'privacy-2', given_at: '2026-10-19T10:00:00+00:00', withdrawn_at: null }],
+    colleagues_card: { name: 'Иван Тестовый', role: 'assistant', depot: null, avatar: null, searchable: false },
+    colleagues_status: { kind: 'rest', place: 'Ольховка', dest: null, part: null, note: null, until_at: '2026-10-20T11:00:00+00:00', after_kind: 'wait', updated_at: '2026-10-20T08:50:00+00:00', expires_at: '2026-10-22T08:50:00+00:00' },
+    colleagues: [{ with: ANNA, state: 'accepted', offered_by_me: true }] }));
+  // статус был включён в 2.15
+  await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveProfile({ privacy: { ...(s.S.profile.privacy || {}), status: true } }); });
+  await page.reload(); await page.waitForSelector('.screen');
+  await tab(page, 'profile');
+  await page.locator('#col-sec').getByText(/ещё не включён/).waitFor();
+  await page.locator('.screen [data-page=settings]').click();
+  await page.locator('.screen [data-page=account]').click();
+  await page.locator('.screen [data-page=privacy]').click();
+  await page.locator('.screen').getByText(/ещё не включён/).first().waitFor();
+  await page.locator('[data-act=back]').click();
+  await page.locator('[data-act=acc-export]').click();
+  const s = sheet(page);
+  await s.getByText('Что сервер знает о вас').waitFor();
+  assert.match(await s.innerText(), /Статус для коллег[\s\S]*На отдыхе[\s\S]*Ольховка/i);
+  for (const name of ['set_status', 'set_access', 'clear_status']) assert.equal(srv.calls(name).length, 0, `${name} не вызывался`);
+  assert.equal((await privacy(page)).status, true, 'выключатель не тронут: сервер просто ещё не обновлён');
+  assert.deepEqual(realErrors(errors), []);
+  await context.close();
+});
+
 test('Приватность и выбор коллег — на 320 px в обеих темах, без горизонтальной прокрутки', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, two, (db) => { meCard(db); db.cards[ANNA].name = 'Анна-Мария Константинопольская-Тестовая'; });
