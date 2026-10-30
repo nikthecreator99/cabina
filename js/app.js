@@ -17,7 +17,7 @@ import { lockOn, lockScreen, initLock, openLockSettings } from './lock.js';
 import { initMoney, applyMoney, toggleMoney, eyeBtn, flipOn, setFlip } from './money.js';
 import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange } from './work.js';
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
-import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, hasAvatar } from './avatar-edit.js';
+import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, refreshPremium, hasAvatar } from './avatar-edit.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
@@ -25,12 +25,12 @@ import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phon
 import { careerSub, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml } from './account.js';
-import { consumeAuthRedirect, touch } from './auth.js';
+import { consumeAuthRedirect, touch, session } from './auth.js';
 import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy } from './colleagues.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
 
-export const VERSION = '2.16.1';
+export const VERSION = '2.16.2';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -780,6 +780,8 @@ async function start() {
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
   // аккаунт: отметка «заходил сегодня» для статистики (раз в день; без аккаунта ничего не отправляется)
   touch(VERSION).catch(() => {});
+  // премиум-персонаж: права с сервера (своя отметка у каждого адреса сайта); изменились — перерисовать персонажа
+  if (session()) { const was = premiumOk(); refreshPremium().then(() => { if (premiumOk() !== was && !layerCount()) rerender(); }); }
   // коллеги: свежий список и статус для них (только с аккаунтом и только то, что человек включил)
   colleaguesWake();
   // обновление календаря отдельно от приложения

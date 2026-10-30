@@ -7,6 +7,7 @@ import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveTo
 import { legalReady, consentHtml, policyHtml, APP_URL } from './legal.js';
 import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
   emailOk, normInvite, PASS_MIN, linkErrorText } from './auth.js';
+import { notePremium } from './avatar-edit.js';
 
 // mode: menu | signup | login | reset | sent | reset-sent | newpass. Пароль в состоянии не храним.
 // sent — ввести код из письма, чтобы подтвердить почту; reset-sent — код из письма и новый пароль.
@@ -40,7 +41,7 @@ export function accountEnter() {
   A.busy = false;
   A.role = null;
   if (!session()) return Promise.resolve();
-  return myRole().then((r) => { A.role = r; }).catch(() => {});
+  return myRole().then((r) => { A.role = r; notePremium(r); }).catch(() => {});
 }
 
 // Строка на экране «Профиль»

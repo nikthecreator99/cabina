@@ -11,14 +11,21 @@ const PREM_KEY = 'cabina-premium-dev';
 export function premiumOk() {
   try { const s = session(); return !!s && localStorage.getItem(PREM_KEY) === s.sub; } catch { return false; }
 }
-// Роль спрашиваем у сервера только при открытом аккаунте. Нет связи — оставляем как было.
-async function refreshPremium() {
+// Запомнить права по роли, которую уже прислал сервер (вход, «Настройки аккаунта»). Нет ответа — оставляем как было.
+export function notePremium(role) {
   try {
     const s = session();
-    if (!s) { localStorage.removeItem(PREM_KEY); return; }
-    const role = await myRole();
-    if (role === 'admin') localStorage.setItem(PREM_KEY, s.sub);
+    if (!s) localStorage.removeItem(PREM_KEY);
+    else if (role === 'admin') localStorage.setItem(PREM_KEY, s.sub);
     else if (role) localStorage.removeItem(PREM_KEY);
+  } catch {}
+}
+// Роль спрашиваем у сервера только при открытом аккаунте: при запуске приложения и на экране персонажа.
+// Отметка своя у каждого адреса сайта, поэтому после переезда или нового телефона её нужно получить заново.
+export async function refreshPremium() {
+  try {
+    if (!session()) { localStorage.removeItem(PREM_KEY); return; }
+    notePremium(await myRole());
   } catch {}
 }
 

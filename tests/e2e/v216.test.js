@@ -258,3 +258,31 @@ test('2.16.1: на старом адресе (GitHub) — плашка «CABINA 
   assert.equal(await fresh.page.locator('.move-nag').count(), 0);
   await fresh.context.close();
 });
+
+test('2.16.2: права на премиум-персонажа — сразу при запуске с аккаунтом, без захода в «Мой персонаж»', async () => {
+  for (const role of ['admin', 'user']) {
+    const { context, page, errors } = await openApp(env);
+    await ready(context, page, two, meCard);
+    // как после переезда на новый адрес: отметки о правах нет, а сохранён премиум-персонаж «Робот»
+    await context.route('https://api.cabina-app.ru/rest/v1/profiles**', (route) => route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: JSON.stringify([{ role }]) }));
+    await page.evaluate(async () => {
+      localStorage.removeItem('cabina-premium-dev');
+      const s = await import('./js/store.js');
+      await s.saveProfile({ avatar: { sex: 'robot', metal: 1, glow: 2 } });
+    });
+    await page.reload(); await page.waitForSelector('.screen');
+    await page.waitForFunction((r) => (localStorage.getItem('cabina-premium-dev') !== null) === (r === 'admin'), role);
+    await tab(page, 'profile');
+    const shown = await page.locator('.profile-card svg.ava-svg').first().evaluate((el) => el.outerHTML);
+    const want = await page.evaluate(async ({ premium, size }) => {
+      const A = await import('./js/avatar.js'); const s = await import('./js/store.js');
+      const box = document.createElement('div');
+      box.innerHTML = A.avatarSvg(A.normalizeAvatar(s.S.profile.avatar, { premium }), { size, cls: 'ava-svg' });
+      return box.firstElementChild.outerHTML;
+    }, { premium: role === 'admin', size: Number(await page.locator('.profile-card svg.ava-svg').first().getAttribute('width')) });
+    const ids = (h) => h.replace(/v\d+_/g, 'v_');
+    assert.equal(ids(shown), ids(want), role === 'admin' ? 'у администратора — робот' : 'без прав — человек');
+    assert.deepEqual(realErrors(errors), []);
+    await context.close();
+  }
+});
