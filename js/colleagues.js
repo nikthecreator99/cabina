@@ -588,7 +588,7 @@ export function colleaguesHtml() {
     if (k) badge = `<span class="col-badge" aria-label="Новых предложений: ${k}">${k}</span>`;
   }
   return `<div class="group" id="col-entry-sec"><div class="group-title">Коллеги</div>
-    <button class="col-search" data-act="go" data-page="colleagues" id="col-find">${small(I.search, 20)}<span>Найти коллегу</span></button>
+    <button class="col-search" data-act="go" data-page="colleagues" id="col-find" aria-label="Найти коллегу">${small(I.search, 20)}<span>Найти</span></button>
     <div class="panel"><button class="row" data-act="go" data-page="team" id="col-entry"><span class="ico" style="--c:var(--ok)">${I.users}</span>
       <div class="grow"><div class="t1">Мои коллеги</div><div class="t2">${esc(sub)}</div></div>${badge}${small(I.right, 18)}</button></div></div>`;
 }

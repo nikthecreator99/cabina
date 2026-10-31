@@ -1,5 +1,5 @@
 // Браузерные проверки CABINA 2.5: явка заранее, вид движения, ожидание над следованием, учёба,
-// заработок по среднему, настройки, медкомиссия в отвлечении, «Пропустить» в подсказках. Данные — выдуманные.
+// заработок по среднему, настройки, медкомиссия в отвлечении, «Пропустить» в подсказках (с 2.19.3 см. и v2193). Данные — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
@@ -207,7 +207,7 @@ test('настройки: новый порядок, календарь и ча�
   await context.close();
 });
 
-test('подсказки: «Пропустить» слева закрывает подсказки экрана, стрелка статистики — прямо между разделами', async () => {
+test('подсказки: «Пропустить» слева закрывает подсказку, перерисовка экрана новую не показывает', async () => {
   const { context, page, errors } = await openApp(env, { tours: true });
   await page.waitForFunction(() => document.querySelector('.tour-next')?.textContent === 'Дальше');
   const skip = page.locator('.tour-skip');
@@ -223,29 +223,6 @@ test('подсказки: «Пропустить» слева закрывает
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveSettings({ minRest: 240 }); });
   await page.waitForTimeout(1500);
   assert.equal(await page.locator('.tour').count(), 0, 'после «Пропустить» на этом экране подсказок больше нет');
-  // меню из трёх разделов — новая подсказка в один шаг (без «Пропустить»)
-  await page.reload();
-  // 2.6: сначала (сверху) — поиск поездок, потом нижнее меню
-  await page.waitForFunction(() => document.querySelector('.tour-title')?.textContent === 'Поиск поездок');
-  await next.click();
-  await page.waitForFunction(() => document.querySelector('.tour-title')?.textContent === 'Разделы внизу');
-  assert.match(await text(page, '.tour-card'), /Разделы внизу[\s\S]*Главная[\s\S]*Ещё[\s\S]*Профиль/);
-  assert.doesNotMatch(await text(page, '.tour-card'), /Обучение|Чаты/);
-  assert.equal(await skip.isHidden(), true, 'на последнем шаге только «Понятно»');
-  await next.click();
-  await page.waitForFunction(() => !document.querySelector('.tour'));
-  // статистика: прямая стрелка ровно по центру переключателя
-  await page.locator('.hero').click();
-  await page.waitForSelector('.tour-arrow:not([hidden]) svg');
-  await page.waitForTimeout(500);
-  const seg = await page.locator('#st-kind').boundingBox();
-  const arrow = await page.locator('.tour-arrow').boundingBox();
-  const gap = await page.locator('#st-kind button').nth(1).boundingBox();
-  assert.ok(Math.abs(arrow.x + arrow.width / 2 - (seg.x + seg.width / 2)) <= 2, 'стрелка по центру');
-  assert.ok(Math.abs(arrow.x + arrow.width / 2 - gap.x) <= 6, 'между «Поездная статистика» и «Заработная плата»');
-  assert.equal(await page.locator('.tour-arrow path').count(), 2);
-  assert.match(await page.locator('.tour-arrow path').first().getAttribute('d'), /^M20 49V6/, 'стрелка прямая');
-  assert.equal(await page.locator('.tour-arrow').getAttribute('data-dir'), 'up');
   assert.deepEqual(errors, []);
   await context.close();
 });

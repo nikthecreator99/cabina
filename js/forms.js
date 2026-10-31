@@ -14,7 +14,7 @@ import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
-import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, studyTour, routeNormsTour, routeTimesTour } from './tours.js';
+import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour } from './tours.js';
 
 export { computeHomeRest };
 
@@ -708,7 +708,7 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
   }));
   $(el, '#af-start').value = A.start;
   $(el, '#af-end').value = A.end;
-  setTimeout(() => { absenceTour(el); studyTour(el); }, 450);
+  setTimeout(() => absenceTour(el), 450);
 
   function renderMed() {
     const box = $(el, '#af-med');
@@ -881,7 +881,7 @@ export function openRouteForm(id, preset) {
   $(el, '#rf-ln').value = existing?.lengthNorm ? String(existing.lengthNorm) : '';
   for (const k of TN_KEYS) $(el, `#rf-${k}`).value = existing?.[`${k}Min`] ? String(existing[`${k}Min`]) : '';
   if (!existing) setTimeout(() => $(el, '#rf-from').focus(), 250);
-  else setTimeout(() => { routeNormsTour(el); routeTimesTour(el); }, 450);
+  else setTimeout(() => routeNormsTour(el), 450);
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;

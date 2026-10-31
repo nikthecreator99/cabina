@@ -4,19 +4,34 @@ import { esc } from './ui.js';
 
 let done = new Set();
 let active = null;
-const queue = [];
-// «Пропустить» закрывает подсказки этого экрана: до перехода на другой экран (или перезапуска) новых не показываем,
-// даже если экран перерисуется. screenKey задаёт app.js: вкладка или экран + число открытых окон.
+// Одна подсказка за раз (2.19.3): после закрытия подсказки («Понятно» или «Пропустить») на этом экране новых нет,
+// пока человек не перейдёт на другой экран или не закроет/откроет окно. Цепочек подсказок подряд нет.
+// screenKey задаёт app.js: вкладка или экран + число открытых окон.
 let screenKey = () => '';
-let skippedOn = null;
+let quietOn = null;
+let quietTimer = null;
 export const setTourScreen = (fn) => { screenKey = fn; };
+// app.js зовёт при каждой отрисовке: ушли с экрана, где закрыли подсказку, — тишина кончилась (даже если быстро вернулись)
+export function noteTourScreen() { if (quietOn !== null && screenKey() !== quietOn) { quietOn = null; clearInterval(quietTimer); } }
+// окна открываются без перерисовки экрана — их замечаем проверкой раз в 0,4 с
+function quiet() {
+  quietOn = screenKey();
+  clearInterval(quietTimer);
+  quietTimer = setInterval(() => { if (screenKey() !== quietOn) { quietOn = null; clearInterval(quietTimer); } }, 400);
+}
 
-const disabled = () => { try { return localStorage.getItem('cabina-tours-off') === '1'; } catch { return false; } };
+// Подсказки можно выключить в Настройках (2.19.3). Выбор хранится в этом телефоне, в резервную копию не попадает.
+const OFF_KEY = 'cabina-tours-off';
+export const toursOff = () => { try { return localStorage.getItem(OFF_KEY) === '1'; } catch { return false; } };
+export function setToursOff(off) {
+  try { if (off) localStorage.setItem(OFF_KEY, '1'); else localStorage.removeItem(OFF_KEY); } catch {}
+  if (off && active) active.close();
+}
 
 export async function loadTours() {
   try { const m = await db.get('meta', 'tours'); done = new Set(m?.done || []); } catch { done = new Set(); }
 }
-export const tourDone = (id) => disabled() || done.has(id);
+export const tourDone = (id) => toursOff() || done.has(id);
 export const tourActive = () => !!active;
 async function markDone(id) {
   done.add(id);
@@ -26,7 +41,8 @@ async function markDone(id) {
 export const markTourDone = (id) => (done.has(id) ? null : markDone(id));
 export async function resetTours() {
   done = new Set();
-  skippedOn = null;
+  quietOn = null;
+  clearInterval(quietTimer);
   try { await db.put('meta', { id: 'tours', done: [] }); } catch {}
 }
 
@@ -39,12 +55,11 @@ const visible = (el) => { if (!el) return false; const r = el.getBoundingClientR
 
 /**
  * steps: [{ target, title, text, onShow?, pad?, arrow? }] — arrow: 'straight' — прямая стрелка ровно по центру элемента.
- * Шаги, чей элемент не найден, пропускаются. Тур показывается один раз.
+ * Шаги, чей элемент не найден, пропускаются. Тур показывается один раз и не больше одного за посещение экрана.
  */
 export function runTour(id, steps) {
-  if (tourDone(id)) return;
-  if (skippedOn !== null && skippedOn === screenKey()) return;
-  if (active) { if (active.id !== id && !queue.some((q) => q.id === id)) queue.push({ id, steps }); return; }
+  if (tourDone(id) || active) return; // занято — эта подсказка покажется в другой раз
+  if (quietOn !== null && quietOn === screenKey()) return;
   start(id, steps);
 }
 
@@ -56,7 +71,7 @@ function start(id, allSteps) {
     return ea.compareDocumentPosition(eb) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
   });
   if (!steps.length) return;
-  active = { id };
+  active = { id, close: () => finish() };
   const ov = document.createElement('div');
   ov.className = 'tour';
   ov.setAttribute('role', 'dialog');
@@ -127,7 +142,8 @@ function start(id, allSteps) {
     ov.querySelector('.tour-next').focus({ preventScroll: true });
   }
 
-  function finish(skipped) {
+  function finish() {
+    if (active?.id !== id) return;
     window.removeEventListener('resize', place);
     window.removeEventListener('scroll', place, true);
     document.removeEventListener('keydown', onKey);
@@ -135,13 +151,11 @@ function start(id, allSteps) {
     setTimeout(() => ov.remove(), 200);
     markDone(id);
     active = null;
-    if (skipped === true) { queue.length = 0; skippedOn = screenKey(); return; } // «Пропустить» — без цепочки следующих подсказок
-    const nxt = queue.shift();
-    if (nxt) setTimeout(() => runTour(nxt.id, nxt.steps), 300);
+    quiet();
   }
-  const onKey = (e) => { if (e.key === 'Escape') finish(true); };
+  const onKey = (e) => { if (e.key === 'Escape') finish(); };
 
-  skip.onclick = () => finish(true);
+  skip.onclick = () => finish();
   ov.querySelector('.tour-next').onclick = () => (i + 1 < steps.length ? show(i + 1) : finish());
   window.addEventListener('resize', place);
   window.addEventListener('scroll', place, true);

@@ -100,7 +100,7 @@ test('без аккаунта приложение ничего не отпра�
   await tab(page, 'profile');
   await page.locator('.screen [data-page=settings]').click();
   const row = page.locator('.screen [data-page=account]');
-  assert.match(await row.innerText(), /Настройки аккаунта[\s\S]*не обязателен/);
+  assert.equal((await row.innerText()).trim(), 'Войти в аккаунт', 'без входа — одна строка «Войти в аккаунт» (2.19.3)');
   await row.click();
   assert.match(await page.locator('.screen').innerText(), /Аккаунт не обязателен[\s\S]*только в этом телефоне/);
   await page.locator('[data-act=acc-policy]').first().click();
@@ -115,7 +115,12 @@ test('без аккаунта приложение ничего не отпра�
   // политика доступна и из Настроек; текст о хранении данных честный
   await page.locator('[data-act=back]').click();
   await page.locator('.page-head h1', { hasText: 'Настройки' }).waitFor();
-  assert.match(await page.locator('.screen').innerText(), /Записи хранятся только в этом телефоне[\s\S]*Аккаунт — по желанию/);
+  // с 2.19.3 в Настройках — короткая плашка, подробности — в её окне
+  assert.match(await page.locator('#storage-note').innerText(), /Записи — только в этом телефоне/);
+  await page.locator('#storage-note').click();
+  assert.match(await sheet(page).innerText(), /В этом телефоне[\s\S]*По сети не передаются[\s\S]*На сервере в России — только с аккаунтом/);
+  await sheet(page).getByRole('button', { name: 'Понятно' }).click();
+  await waitNoLayers(page);
   await page.locator('[data-act=policy]').click();
   assert.match(await sheet(page).innerText(), /Григорьев Никита Сергеевич/);
   await sheet(page).getByRole('button', { name: 'Понятно' }).click();
@@ -193,7 +198,7 @@ test('вход, отметка «заходил сегодня» раз в де�
   await page.locator('#acc-pass').fill('Probnyj-parol-1');
   await page.locator('#acc-submit').click();
   await toastHas(page, /Вы вошли в аккаунт/);
-  assert.match(await page.locator('.screen').innerText(), /ivan@example\.com[\s\S]*Вы вошли в аккаунт CABINA[\s\S]*На сервере о вас только/);
+  assert.match(await page.locator('.screen').innerText(), /ivan@example\.com[\s\S]*Вы вошли в аккаунт CABINA[\s\S]*Мои данные на сервере[\s\S]*Поездок и заработка там нет/);
   assert.equal(await page.locator('[data-act=acc-stats]').count(), 0, 'обычный человек статистику не видит');
   assert.equal(await page.locator('[data-act=acc-invite-new]').count(), 0, 'обычный человек приглашения не создаёт');
   // строка в Настройках показывает почту

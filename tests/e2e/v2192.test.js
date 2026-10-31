@@ -42,7 +42,8 @@ test('профиль: ✎ у имени вместо большой кнопки
   assert.ok(pen.x > name.x + name.width - 1 && Math.abs((pen.y + pen.height / 2) - (name.y + name.height / 2)) < 6, 'значок — справа от имени, на одной строке');
   assert.deepEqual(await page.locator('#pr-edit').evaluate((b) => [b.offsetWidth, b.offsetHeight]), [38, 38], 'на значок легко попасть');
   // порядок: карточка → награды → «Найти коллегу» → «Мои коллеги»; рекордов в профиле нет
-  assert.match(await text(page, '.screen'), /Иван Тестовый[\s\S]*Награды[\s\S]*Коллеги[\s\S]*Найти коллегу[\s\S]*Мои коллеги/i);
+  assert.match(await text(page, '.screen'), /Иван Тестовый[\s\S]*Награды[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги/i);
+  assert.equal((await text(page, '#col-find')).trim(), 'Найти', 'с 2.19.3 — просто «Найти»');
   assert.equal(await page.locator('#pr-records').count(), 0);
   assert.ok((await box(page, '#col-find')).y < (await box(page, '#col-entry')).y);
   assert.doesNotMatch(await text(page, '#col-find'), /нов/i, 'без слова «новых»');

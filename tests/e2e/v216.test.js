@@ -42,7 +42,7 @@ test('Настройки аккаунта — вверху Настроек; в 
   await first.locator('[data-page=account]').click();
   const acc = page.locator('.screen');
   await acc.locator('#acc-col').waitFor();
-  assert.match(await acc.innerText(), /Настройки аккаунта[\s\S]*Коллеги[\s\S]*Приватность[\s\S]*Выйти из «Коллег»[\s\S]*Мои данные/i);
+  assert.match(await acc.innerText(), /Настройки аккаунта[\s\S]*Мои данные на сервере[\s\S]*Коллеги[\s\S]*Приватность[\s\S]*Выйти из «Коллег»[\s\S]*Документы[\s\S]*Согласие/i);
   // поиск: должность — любая, машинист или помощник
   await page.locator('.tab[data-tab=profile]').click();
   await page.locator('#col-find').click();

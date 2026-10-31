@@ -678,6 +678,13 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .profile-name.with-edit > span { min-width: 0; overflow-wrap: anywhere; }
 .profile-name .ph { color: var(--muted); font-weight: 600; }
 .profile-sub { font-size: 14px; color: var(--text-2); }
+.notice-btn { width: 100%; align-items: center; text-align: left; cursor: pointer; font: inherit; }
+.notice-btn > .grow { flex: 1; min-width: 0; }
+.notice-btn > svg:last-child { color: var(--muted); flex: none; }
+.notice-btn:active { filter: brightness(.97); }
+/* «Войти в аккаунт» — одна крупная строка вместо двух мелких (2.19.3) */
+.row.acc-login { min-height: 64px; }
+.row.acc-login .t1 { font-size: 18px; font-weight: 700; }
 .notice.ok { background: color-mix(in srgb, var(--ok) 10%, var(--card-solid)); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
 .notice.ok svg { color: var(--ok); }
 .notice > svg { flex: none; }

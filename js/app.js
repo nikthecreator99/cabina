@@ -8,8 +8,8 @@ import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docSta
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
-import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour, privacyTour, pullTour, shareTour, awardsTour } from './tours.js';
+import { loadTours, resetTours, tourActive, setTourScreen, noteTourScreen, toursOff, setToursOff } from './tour.js';
+import { homeTour, swipeTour, routesTour, settingsTour, workTour, tariffsTour, housesTour, fixTour, careerTour, calDayTour, moneyTour, payModeTour, colleaguesTour, shareTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -33,7 +33,7 @@ import { legalReady, policyHtml, APP_URL } from './legal.js';
 import { renderAwards, renderRecords, openAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 
-export const VERSION = '2.19.2';
+export const VERSION = '2.19.3';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null };
@@ -405,6 +405,22 @@ function openCalendarInfo() {
   }));
 }
 
+// Где хранятся данные: в Настройках — одна короткая плашка, подробности — в окне (2.19.3)
+function openStorageInfo() {
+  const row = (ic, c, t1, t2) => `<div class="row"><span class="ico" style="--c:${c}">${ic}</span><div class="grow"><div class="t1">${t1}</div><div class="t2">${t2}</div></div></div>`;
+  openLayer(sheet({
+    title: 'Где хранятся данные',
+    body: `<div class="panel" id="storage-info">
+        ${row(I.phone, 'var(--ok)', 'В этом телефоне', 'Поездки, заработок, отвлечения, профиль, заметки и документы. По сети не передаются.')}
+        ${legalReady() ? row(I.user, 'var(--night)', 'На сервере в России — только с аккаунтом', 'Почта и даты входа. Если вы включили «Коллеги» — имя, коллеги и текущий статус.') : ''}
+        ${storageInfo ? row(I.shield, storageInfo.persisted ? 'var(--ok)' : 'var(--warn)', `Занято ${fmtSize(storageInfo.usage)}`, storageInfo.persisted ? 'Защищено от автоочистки браузера' : 'Если в телефоне мало места, браузер может очистить данные — сохраняйте копию') : ''}
+        ${row(I.alert, 'var(--warn)', 'Без копии записи не вернуть', 'Если удалить приложение, очистить данные браузера или потерять телефон.')}
+        ${row(I.download, 'var(--accent)', 'Резервная копия', 'Файл .json со всеми записями. Сохраните его в «Файлы», облако или отправьте себе — с ним данные можно вернуть на новый телефон. Чужим не пересылайте.')}
+      </div>`,
+    foot: '<button class="btn btn-primary" data-close>Понятно</button>',
+  }));
+}
+
 function openTzPicker() {
   const el = openLayer(sheet({
     title: 'Часовой пояс',
@@ -424,7 +440,7 @@ function renderSettings() {
   const y = new Date(nowLocal()).getUTCFullYear();
   const yi = yearInfo(y);
   const themeBtn = (v, label, ic) => `<button data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${small(ic, 16)} ${label}</button>`;
-  const lastBk = S.backup.lastAt ? `Последняя копия: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Копия ещё не сохранялась';
+  const lastBk = S.backup.lastAt ? `Последняя: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Ещё не сохранялась';
   return `${pageHead('Настройки', { back: true })}
     ${accountRowHtml()}
     <div class="group"><div class="group-title">Оформление</div>
@@ -439,15 +455,13 @@ function renderSettings() {
       </div>
     </div>
     <div class="group"><div class="group-title">Данные и резервная копия</div>
-      <div class="notice">${I.alert}<div><b>Данные хранятся только на этом устройстве.</b> Если удалить приложение или очистить данные браузера без резервной копии, поездки, отвлечения, профиль и документы будут потеряны.</div></div>
+      ${isMemoryMode() ? `<div class="notice">${I.alert}<div><b>Записи не сохраняются.</b> Хранилище браузера недоступно — данные пропадут после закрытия. Откройте CABINA в обычном (не приватном) окне.</div></div>`
+        : `<button class="notice notice-btn" data-act="storage-info" id="storage-note">${I.alert}<div class="grow"><b>Записи — только в этом телефоне.</b> Без копии их не вернуть.</div>${small(I.right, 18)}</button>`}
       <div class="panel">
-        <div class="row"><span class="ico" style="--c:var(--warn)">${I.folder}</span><div class="grow"><div class="t1">Включить рабочие документы</div><div class="t2">Копия будет больше, но сохранит все файлы</div></div>
-          <button class="switch" role="switch" id="bk-docs" aria-checked="${V.bkDocs !== false}" aria-label="Включить документы в копию" data-act="bk-docs"></button></div>
-        <button class="row" data-act="export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Создать резервную копию</div><div class="t2">${lastBk}. Файл .json — сохраните его в «Файлы», облако или отправьте себе</div></div>${small(I.right, 18)}</button>
-        <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные будут заменены</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
-        <div class="row"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Локальное хранение</div>
-          <div class="t2">${isMemoryMode() ? 'Хранилище браузера недоступно — данные пропадут после закрытия. Откройте CABINA в обычном (не приватном) окне.'
-            : `${legalReady() ? 'Записи хранятся только в этом телефоне и по сети не передаются. Аккаунт — по желанию: на сервере в России почта и даты входа, а если вы включили «Коллеги» — имя, коллеги и текущий статус.' : 'Без регистрации и серверов. Данные не передаются по сети.'}${storageInfo ? ` Занято ${fmtSize(storageInfo.usage)}${storageInfo.persisted ? ' · защищено от автоочистки' : ''}.` : ''}`}</div></div></div>
+        <div class="row"><span class="ico" style="--c:var(--warn)">${I.folder}</span><div class="grow"><div class="t1">Документы в копии</div><div class="t2">Файл копии будет больше</div></div>
+          <button class="switch" role="switch" id="bk-docs" aria-checked="${V.bkDocs !== false}" aria-label="Сохранять рабочие документы в копию" data-act="bk-docs"></button></div>
+        <button class="row" data-act="export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Создать резервную копию</div><div class="t2">${lastBk}</div></div>${small(I.right, 18)}</button>
+        <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные заменятся</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
       </div>
     </div>
     <div class="group"><div class="group-title">Производственный календарь</div>
@@ -467,7 +481,9 @@ function renderSettings() {
     <div class="group"><div class="group-title">О приложении</div>
       <div class="panel">
         <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
-        <button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Показать подсказки заново</div><div class="t2">Объяснения по каждому разделу при первом открытии</div></div>${small(I.right, 18)}</button>
+        <div class="row"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Подсказки</div><div class="t2">Короткие объяснения при первом открытии</div></div>
+          <button class="switch" role="switch" id="tours-sw" aria-checked="${!toursOff()}" aria-label="Показывать подсказки" data-act="tours-toggle"></button></div>
+        ${toursOff() ? '' : `<button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.refresh}</span><div class="grow"><div class="t1">Показать подсказки заново</div></div>${small(I.right, 18)}</button>`}
         ${legalReady() ? `<button class="row" data-act="policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки персональных данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>` : ''}
         <button class="row" data-act="about"><span class="ico">${I.info}</span><div class="grow"><div class="t1">CABINA ${VERSION}</div><div class="t2">Личный учёт поездок. Не является официальной системой ОАО «РЖД».</div></div>${small(I.right, 18)}</button>
       </div>
@@ -544,26 +560,27 @@ function back() { V.pages.pop(); render(); window.scrollTo(0, 0); }
 let tourTimer = null;
 setTourScreen(() => `${page() || `${V.tab}:${V.extra || ''}`}|${layerCount()}`);
 function scheduleTours() {
+  noteTourScreen();
   clearTimeout(tourTimer);
   tourTimer = setTimeout(() => {
     if (layerCount() || tourActive() || !S.onboarded) return;
     const p = page();
     if (p === 'work') workTour();
     else if (p === 'routes') routesTour();
-    else if (p === 'tariffs') { tariffsTour(); payModeTour(); sickPayTour(); }
+    else if (p === 'tariffs') { tariffsTour(); payModeTour(); }
     else if (p === 'houses') housesTour();
-    else if (p === 'stats') { statsTour(); slipPdfTour(); if (app.querySelector('.cal-grid')) calDayTour(); if (app.querySelector('.st-locos, [data-act=st-recap]')) statsMoreTour(); }
-    else if (p === 'settings') { if (legalReady()) accountTileTour(); settingsTour(); }
-    else if (p === 'privacy') { if (app.querySelector('#pv-access')) privacyTour(); }
-    else if (p === 'profile-edit') profileEditTour();
-    else if (p === 'avatar') { avatarTour(); avatarCharsTour(); }
+    else if (p === 'stats') { if (app.querySelector('.cal-grid')) calDayTour(); }
+    else if (p === 'settings') settingsTour();
     else if (p === 'career') careerTour();
-    else if (p === 'colleagues') { if (app.querySelector('#col-form')) colleaguesPageTour(); }
-    else if (p === 'team') { if (app.querySelector('#col-list')) pullTour(); }
     else if (p) return;
-    else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.swipe > .trip:not(.is-live)')) shareTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
-    else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
-    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('#pr-awards')) awardsTour(); if (app.querySelector('#col-entry')) colleaguesTour(); }
+    else if (V.tab === 'home') {
+      homeTour();
+      if (app.querySelector('.swipe')) swipeTour();
+      // отправить напарнику — когда поездок уже несколько
+      if (app.querySelector('.swipe > .trip:not(.is-live)') && S.trips.filter((t) => t.end).length >= 3) shareTour();
+      if (app.querySelector('.hero-pay .eye-btn') && flipOn()) moneyTour();
+    } else if (V.tab === 'extra') { if (V.extra === 'fix') fixTour(); }
+    else if (V.tab === 'profile') { if (app.querySelector('#col-entry')) colleaguesTour(); }
   }, 500);
 }
 export { scheduleTours };
@@ -738,6 +755,8 @@ app.addEventListener('click', async (e) => {
     case 'about': showOnboarding(true); break;
     case 'policy': openLayer(sheet({ title: 'Политика обработки персональных данных', body: policyHtml(), tall: true, foot: '<button class="btn btn-primary" data-close>Понятно</button>' })); break;
     case 'whats-new': showWhatsNew(); break;
+    case 'tours-toggle': setToursOff(!toursOff()); toast(toursOff() ? 'Подсказки выключены' : 'Подсказки включены'); rerender(); break;
+    case 'storage-info': openStorageInfo(); break;
     case 'tours-reset': await resetTours(); V.tab = 'home'; V.pages = []; goToday(); render(); window.scrollTo(0, 0); break;
     default: break;
   }

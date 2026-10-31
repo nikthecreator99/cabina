@@ -44,14 +44,14 @@ export function accountEnter() {
   return myRole().then((r) => { A.role = r; notePremium(r); }).catch(() => {});
 }
 
-// Строка на экране «Профиль»
-// Строка вверху «Настроек»
+// Строка вверху «Настроек». Не вошли — одна крупная надпись «Войти в аккаунт» (2.19.3, просьба Никиты: меньше текста);
+// что аккаунт не обязателен и что хранится на сервере — на самом экране аккаунта.
 export function accountRowHtml() {
   if (!legalReady()) return '';
   const s = session();
-  return `<div class="group"><div class="group-title">Аккаунт</div><div class="panel"><button class="row" data-act="go" data-page="account">
+  return `<div class="group"><div class="group-title">Аккаунт</div><div class="panel"><button class="row${s ? '' : ' acc-login'}" data-act="go" data-page="account">
     <span class="ico" style="--c:var(--night)">${I.user}</span>
-    <div class="grow"><div class="t1">Настройки аккаунта</div><div class="t2 acc-email">${s ? `Вы вошли: ${esc(s.email)}` : 'Аккаунт CABINA не обязателен · закрытое испытание'}</div></div>${small(I.right, 18)}</button></div></div>`;
+    <div class="grow">${s ? `<div class="t1">Настройки аккаунта</div><div class="t2 acc-email">Вы вошли: ${esc(s.email)}</div>` : '<div class="t1">Войти в аккаунт</div>'}</div>${small(I.right, 18)}</button></div></div>`;
 }
 
 const field = (id, label, input, hint = '') => `<div class="pay-field"><label for="${id}">${label}</label>${input}${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
@@ -69,13 +69,14 @@ const docsBtns = `<div class="acc-docs"><button type="button" class="link-btn" d
 const localNote = `<div class="notice ok">${I.shield}<div><b>Аккаунт не обязателен.</b> Без него CABINA работает как раньше. Поездки, заработок, отвлечения и документы хранятся только в этом телефоне и на сервер не отправляются — с аккаунтом тоже.</div></div>`;
 
 function signedInHtml(s, colHtml) {
+  // 2.19.3 (просьба Никиты — меньше текста): вместо длинной зелёной плашки — строка «Мои данные на сервере» сразу под почтой;
+  // полный список того, что хранит сервер, и «Не на сервере» — в её окне (myDataHtml)
   return `<div class="panel"><div class="row"><span class="ico" style="--c:var(--ok)">${I.user}</span>
-      <div class="grow"><div class="t1 acc-email">${esc(s.email)}</div><div class="t2">Вы вошли в аккаунт CABINA</div></div></div></div>
-    <div class="notice ok">${I.shield}<div><b>На сервере о вас только:</b> почта, дата регистрации, дата последнего захода, тип устройства и версия приложения. Если вы включили «Коллеги» — ещё имя, должность, то, что вы разрешили в «Приватности», список коллег и текущий статус. Поездки, заработок, отвлечения и документы остаются в этом телефоне.</div></div>
+      <div class="grow"><div class="t1 acc-email">${esc(s.email)}</div><div class="t2">Вы вошли в аккаунт CABINA</div></div></div>
+      <button class="row" data-act="acc-export"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Мои данные на сервере</div><div class="t2">Поездок и заработка там нет</div></div>${small(I.right, 18)}</button></div>
     ${colHtml}
-    <div class="group"><div class="group-title">Мои данные</div>
+    <div class="group"><div class="group-title">Документы</div>
       <div class="panel">
-        <button class="row" data-act="acc-export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Мои данные на сервере</div><div class="t2">Посмотреть, что сервер знает о вас, и скачать файлом</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="acc-consent-doc"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div class="grow"><div class="t1">Согласие на обработку данных</div><div class="t2">Действующая редакция</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="acc-policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>
       </div></div>

@@ -8,7 +8,6 @@ import { payMonth, payTotal, overRestIntervals, hasRate, isAvg, rateOn, fmtRub, 
 import { houseOf, dayOffIntervals } from './rest.js';
 import { ABS_TYPES, openTripForm } from './forms.js';
 import { exportSlip } from './slip.js';
-import { slipPdfTour } from './tours.js';
 import { openDay } from './day.js';
 import { eyeBtn } from './money.js';
 import { openRecap } from './recap.js';
@@ -415,7 +414,7 @@ export function renderStats() {
 
 export function statsClick(act, b, ctx) {
   switch (act) {
-    case 'st-kind': ST.kind = b.dataset.v; ctx.rerender(); if (ST.kind === 'pay') setTimeout(slipPdfTour, 400); return true;
+    case 'st-kind': ST.kind = b.dataset.v; ctx.rerender(); return true;
     case 'st-period': ST.period = b.dataset.v; ctx.rerender(); return true;
     case 'st-prev': Object.assign(ST, shifted(ST, -1)); ctx.rerender(); return true;
     case 'st-next': Object.assign(ST, shifted(ST, 1)); ctx.rerender(); return true;

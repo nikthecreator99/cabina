@@ -222,7 +222,7 @@ test('без аккаунта раздела нет и на сервер нич�
   await page.locator('[data-act=back]').click();
   await page.locator('.screen [data-page=settings]').click();
   const row = page.locator('.screen [data-page=account]');
-  assert.match(await row.innerText(), /Настройки аккаунта[\s\S]*не обязателен/);
+  assert.equal((await row.innerText()).trim(), 'Войти в аккаунт');
   await row.click();
   await page.locator('.page-head h1', { hasText: 'Настройки аккаунта' }).waitFor();
   assert.equal(await page.locator('[data-page=privacy]').count(), 0, 'без входа «Приватности» нет');
