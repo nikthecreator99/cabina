@@ -313,6 +313,8 @@ export function loadColleagues({ force = false } = {}) {
     return snap;
   });
 }
+// Что случилось при последней загрузке: '' — всё хорошо, 'offline' — нет связи, 'server' / 'error' — сервер отказал
+export const colleaguesError = () => C.err;
 function ensureFresh() {
   if (C.loading) return;
   if (C.err && Date.now() - C.failAt < 30e3) return;

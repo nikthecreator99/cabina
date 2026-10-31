@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour, privacyTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour, privacyTour, pullTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -27,10 +27,11 @@ import { medReminder, medBannerHtml, medClick } from './med.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml } from './account.js';
 import { consumeAuthRedirect, touch, session } from './auth.js';
 import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
-  colleaguesAccountHtml, renderPrivacy } from './colleagues.js';
+  colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
+import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
 
-export const VERSION = '2.16.2';
+export const VERSION = '2.17.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -405,6 +406,7 @@ function renderSettings() {
     ${accountRowHtml()}
     <div class="group"><div class="group-title">Оформление</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
+      <div class="panel"><button class="row" data-act="pull-style" id="pull-row"><span class="ico" style="--c:var(--night)">${I.refresh}</span><div class="grow"><div class="t1">Анимация обновления</div><div class="t2">${esc(PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name)} · потяните экран вниз, чтобы обновить</div></div>${small(I.right, 18)}</button></div>
     </div>
     <div class="group"><div class="group-title">Конфиденциальность</div>
       <div class="panel">
@@ -537,7 +539,7 @@ function scheduleTours() {
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
-    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('.col-search')) colleaguesTour(); }
+    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('.col-search')) colleaguesTour(); if (app.querySelector('#col-list')) pullTour(); }
   }, 500);
 }
 export { scheduleTours };
@@ -676,6 +678,7 @@ app.addEventListener('click', async (e) => {
     case 'money-eye': await toggleMoney(); break;
     case 'lock-settings': openLockSettings(rerender); break;
     case 'flip-toggle': if (await setFlip(!flipOn())) rerender(); break;
+    case 'pull-style': openPullStyles(); break;
     case 'bk-docs': V.bkDocs = V.bkDocs === false; rerender(); break;
     case 'export': await doExport(); break;
     case 'install': {
@@ -761,6 +764,38 @@ function showOnboarding(again = false) {
   if (!again) { S.onboarded = true; setOnboarded().catch(() => {}); }
 }
 
+// ---------------------------------------------------------------- обновление свайпом вниз
+// Тянуть можно, когда нет окон, подсказок, экрана кода и редактора персонажа
+const canPull = () => !layerCount() && !tourActive() && !document.querySelector('.lock') && !document.body.classList.contains('av-editing') && !swipe.busy();
+// Свежие статусы коллег (если есть аккаунт) и проверка новой версии. false — не получилось.
+async function pullRefresh() {
+  const jobs = [swReg ? swReg.update().catch(() => {}) : null];
+  const withCol = session() && legalReady();
+  if (withCol) jobs.push(loadColleagues({ force: true }));
+  await Promise.all(jobs);
+  if (!layerCount()) rerender();
+  const err = withCol ? colleaguesError() : '';
+  if (err) toast(err === 'offline' ? 'Нет связи с сервером. Показаны последние сохранённые статусы.' : 'Не удалось обновить коллег. Попробуйте ещё раз позже.', { error: true });
+  return !err;
+}
+// Настройки → «Анимация обновления»: пока для проверки — какая понравится, ту и оставим
+function openPullStyles() {
+  const cur = () => pullStyle(S.settings.pullAnim);
+  const list = () => PULL_STYLES.map((x) => `<button class="row" data-act="pull-pick" data-v="${x.id}" aria-pressed="${cur() === x.id}"><div class="grow"><div class="t1">${esc(x.name)}</div><div class="t2">${esc(x.text)}</div></div></button>`).join('');
+  const el = openLayer(sheet({
+    title: 'Анимация обновления',
+    body: `<div class="hint">Потяните любой экран вниз, когда он в самом верху: обновятся статусы коллег, а если вышла новая версия — появится окно обновления. Нажмите на вариант, чтобы посмотреть.</div>
+      <div class="panel pull-pick">${list()}</div>`,
+  }));
+  el.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-act=pull-pick]');
+    if (!b) return;
+    await saveSettings({ pullAnim: pullStyle(b.dataset.v) });
+    el.querySelector('.pull-pick').innerHTML = list();
+    pullDemo(b.dataset.v);
+  });
+}
+
 // ---------------------------------------------------------------- старт
 async function start() {
   goToday();
@@ -789,6 +824,7 @@ async function start() {
   // обновлять «сейчас» (поездка «в пути», статус отдыха) раз в минуту
   // раз в минуту: время «в пути», остаток отдыха и статус в профиле
   setInterval(() => { if ((V.tab === 'home' || V.tab === 'profile') && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); colleaguesTick(); }, 60000);
+  initPull({ can: canPull, refresh: pullRefresh, style: () => pullStyle(S.settings.pullAnim), screen: app });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { colleaguesWake(); if (!layerCount()) rerender(); } });
   registerSW();
 }
@@ -805,6 +841,7 @@ function changelogHtml(versions) {
     <ul class="news-list">${(v.items || []).map((it) => `<li>${esc(it)}</li>`).join('')}</ul></section>`).join('');
 }
 let updateWorker = null;
+let swReg = null;
 let updateRequested = false;
 let updateShown = false;
 async function showUpdate(worker, { force = false } = {}) {
@@ -846,6 +883,7 @@ function registerSW() {
   if (!('serviceWorker' in navigator) || inFrame) return;
   if (!(location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) return;
   navigator.serviceWorker.register('sw.js').then((reg) => {
+    swReg = reg;
     // проверять обновление, когда приложение снова открыто
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
     if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);

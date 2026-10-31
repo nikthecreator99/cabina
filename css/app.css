@@ -1067,3 +1067,87 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
 .pick-row .t1 { font-weight: 700; overflow-wrap: anywhere; }
 .pv-preview .col-st { vertical-align: middle; }
 .switch:disabled { opacity: .45; cursor: default; }
+
+/* ---------- Обновление свайпом вниз (2.17) ---------- */
+.ptr { position: fixed; left: 0; right: 0; top: env(safe-area-inset-top, 0px); z-index: 95; display: flex; justify-content: center; pointer-events: none; visibility: hidden;
+  --p: 0; --over: 0px; transform: translateY(calc(var(--p) * (100% + 14px) - 100% + var(--over))); opacity: min(1, calc(var(--p) * 2)); }
+.ptr.on { visibility: visible; }
+.ptr.settle { transition: transform .22s ease, opacity .22s ease; }
+.ptr.leaving { visibility: visible; transition: transform .24s ease-in, opacity .24s ease-in; transform: translateY(calc(-100% - 12px)); opacity: 0; }
+.ptr-bubble { position: relative; display: flex; align-items: center; justify-content: center; padding: 8px; border-radius: 999px; background: var(--card-solid); border: 1px solid var(--line-2); box-shadow: var(--shadow); overflow: hidden; }
+.ptr-art { display: block; overflow: visible; }
+.ptr-note { position: absolute; top: 100%; margin-top: 8px; padding: 5px 12px; border-radius: 999px; background: var(--card-solid); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text-2); font-size: 13px; font-weight: 700; opacity: 0; transform: translateY(-4px); transition: opacity .2s ease, transform .2s ease; }
+.ptr.done .ptr-note { opacity: 1; transform: none; }
+.ptr [class^="ptr-wh"], .ptr-arc, .ptr-wheel, .ptr-smoke circle { transform-box: fill-box; transform-origin: center; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+
+/* круг */
+.ptr-arc { stroke: var(--accent); transform: rotate(calc(var(--p) * 300deg)); transition: opacity .2s ease; }
+.ptr.loading .ptr-arc { stroke-dasharray: 60 100; animation: ptr-spin .8s linear infinite; }
+.ptr-ok { stroke: var(--ok); stroke-dasharray: 1; stroke-dashoffset: 1; }
+.ptr.done .ptr-ok { stroke-dashoffset: 0; transition: stroke-dashoffset .3s ease .1s; }
+.ptr.done .ptr-arc { opacity: 0; }
+
+/* поезд */
+.ptr[data-style="train"] .ptr-bubble { padding: 4px 8px 2px; border-radius: 20px; }
+.ptr-ties rect { fill: var(--text-2); opacity: .5; }
+.ptr-rail { stroke: var(--text-2); stroke-width: 1.6; }
+.ptr-loco { transform: translateX(calc((var(--p) - 1) * 80px)); }
+.ptr.loading .ptr-loco { transform: none; animation: ptr-bob .28s ease-in-out infinite alternate; }
+.ptr.done .ptr-loco { animation: ptr-go .7s ease-in forwards; }
+.ptr.loading .ptr-ties { animation: ptr-ties .3s linear infinite; }
+.ptr-body { fill: var(--accent); }
+.ptr-dark { fill: var(--text); }
+.ptr-win, .ptr-lamp { fill: #ffd08a; }
+.ptr-wh circle { fill: var(--card-solid); stroke: var(--text); stroke-width: 1.8; }
+.ptr-wh line { stroke: var(--text); stroke-width: 1.4; }
+.ptr-wh { transform: rotate(calc(var(--p) * 360deg)); }
+.ptr.loading .ptr-wh, .ptr.done .ptr-wh { animation: ptr-spin .42s linear infinite; }
+.ptr-rod { stroke: var(--text-2); stroke-width: 1.8; stroke-linecap: round; }
+.ptr.loading .ptr-rod, .ptr.done .ptr-rod { animation: ptr-rod .42s linear infinite; }
+.ptr-smoke circle { fill: var(--text-2); opacity: 0; }
+.ptr.loading .ptr-smoke circle { animation: ptr-puff 1.05s ease-out infinite; }
+.ptr.loading .ptr-smoke circle:nth-child(2) { animation-delay: .35s; }
+.ptr.loading .ptr-smoke circle:nth-child(3) { animation-delay: .7s; }
+.ptr-chuh { font: 800 8px var(--font-body); fill: var(--text-2); opacity: 0; }
+.ptr.loading .ptr-chuh { animation: ptr-chuh 1.2s ease-out infinite; }
+.ptr.loading .ptr-chuh.c2 { animation-delay: .6s; }
+@keyframes ptr-bob { to { transform: translateY(-.7px); } }
+@keyframes ptr-go { to { transform: translateX(120px); } }
+@keyframes ptr-ties { to { transform: translateX(-10px); } }
+@keyframes ptr-rod { 0% { transform: translate(0, -2px); } 25% { transform: translate(2px, 0); } 50% { transform: translate(0, 2px); } 75% { transform: translate(-2px, 0); } 100% { transform: translate(0, -2px); } }
+@keyframes ptr-puff { 0% { opacity: .75; transform: translate(0, 0) scale(.6); } 100% { opacity: 0; transform: translate(-18px, -8px) scale(2); } }
+@keyframes ptr-chuh { 0% { opacity: 0; transform: translateY(2px); } 25%, 55% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-4px); } }
+
+/* светофор */
+.ptr[data-style="light"] .ptr-bubble { padding: 6px 10px 0; border-radius: 18px; }
+.ptr-box { fill: #1a1f2b; stroke: rgba(255, 255, 255, .14); stroke-width: 1; }
+.ptr-mast { fill: var(--text-2); }
+.ptr-bulb { fill: #394052; transition: fill .15s ease; }
+.ptr-halo { opacity: 0; transition: opacity .15s ease; }
+.ptr-bulb.r, .ptr-halo.r { fill: #ff4d5e; }
+.ptr-halo.y { fill: #ffc83d; }
+.ptr-halo.g { fill: #34d27b; }
+.ptr-halo.r { opacity: calc(var(--p) * .35); }
+.ptr.armed .ptr-bulb.r, .ptr.loading .ptr-bulb.r, .ptr.done .ptr-bulb.r { fill: #394052; }
+.ptr.armed .ptr-halo.r, .ptr.loading .ptr-halo.r, .ptr.done .ptr-halo.r { opacity: 0; }
+.ptr.armed .ptr-bulb.y, .ptr.loading .ptr-bulb.y { fill: #ffc83d; }
+.ptr.armed .ptr-halo.y, .ptr.loading .ptr-halo.y { opacity: .35; }
+.ptr.loading .ptr-bulb.y, .ptr.loading .ptr-halo.y { animation: ptr-blink .9s steps(1) infinite; }
+.ptr.done .ptr-bulb.g { fill: #34d27b; }
+.ptr.done .ptr-halo.g { opacity: .35; }
+.ptr.fail .ptr-bulb.r { fill: #ff4d5e; }
+@keyframes ptr-blink { 50% { fill: #394052; opacity: 0; } }
+
+/* колесо */
+.ptr-wheel { transform: rotate(calc(var(--p) * 400deg)); }
+.ptr.loading .ptr-wheel { animation: ptr-spin .7s linear infinite; }
+.ptr-tire { fill: none; stroke: var(--text); stroke-width: 3; }
+.ptr-rim { fill: none; stroke: var(--text-2); stroke-width: 1.4; }
+.ptr-spoke { stroke: var(--text-2); stroke-width: 1.8; }
+.ptr-weight, .ptr-hub { fill: var(--accent); }
+.ptr-pin { fill: var(--text); }
+
+/* выбор анимации в Настройках */
+.pull-pick .row[aria-pressed="true"] .t1::after { content: " ✓"; color: var(--ok); }
+#app.ptr-glide { transition: transform .24s ease; }

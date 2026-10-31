@@ -64,6 +64,7 @@ export const I = {
   book: sv('<path d="M6.5 3.5H18a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><circle cx="12" cy="10" r="2.3"/><path d="M8.5 16c.6-1.6 1.9-2.5 3.5-2.5s2.9.9 3.5 2.5M3 8h3M3 12h3M3 16h3"/>'),
   mail: sv('<rect x="3.5" y="5.5" width="17" height="13" rx="2.2"/><path d="m4 7 8 6 8-6"/>'),
   dice: sv('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'),
+  refresh: sv('<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/>'),
   undo: sv('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
   face: sv('<circle cx="12" cy="12" r="8.5"/><path d="M9 10.5h.01M15 10.5h.01" stroke-width="2.6"/><path d="M8.8 14.8q3.2 2.6 6.4 0"/>'),
   hair: sv('<path d="M5 15c0-6.2 3.1-10.5 7-10.5s7 4.3 7 10.5"/><path d="M5 15c2.2-1.2 4-4 5-7.2M19 15c-3-1-5.6-3.2-6.8-6.2"/><path d="M8.5 19.5c1 .6 2.2 1 3.5 1s2.5-.4 3.5-1"/>'),
