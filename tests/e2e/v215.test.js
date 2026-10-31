@@ -282,7 +282,8 @@ test('экраны «Коллег» помещаются на 320 px в тёмн
     assert.ok(await fits(), `окно коллеги, ${theme}`);
     await sheet(page).locator('button[data-close]').first().click();
     await waitNoLayers(page);
-    await page.locator('.col-search').click();
+    await page.locator('[data-act=back]').click();
+    await page.locator('#col-find').click();
     await page.locator('#col-name').fill('Анна');
     await page.locator('#col-submit').click();
     await page.locator('#col-found').waitFor();

@@ -184,7 +184,7 @@ test('чужой и испорченный код: понятное сообще
   await context.close();
 });
 
-test('награды: в профиле над коллегами, своих часов нет; повторяемые — только «×N», со ступенями — без счётчика; рекорды — отдельным экраном; поздравления; 320 px, обе темы', async () => {
+test('награды: в профиле над коллегами, своих часов нет; повторяемые — только «×N», со ступенями — без счётчика; рекорды — внутри наград; поздравления; 320 px, обе темы', async () => {
   const { context, page, errors } = await openApp(env, { awards: true });
   const trips = Array.from({ length: 6 }, (_, i) => ({ id: `t${i}`, routeId: 'r1', start: `2026-10-0${i + 1}T08:00`, end: `2026-10-0${i + 1}T16:00`, weight: 6000 }));
   trips.push({ id: 'long', routeId: 'r1', start: '2026-10-08T06:00', end: '2026-10-08T18:30' });
@@ -192,16 +192,17 @@ test('награды: в профиле над коллегами, своих ч
   await tab(page, 'profile');
   assert.match(await text(page, '#pr-awards .group-title'), /Награды\s+\d+ из 32/i);
   assert.equal(await page.locator('.profile-tiles').count(), 0, 'своих часов и поездок в профиле нет');
-  assert.match(await text(page, '#pr-records'), /Рекорды[\s\S]*Самая долгая поездка — 12 ч 30 мин/);
-  // рекорды — по нажатию
-  await page.locator('#pr-records').click();
-  await page.waitForSelector('#aw-records');
-  assert.match(await text(page, '.screen'), /Рекорды[\s\S]*Самая долгая поездка[\s\S]*12 ч 30 мин[\s\S]*Больше всего поездок за месяц[\s\S]*7/);
-  await page.locator('[data-act=back]').click();
+  assert.equal(await page.locator('#pr-records, .screen #aw-records').count(), 0, 'рекордов в профиле нет (2.19.2) — они внутри наград');
   await page.locator('#pr-awards .aw-strip').click();
   await page.waitForSelector('.aw-grid');
   assert.equal(await page.locator('.screen #aw-records').count(), 0, 'на экране наград рекорды — строкой, не списком');
-  assert.equal(await page.locator('.screen #aw-rec-row').count(), 1);
+  assert.match(await text(page, '#aw-rec-row'), /Рекорды[\s\S]*Самая долгая поездка — 12 ч 30 мин/);
+  // рекорды — по нажатию
+  await page.locator('#aw-rec-row').click();
+  await page.waitForSelector('#aw-records');
+  assert.match(await text(page, '.screen'), /Рекорды[\s\S]*Самая долгая поездка[\s\S]*12 ч 30 мин[\s\S]*Больше всего поездок за месяц[\s\S]*7/);
+  await page.locator('[data-act=back]').click();
+  await page.waitForSelector('.aw-grid');
   // повторяемая: только счётчик, без ступеней
   assert.equal(await text(page, '[data-id=iron] .aw-n'), '×1');
   assert.equal(await page.locator('[data-id=iron] .aw-pips').count(), 0);

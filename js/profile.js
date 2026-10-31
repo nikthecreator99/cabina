@@ -91,12 +91,11 @@ export function renderProfile(colleagues = '') {
   return `${pageHead('Профиль', { right: `<button class="icon-btn" data-act="go" data-page="settings" aria-label="Настройки">${I.gear}</button>` })}
     <section class="profile-card">
       <button class="avatar view big" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}</button>
-      <div class="profile-name">${p.name ? esc(p.name) : '<span class="ph">Имя не указано</span>'}</div>
+      <div class="profile-name with-edit">${p.name ? `<span>${esc(p.name)}</span>` : '<span class="ph">Имя не указано</span>'}<button class="pr-edit" id="pr-edit" data-act="go" data-page="profile-edit" aria-label="Редактировать профиль">${small(I.edit, 18)}</button></div>
       <div class="profile-sub">${esc(subLine(p))}</div>
       ${p.phone ? `<div class="profile-sub">${small(I.call, 14)} <span class="nw">${esc(p.phone)}</span></div>` : ''}
       ${(() => { const c = careerOf(p); const t = c.hired ? tenure(c.hired, todayKey()) : null; return t ? `<div class="profile-sub">${small(I.briefcase, 14)} Стаж ${tenureText(t)}</div>` : ''; })()}
       ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
-      <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.edit, 16)} Редактировать профиль</button>
     </section>
     ${awardsStripHtml()}
     ${colleagues}

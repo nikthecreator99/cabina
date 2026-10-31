@@ -176,9 +176,10 @@ test('присланное проверяется: мусор, будущее, �
   const base = Math.round(parseLocal('2026-10-14T06:00') / MIN);
   await assert.rejects(decodeShare('zzzz', NOW), /повреждена|не код/);
   await assert.rejects(decodeShare('<script>', NOW), /не код CABINA/);
-  await assert.rejects(decodeShare(enc({ v: 2, b: base, t: [] }), NOW), /более новой версии/);
-  await assert.rejects(decodeShare(enc({ v: 1, b: 5, t: [] }), NOW), /повреждена/);
-  const res = await decodeShare(enc({ v: 1, b: base, t: [
+  const e = Math.round(Date.now() / MIN) + 60; // срок кода (2.19.2) — ещё час
+  await assert.rejects(decodeShare(enc({ v: 3, b: base, e, t: [] }), NOW), /более новой версии/);
+  await assert.rejects(decodeShare(enc({ v: 2, b: 5, e, t: [] }), NOW), /повреждена/);
+  const res = await decodeShare(enc({ v: 2, b: base, e, t: [
     { a: 0, d: 600, f: '<img src=x onerror=alert(1)>', to: 'Б', lt: 'x'.repeat(100), w: 1e9, ax: -5, k: 'z', r: 'evil', p: [[0, 60], ['a', 1], [0, 1e9]] },
     { a: 10 * 24 * 60, d: 60 }, // в будущем относительно «сейчас»
     { a: 0, d: 0 },

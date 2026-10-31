@@ -250,13 +250,12 @@ const order = (aw) => [...AWARDS].sort((a, b) => (aw[b.id].tier > 0) - (aw[a.id]
   || (aw[b.id].last || aw[b.id].days.at(-1) || '').localeCompare(aw[a.id].last || aw[a.id].days.at(-1) || ''));
 export function awardsStripHtml() {
   if (!S.trips.length) return '';
-  const { aw, records } = computeAwards();
+  const { aw } = computeAwards();
   const n = medalsOf(aw);
   const shown = order(aw).slice(0, 6);
   return `<div class="group" id="pr-awards"><div class="group-title">Награды <span class="hint">${n} из ${MEDALS_TOTAL}</span></div>
     <button class="panel aw-strip" data-act="go" data-page="awards" aria-label="Все награды: получено ${n} из ${MEDALS_TOTAL}">
-      ${shown.map((a) => `<span class="aw-mini ${aw[a.id].tier ? '' : 'locked'}">${pic(a, aw[a.id], 44)}</span>`).join('')}<span class="chev">${small(I.right, 18)}</span></button>
-    ${recordsRowHtml(records, 'pr-records')}</div>`;
+      ${shown.map((a) => `<span class="aw-mini ${aw[a.id].tier ? '' : 'locked'}">${pic(a, aw[a.id], 44)}</span>`).join('')}<span class="chev">${small(I.right, 18)}</span></button></div>`;
 }
 
 // ---- экран «Награды» ----

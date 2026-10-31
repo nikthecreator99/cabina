@@ -53,7 +53,7 @@ test('свайп вниз у коллег — свежий статус колл
   assert.equal(statusReads(srv), before);
   // настоящий свайп: держим — индикатор опущен и «можно отпускать»
   const cdp = await drag(page, { release: false });
-  assert.equal(await page.locator('.ptr.on.armed[data-style=spin]').count(), 1);
+  assert.equal(await page.locator('.ptr.on.armed[data-style=light]').count(), 1, 'по умолчанию — светофор (2.19.2)');
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.locator('.ptr.loading').waitFor({ state: 'attached' });
   await page.waitForFunction(() => /Обновлено/.test(document.querySelector('.ptr.done')?.innerText || ''));
@@ -94,11 +94,11 @@ test('Настройки → «Анимация обновления»: четы
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
   await page.locator('.screen [data-page=settings]').click();
-  assert.match(await text(page, '#pull-row'), /Анимация обновления[\s\S]*Круг/);
+  assert.match(await text(page, '#pull-row'), /Анимация обновления[\s\S]*Светофор/);
   await page.locator('#pull-row').click();
   const s = sheet(page);
-  assert.deepEqual((await s.locator('[data-act=pull-pick] .t1').allInnerTexts()).map((t) => t.replace(' ✓', '')), ['Круг', 'Поезд', 'Светофор', 'Колесо']);
-  for (const [name, style] of [['Поезд', 'train'], ['Светофор', 'light'], ['Колесо', 'wheel']]) {
+  assert.deepEqual((await s.locator('[data-act=pull-pick] .t1').allInnerTexts()).map((t) => t.replace(' ✓', '')), ['Светофор', 'Круг', 'Поезд', 'Колесо']);
+  for (const [name, style] of [['Поезд', 'train'], ['Круг', 'spin'], ['Колесо', 'wheel']]) {
     await s.locator('[data-act=pull-pick]', { hasText: name }).click();
     await page.locator(`.ptr.on.loading[data-style=${style}]`).waitFor();
     assert.equal(await s.locator(`[data-act=pull-pick][data-v=${style}]`).getAttribute('aria-pressed'), 'true');
@@ -116,11 +116,11 @@ test('Настройки → «Анимация обновления»: четы
   for (let i = 0; i < 60 && await page.evaluate(async () => (await import('./js/pull.js')).pullBusy()); i++) await wait(50);
   await drag(page);
   await page.waitForFunction(() => document.querySelector('.ptr.on')?.dataset.style === 'wheel');
-  // чужое значение из копии — обычный круг
+  // чужое значение из копии — светофор, как по умолчанию
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveSettings({ pullAnim: '<b>x</b>' }); });
   await page.waitForFunction(() => !document.querySelector('.ptr.on'), null, { timeout: 5000 });
   await page.locator('.screen [data-page=settings]').click();
-  assert.match(await text(page, '#pull-row'), /Круг/);
+  assert.match(await text(page, '#pull-row'), /Светофор/);
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });

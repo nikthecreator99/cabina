@@ -31,7 +31,8 @@ test('Настройки аккаунта — вверху Настроек; в 
   await page.locator('#col-entry').click();
   const sec = page.locator('#col-sec');
   await sec.locator('#col-list').waitFor();
-  assert.match(await sec.innerText(), /Анна Тестовая[\s\S]*Олег Пробный[\s\S]*Найти нового коллегу/i);
+  assert.match(await sec.innerText(), /Анна Тестовая[\s\S]*Олег Пробный/i);
+  assert.equal(await sec.locator('.col-search').count(), 0, 'искать новых — строкой в профиле, здесь только свои');
   assert.equal(await sec.locator('.switch, [data-act=col-leave]').count(), 0, 'переключателей и «Выйти» здесь нет');
   await page.locator('[data-act=back]').click();
   // Настройки: первая группа — аккаунт
@@ -43,8 +44,8 @@ test('Настройки аккаунта — вверху Настроек; в 
   await acc.locator('#acc-col').waitFor();
   assert.match(await acc.innerText(), /Настройки аккаунта[\s\S]*Коллеги[\s\S]*Приватность[\s\S]*Выйти из «Коллег»[\s\S]*Мои данные/i);
   // поиск: должность — любая, машинист или помощник
-  await openTeam(page);
-  await page.locator('.col-search').click();
+  await page.locator('.tab[data-tab=profile]').click();
+  await page.locator('#col-find').click();
   assert.deepEqual(await page.locator('[data-act=col-role]').allInnerTexts(), ['Любая', 'Машинист', 'Помощник']);
   assert.deepEqual(realErrors(errors), []);
   await context.close();

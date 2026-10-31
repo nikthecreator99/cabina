@@ -588,13 +588,15 @@ export function colleaguesHtml() {
     if (k) badge = `<span class="col-badge" aria-label="Новых предложений: ${k}">${k}</span>`;
   }
   return `<div class="group" id="col-entry-sec"><div class="group-title">Коллеги</div>
+    <button class="col-search" data-act="go" data-page="colleagues" id="col-find">${small(I.search, 20)}<span>Найти коллегу</span></button>
     <div class="panel"><button class="row" data-act="go" data-page="team" id="col-entry"><span class="ico" style="--c:var(--ok)">${I.users}</span>
       <div class="grow"><div class="t1">Мои коллеги</div><div class="t2">${esc(sub)}</div></div>${badge}${small(I.right, 18)}</button></div></div>`;
 }
 
 export function teamReset() { C.teamQ = ''; }
 
-// Экран «Коллеги»: предложения, поиск среди своих, список по статусам, «Ждут ответа», «Найти нового коллегу»
+// Экран «Коллеги»: поиск среди своих (в самом верху), предложения, список по статусам, «Ждут ответа».
+// Найти нового коллегу — строкой «Найти коллегу» в профиле (здесь кнопка только пока коллег нет)
 export function renderTeam() {
   const head = pageHead('Коллеги', { back: true });
   if (!legalReady() || !mine()) {
@@ -612,12 +614,12 @@ export function renderTeam() {
   const q = C.teamQ;
   const n = snap.colleagues.length;
   return `${head}<div class="col-sec" id="col-sec">
+    ${n ? `<div class="search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="team-q" placeholder="Поиск: имя или депо" autocomplete="off" enterkeyhint="search" value="${esc(q)}" aria-label="Поиск среди коллег">${q ? `<button class="search-x" data-act="col-team-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>` : ''}
     ${snap.incoming.length ? `<div class="group-title">Предлагают стать коллегами</div><div class="panel col-offers">${snap.incoming.map(offerRow).join('')}</div>` : ''}
-    ${n > 1 ? `<div class="search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="team-q" placeholder="Поиск: имя или депо" autocomplete="off" enterkeyhint="search" value="${esc(q)}" aria-label="Поиск среди коллег">${q ? `<button class="search-x" data-act="col-team-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>` : ''}
     ${n ? `<div id="col-list">${teamListHtml(snap)}</div>`
       : '<div class="hint col-empty">Пока никого. Найдите коллегу по имени и предложите стать коллегами — когда он согласится, появится здесь.</div>'}
     ${snap.outgoing.length ? `<div class="group-title">Ждут ответа</div><div class="panel">${snap.outgoing.map(sentRow).join('')}</div>` : ''}
-    <button class="col-search" data-act="go" data-page="colleagues">${small(I.search, 20)}<span>Найти нового коллегу</span></button>
+    ${n ? '' : `<button class="col-search" data-act="go" data-page="colleagues">${small(I.search, 20)}<span>Найти коллегу</span></button>`}
   </div>`;
 }
 

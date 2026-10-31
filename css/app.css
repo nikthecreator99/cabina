@@ -674,6 +674,8 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .ava-cam { position: absolute; right: -2px; bottom: -2px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; border: 3px solid var(--card-solid); }
 .ava-cam svg { width: 17px; height: 17px; }
 .profile-name { font-size: 20px; font-weight: 800; margin-top: 6px; }
+.profile-name.with-edit { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; padding-left: 44px; }
+.profile-name.with-edit > span { min-width: 0; overflow-wrap: anywhere; }
 .profile-name .ph { color: var(--muted); font-weight: 600; }
 .profile-sub { font-size: 14px; color: var(--text-2); }
 .notice.ok { background: color-mix(in srgb, var(--ok) 10%, var(--card-solid)); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
@@ -1248,8 +1250,16 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 .col-badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: #c4262c; color: #fff; font-size: 12.5px; font-weight: 800;
   display: inline-grid; place-items: center; flex: none; font-variant-numeric: tabular-nums; }
 #col-sec .search { margin-bottom: 4px; }
-#col-sec .col-offers + .search { margin-top: 14px; }
 #col-sec .col-search { margin-top: 14px; }
 .col-gt { margin-top: 14px; }
 .col-gt .hint { font-weight: 600; }
 .aw-rec-panel { margin-top: 10px; }
+
+/* 2.19.2: профиль без большой кнопки — значок ✎ у имени; «Найти коллегу» над «Мои коллеги» */
+.pr-edit { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--card-2);
+  border: 1px solid var(--line); color: var(--text-2); }
+.pr-edit:active { transform: scale(.94); }
+#col-entry-sec .col-search { margin-bottom: 10px; }
+.share-ttl { margin: 0; color: var(--text-2); font-size: 14px; text-align: center; }
+.share-ttl svg { vertical-align: -3px; margin-right: 2px; }
+#col-sec .search + .group-title { margin-top: 16px; }

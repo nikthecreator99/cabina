@@ -8,9 +8,13 @@ import { S, saveTrip, saveRoute, statsOf, isLive, nowLocal } from './store.js';
 import { parseLocal, fmtLocal, MIN, validateTrip, fmtDur } from './calc.js';
 import { routeEnds, stationKey } from './rest.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
-import { I, esc, uid, openLayer, closeLayer, sheet, toast, plural, dayMonth, hm, WD } from './ui.js';
+import { I, esc, small, uid, openLayer, closeLayer, sheet, toast, plural, dayMonth, hm, WD } from './ui.js';
 
 export const SHARE_MAX = 40; // поездок за один раз
+// 2.19.2 (просьба Никиты): код и ссылка действуют сутки. Напарники делятся после совместной поездки — суток хватает,
+// а старые ссылки в переписке перестают добавлять поездки. Срок проверяет приложение напарника; сами данные
+// в старой ссылке остаются, поэтому в окне и в тексте ссылки честно сказано, кому её отправлять.
+export const SHARE_TTL_MIN = 24 * 60;
 const CODE_MAX = 8000; // длина кода в ссылке
 const JSON_MAX = 64 * 1024; // распакованные данные
 const DAY_MIN = 24 * 60;
@@ -63,11 +67,13 @@ function packTrip(t, base) {
 // Можно отправить только законченную поездку
 export const shareable = (t) => !!t && !!t.end && !isLive(t) && Number.isFinite(parseLocal(t.end)) && parseLocal(t.end) > parseLocal(t.start);
 
-export async function encodeTrips(trips) {
+// Формат 2 (2.19.2): e — до какого времени код действует (минуты от 1970 года по UTC, не «настенное» время:
+// у напарников может быть разный часовой пояс в настройках). Формат 1 (2.19.0–2.19.1) был без срока — его не принимаем.
+export async function encodeTrips(trips, absNow = Date.now()) {
   const list = trips.filter(shareable).sort((a, b) => parseLocal(a.start) - parseLocal(b.start)).slice(0, SHARE_MAX);
   if (!list.length) throw new Error('empty');
   const base = mins(list[0].start);
-  const json = JSON.stringify({ v: 1, b: base, t: list.map((t) => packTrip(t, base)) });
+  const json = JSON.stringify({ v: 2, b: base, e: Math.round(absNow / MIN) + SHARE_TTL_MIN, t: list.map((t) => packTrip(t, base)) });
   const raw = new TextEncoder().encode(json);
   if (canZip()) return `z${b64u(await pipe(raw, new CompressionStream('deflate-raw'), JSON_MAX * 2))}`;
   return `j${b64u(raw)}`;
@@ -127,8 +133,9 @@ function unpackTrip(x, base, nowMs) {
   return { trip, from: from && to ? from : '', to: from && to ? to : '', km: pos(x.km, 20000) };
 }
 
-// Возвращает { items: [{ trip, from, to, km, dup }], skipped } или бросает ошибку с понятным текстом
-export async function decodeShare(code, nowMs) {
+// Возвращает { items: [{ trip, from, to, km, dup }], skipped } или бросает ошибку с понятным текстом.
+// nowMs — «настенное» время (поездки не из будущего), absNow — настоящее время для срока кода.
+export async function decodeShare(code, nowMs, absNow = Date.now()) {
   if (!code || code.length > CODE_MAX || !/^[zj][A-Za-z0-9_-]+$/.test(code)) throw new Error('Это не код CABINA с поездками.');
   let bytes;
   try { bytes = unb64u(code.slice(1)); } catch { throw new Error('Ссылка повреждена — попросите отправить её ещё раз.'); }
@@ -138,9 +145,15 @@ export async function decodeShare(code, nowMs) {
   } else if (bytes.length > JSON_MAX) throw new Error('Слишком много данных.');
   let data;
   try { data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { throw new Error('Ссылка повреждена — попросите отправить её ещё раз.'); }
-  if (!data || data.v !== 1 || !Array.isArray(data.t)) throw new Error('Поездки отправлены из более новой версии CABINA. Обновите приложение.');
+  if (data?.v === 1) throw new Error('Код сделан в прежней версии CABINA. Попросите напарника обновить приложение и поделиться ещё раз.');
+  if (!data || data.v !== 2 || !Array.isArray(data.t)) throw new Error('Поездки отправлены из более новой версии CABINA. Обновите приложение.');
   const base = int(data.b, MIN_BASE, MAX_BASE);
-  if (base == null) throw new Error('Ссылка повреждена — попросите отправить её ещё раз.');
+  const exp = int(data.e, MIN_BASE, MAX_BASE);
+  if (base == null || exp == null) throw new Error('Ссылка повреждена — попросите отправить её ещё раз.');
+  const left = exp - absNow / MIN;
+  if (left < 0) throw new Error('Срок кода истёк: код и ссылка действуют сутки. Попросите напарника поделиться ещё раз.');
+  // срок дальше суток (с запасом на неверные часы в телефоне) — код не наш или часы сбиты
+  if (left > SHARE_TTL_MIN + DAY_MIN) throw new Error('У кода неверный срок. Проверьте дату и время в телефоне — у себя и у напарника.');
   const list = data.t.slice(0, SHARE_MAX);
   const items = [];
   for (const x of list) {
@@ -251,6 +264,7 @@ export async function openShareSheet(trips, { onDone } = {}) {
     title: list.length === 1 ? 'Поездка напарнику' : `${list.length} ${plural(list.length, 'поездка', 'поездки', 'поездок')} напарнику`, tall: true,
     body: `<div class="share-box" id="sh-box"><div class="qr-wrap" id="sh-qr"><div class="hint">Готовим QR-код…</div></div>
       <p class="share-how">Напарник открывает свою CABINA → <b>«Добавить поездку»</b> → <b>«Получить поездки от напарника»</b> и наводит камеру. Можно и обычной камерой телефона.</p>
+      <p class="share-ttl" id="sh-ttl">${small(I.clock, 16)} Код и ссылка действуют сутки — до ${hm(nowLocal() + SHARE_TTL_MIN * MIN)}, ${dayMonth(nowLocal() + SHARE_TTL_MIN * MIN)}</p>
       <button class="btn btn-ghost" data-act="sh-link" id="sh-link" disabled>${I.link} Отправить ссылкой</button>
       <div class="notice">${I.shield}<div>В коде — время, маршрут и локомотив ${list.length === 1 ? 'этой поездки' : 'этих поездок'}. <b>Заработка, заметок и отвлечений там нет.</b> Наш сервер код не видит. Ссылку отправляйте только тому, с кем ездили: мессенджер видит её содержимое.</div></div>
       <details class="share-list"><summary>Что отправится</summary><ul>${list.map((t) => `<li>${esc(tripLine(t))}</li>`).join('')}</ul></details></div>`,
@@ -262,7 +276,7 @@ export async function openShareSheet(trips, { onDone } = {}) {
   const btn = el.querySelector('#sh-link');
   btn.disabled = false;
   btn.onclick = async () => {
-    const text = 'Поездки для CABINA. Откройте её или вставьте в CABINA: «Добавить поездку» → «Получить поездки от напарника».';
+    const text = 'Поездки для CABINA. Откройте ссылку или вставьте её в CABINA: «Добавить поездку» → «Получить поездки от напарника». Ссылка действует сутки.';
     try {
       if (navigator.share) { await navigator.share({ title: 'Поездки CABINA', text, url }); return; }
     } catch (ex) { if (ex?.name === 'AbortError') return; }
@@ -279,18 +293,25 @@ export function openReceive() {
     body: `<p class="t2">Напарник выбирает поездки (удержать палец на поездке) → «Поделиться» и показывает QR-код.</p>
       <div class="cam-wrap" id="rc-cam" hidden><video id="rc-video" playsinline muted></video><div class="cam-frame"></div></div>
       <button class="btn btn-primary" data-act="rc-cam" id="rc-cam-btn">${I.camera} Сканировать камерой</button>
-      <label class="btn btn-ghost file-btn" id="rc-photo-btn">${I.image} Сфотографировать или выбрать картинку<input type="file" accept="image/*" id="rc-photo" hidden></label>
+      <label class="btn btn-primary file-btn" id="rc-shot-btn" hidden>${I.camera} Сфотографировать<input type="file" accept="image/*" capture="environment" id="rc-shot" hidden></label>
+      <label class="btn btn-ghost file-btn" id="rc-photo-btn">${I.image} Выбрать картинку<input type="file" accept="image/*" id="rc-photo" hidden></label>
       <div class="pay-field"><label for="rc-link">Или вставьте ссылку</label>
         <div class="input-row"><input class="input" id="rc-link" autocomplete="off" inputmode="url" placeholder="https://cabina-app.ru/#t=…"><button class="btn btn-ghost btn-sm" data-act="rc-open">Открыть</button></div></div>
       <div data-error></div>`,
   }), { onClose: stop });
   const err = (text) => { el.querySelector('[data-error]').innerHTML = text ? `<div class="error-box">${I.alert}<div>${esc(text)}</div></div>` : ''; };
-  // Камера запрещена правилами сайта или её нет — сразу главная кнопка «Сфотографировать»
-  const camOff = !navigator.mediaDevices?.getUserMedia || (document.featurePolicy && !document.featurePolicy.allowsFeature('camera'));
-  if (camOff) {
+  // Сканировать камерой прямо в окне можно не везде: Android (Chrome) слушается правил сайта, а они пока запрещают
+  // камеру странице (Permissions-Policy на сервере). Тогда главная кнопка — «Сфотографировать»: она открывает
+  // обычную камеру телефона (capture), снимок читается здесь же, в телефоне. Без сенсорного экрана — только картинка.
+  const touch = matchMedia('(pointer: coarse)').matches;
+  const noLive = () => {
     el.querySelector('#rc-cam-btn').hidden = true;
-    el.querySelector('#rc-photo-btn').classList.replace('btn-ghost', 'btn-primary');
-  }
+    if (touch) el.querySelector('#rc-shot-btn').hidden = false;
+    else el.querySelector('#rc-photo-btn').classList.replace('btn-ghost', 'btn-primary');
+  };
+  const pp = document.permissionsPolicy || document.featurePolicy;
+  const camOff = !navigator.mediaDevices?.getUserMedia || (pp?.allowsFeature && !pp.allowsFeature('camera'));
+  if (camOff) noLive();
   const got = async (text) => {
     if (busy) return;
     const code = codeFrom(text);
@@ -307,7 +328,9 @@ export function openReceive() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
     } catch {
-      err('Камера недоступна. Нажмите «Сфотографировать или выбрать картинку» — это работает и без разрешения камеры.');
+      noLive();
+      err(touch ? 'Сканировать в окне не получилось. Нажмите «Сфотографировать» и снимите QR-код — откроется обычная камера телефона.'
+        : 'Камера недоступна. Выберите картинку с QR-кодом или вставьте ссылку.');
       return;
     }
     const v = el.querySelector('#rc-video');
@@ -326,7 +349,7 @@ export function openReceive() {
       if (text) got(text);
     }, 250);
   };
-  el.querySelector('#rc-photo').onchange = async (e) => {
+  const onPhoto = async (e) => {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
@@ -337,6 +360,8 @@ export function openReceive() {
     if (!text) { err('QR-код не найден. Сфотографируйте его ближе и ровнее.'); return; }
     got(text);
   };
+  el.querySelector('#rc-photo').onchange = onPhoto;
+  el.querySelector('#rc-shot').onchange = onPhoto;
   el.querySelector('[data-act=rc-open]').onclick = () => got(el.querySelector('#rc-link').value);
   el.querySelector('#rc-link').addEventListener('keydown', (e) => { if (e.key === 'Enter') got(e.target.value); });
   return el;

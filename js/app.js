@@ -33,7 +33,7 @@ import { legalReady, policyHtml, APP_URL } from './legal.js';
 import { renderAwards, renderRecords, openAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 
-export const VERSION = '2.19.1';
+export const VERSION = '2.19.2';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null };
