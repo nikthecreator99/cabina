@@ -397,7 +397,9 @@ function payView(R) {
   html += block(ST.period === 'month' ? 'Квиток' : 'Квиток за период', slipHtml(total, { single: months.length === 1 ? months[0] : null }));
   if (ST.period === 'month') html += `<button class="btn btn-ghost" data-act="slip-pdf">${I.download} Скачать квиток в PDF</button>`;
   html += `<div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Отпускные, техучёба и разовые выплаты не учитываются. Больничный — если в «Тарифных ставках» указана оплата одного дня.</div></div>`;
-  return `<div class="money-area">${html}</div>`;
+  // тестовый режим «оплата по сменам» — чтобы не спутать с обычным расчётом
+  const test = total.shiftTest ? `<div class="notice" id="st-shift">${I.alert}<div><b>Тестовый режим: оплата по сменам.</b> Сверх нормы дня первые 2 ч — в полуторном размере, дальше — в двойном; переработка за месяц не считается. Выключить: ☰ → «Тарифные ставки».</div></div>` : '';
+  return `<div class="money-area">${test}${html}</div>`;
 }
 
 // ---------------------------------------------------------------- экран

@@ -16,9 +16,11 @@
 //  • следование резервом (вид движения «Резерв») — по тарифу отдельной строкой («ОплЗаРабНаОдиночСледЛоком»);
 //  • учёба (сессия) — средний заработок за час × часы дней учёбы по производственному календарю
 //    (средний за день люди не знают, а средний за час легко посчитать по квитку);
-//  • режим «по среднему»: все рабочие часы × средний заработок за час, без отдельных доплат и надбавок.
+//  • режим «по среднему»: все рабочие часы × средний заработок за час, без отдельных доплат и надбавок;
+//  • тестовый режим «оплата по сменам» (2.18) — см. shiftOver.
 // Все суммы — в рублях, время на входе — в минутах.
 import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal } from './calc.js';
+import { dayInfo } from './calendar.js';
 
 export const ROLES = { assistant: 'Помощник машиниста', driver: 'Машинист' };
 export const NDFL = 13;
@@ -59,6 +61,7 @@ export function paySet(sets, role = 'assistant') {
 export function payCfg(sets, role = 'assistant') {
   const raw = paySet(sets, role);
   const cfg = { role, mode: raw.mode === 'avg' ? 'avg' : 'tariff', rates: Array.isArray(raw.rates) ? raw.rates.filter((r) => num(r.rate)) : [] };
+  cfg.shiftTest = cfg.mode === 'tariff' && raw.shiftTest === true; // тестовый режим «оплата по сменам» — только по тарифу
   for (const f of PAY_FIELDS) {
     if (f.role && f.role !== role) { cfg[f.k] = 0; continue; }
     const v = raw[f.k];
@@ -120,6 +123,21 @@ export function isHeavy(trip, cfg) {
   return (num(n.weight) > 0 && num(trip.weight) > num(n.weight)) || (num(n.length) > 0 && num(trip.length) > num(n.length));
 }
 
+// Тестовый режим «оплата по сменам» (2.18, просьба Никиты: посмотреть, какой была бы зарплата при такой системе).
+// Норма каждой поездки — часы дня явки по производственному календарю (8 ч, предпраздничный 7 ч, выходной и праздник 0).
+// Сверх нормы первые 2 ч — в полуторном размере (+50% к ставке), остальное — в двойном (+100%); все прочие доплаты — как обычно.
+// Праздничные часы уже оплачены вдвойне строкой «Праздничные» — сверх нормы смены их второй раз не считаем.
+// Месячная переработка в этом режиме не считается. Возвращает минуты { norm, first, rest }.
+export const SHIFT_FIRST = 2 * 60;
+export function shiftOver(st) {
+  if (!Number.isFinite(st?.start)) return { norm: 0, first: 0, rest: 0 };
+  const norm = Math.round(dayInfo(dateKeyOf(st.start)).hours * 60);
+  const over = Math.max(0, st.work - norm - (st.holiday || 0));
+  const first = Math.min(over, SHIFT_FIRST);
+  return { norm, first, rest: over - first };
+}
+const shiftPay = (o, rate) => (o.first / 60) * rate * 0.5 + (o.rest / 60) * rate;
+
 // Начисление за часы поездки (или её часть в месяце) без переработки:
 // ставка, следование, ожидание, ночные, вредность, класс, праздничные, тяжёлый поезд.
 // part — { work, night, holiday, wait, pass } в минутах. Работа на локомотиве = work − wait − pass.
@@ -147,7 +165,8 @@ const sumObj = (o) => Object.values(o).reduce((s, v) => s + v, 0);
 const regionalPct = (cfg) => cfg.rk + cfg.sn + cfg.zone + cfg.bam;
 
 // Заработок за одну поездку на руки: все доплаты к часам, отдых сверх нормы после неё, премия,
-// районные надбавки, минус НДФЛ и удержания, плюс ком. расходы. Переработка считается только за месяц.
+// районные надбавки, минус НДФЛ и удержания, плюс ком. расходы. Переработка считается только за месяц
+// (в тестовом режиме «по сменам» — сверх нормы этой смены).
 export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
   if (!hasRate(cfg) || !Number.isFinite(st.start)) return null;
   let gross;
@@ -155,7 +174,7 @@ export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
   else {
     const rate = rateOn(cfg, dateKeyOf(st.start));
     const p = hoursPay(st, rate, cfg, trip);
-    const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3;
+    const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3 + (cfg.shiftTest ? shiftPay(shiftOver(st), rate) : 0);
     gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
   }
   const ded = gross * (NDFL + cfg.union + cfg.pension) / 100;
@@ -172,8 +191,15 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   let comp = 0;
   let reserveMin = 0;
   let heavyMin = 0;
+  const shift = { first: 0, rest: 0, pay1: 0, pay2: 0 }; // тестовый режим: сверх нормы смен, по месяцу явки
   for (const t of sum.monthTrips) {
     const st = statsOf(t);
+    if (cfg.shiftTest && monthKeyOf(st.start) === mk) {
+      const o = shiftOver(st);
+      const r = rateOn(cfg, dateKeyOf(st.start));
+      shift.first += o.first; shift.rest += o.rest;
+      shift.pay1 += (o.first / 60) * r * 0.5; shift.pay2 += (o.rest / 60) * r;
+    }
     const part = st.byMonth[mk];
     if (!part) continue;
     const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t);
@@ -186,7 +212,7 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const lastDay = `${mk}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
   const rateEnd = rateOn(cfg, lastDay);
   // переработка: часы сверх нормы; в выходные и праздники — сначала праздничные (они уже +100%)
-  const O = sum.overtime / 60;
+  const O = cfg.shiftTest ? 0 : sum.overtime / 60;
   const Ow = Math.min(O, (sum.restDay || 0) / 60);
   const hOw = Math.min(Ow, sum.holiday / 60);
   // праздничные часы сверх нормы уже оплачены вдвойне строкой «Праздничные», поэтому здесь только выходные
@@ -225,8 +251,10 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   L('heavy', 'Тяжёлые и длинносоставные поезда', acc.heavy, { pct: cfg.heavy, hours: h(heavyMin) });
   L('overOther', 'Переработка', noAvg(overOther), { pct: 50, hours: O - Ow });
   L('overWeekend', 'Переработка в выходные', noAvg(overWeekend), { pct: 100, hours: Ow - hOw });
+  L('shift1', 'Сверх нормы смены, первые 2 ч', noAvg(shift.pay1), { pct: 50, hours: h(shift.first) });
+  L('shift2', 'Сверх нормы смены, дальше', noAvg(shift.pay2), { pct: 100, hours: h(shift.rest) });
   L('overRest', 'Отдых сверх нормы в пункте оборота', noAvg(orPay), { hours: h(orMin) });
-  const workPay = avg ? avgPay : sumObj(acc) + overOther + overWeekend + orPay;
+  const workPay = avg ? avgPay : sumObj(acc) + overOther + overWeekend + shift.pay1 + shift.pay2 + orPay;
   const bonus = avg ? 0 : workPay * cfg.bonus / 100;
   L('bonus', 'Премия', bonus, { pct: cfg.bonus });
   const withBonus = workPay + bonus;
@@ -261,6 +289,7 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   res.comp = round2(comp);
   res.net = round2(gross - res.deductions.reduce((s, d) => s + d.amount, 0) + comp);
   res.overRestMin = orMin;
+  res.shiftTest = !!cfg.shiftTest;
   res.empty = res.gross <= 0 && comp <= 0;
   return res;
 }
@@ -285,7 +314,7 @@ export function absDaysInMonth(absences, y, m, type) {
 
 // Сумма нескольких месяцев (квартал, год, всё время)
 export function payTotal(months) {
-  const out = { lines: new Map(), deductions: new Map(), gross: 0, net: 0, comp: 0, months };
+  const out = { lines: new Map(), deductions: new Map(), gross: 0, net: 0, comp: 0, months, shiftTest: months.some((r) => r.shiftTest) };
   // если процент в разные месяцы был разный, у итоговой строки его не показываем
   const add = (map, l) => {
     const x = map.get(l.key) || { key: l.key, label: l.label, pct: l.pct, hours: 0, amount: 0 };
@@ -300,7 +329,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', 'overOther', 'overWeekend', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension'];
+  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', 'overOther', 'overWeekend', 'shift1', 'shift2', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));

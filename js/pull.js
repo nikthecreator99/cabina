@@ -5,15 +5,15 @@
 export const PULL_STYLES = [
   { id: 'spin', name: 'Круг', text: 'Крутящийся круг, как в большинстве приложений' },
   { id: 'train', name: 'Поезд', text: 'Паровозик выезжает, дымит и «чух-чух»' },
-  { id: 'light', name: 'Светофор', text: 'Красный — тяните, жёлтый — отпускайте, зелёный — обновилось' },
+  { id: 'light', name: 'Светофор', text: 'Тянете — горит красный, потом плавно жёлтый, а когда обновилось — зелёный' },
   { id: 'wheel', name: 'Колесо', text: 'Колесо локомотива раскручивается' },
 ];
 export const pullStyle = (v) => (PULL_STYLES.some((s) => s.id === v) ? v : 'spin');
 
 const ARM = 72; // столько пикселей (после торможения) — и можно отпускать
 const MAX = 112; // дальше индикатор не опускается
-const MIN_SHOW = { spin: 600, train: 1900, light: 1300, wheel: 900 }; // чтобы анимацию успели увидеть
-const DONE_SHOW = { spin: 550, train: 700, light: 650, wheel: 550 };
+const MIN_SHOW = { spin: 600, train: 1900, light: 1500, wheel: 900 }; // чтобы анимацию успели увидеть
+const DONE_SHOW = { spin: 550, train: 700, light: 850, wheel: 550 };
 
 // Ориентир: все рисунки в своих координатах, цвета — из темы
 const TIES = Array.from({ length: 15 }, (_, i) => `<rect x="${i * 10 - 10}" y="39.5" width="5" height="3" rx="1"/>`).join('');
@@ -43,8 +43,8 @@ const ART = {
   light: `<svg class="ptr-art" viewBox="0 0 30 70" width="30" height="70">
     <rect class="ptr-mast" x="13" y="52" width="4" height="18" rx="1"/>
     <rect class="ptr-box" x="3" y="2" width="24" height="52" rx="12"/>
-    <circle class="ptr-halo r" cx="15" cy="14" r="9"/><circle class="ptr-halo y" cx="15" cy="28" r="9"/><circle class="ptr-halo g" cx="15" cy="42" r="9"/>
-    <circle class="ptr-bulb r" cx="15" cy="14" r="5.5"/><circle class="ptr-bulb y" cx="15" cy="28" r="5.5"/><circle class="ptr-bulb g" cx="15" cy="42" r="5.5"/></svg>`,
+    <circle class="ptr-bulb" cx="15" cy="14" r="5.5"/><circle class="ptr-bulb" cx="15" cy="28" r="5.5"/><circle class="ptr-bulb" cx="15" cy="42" r="5.5"/>
+    ${[['r', 14], ['y', 28], ['g', 42]].map(([c, y]) => `<g class="ptr-on ${c}"><circle class="ptr-halo" cx="15" cy="${y}" r="9"/><circle cx="15" cy="${y}" r="5.5"/></g>`).join('')}</svg>`,
   wheel: `<svg class="ptr-art" viewBox="0 0 40 40" width="34" height="34"><g class="ptr-wheel">
     <circle class="ptr-tire" cx="20" cy="20" r="16.5"/><circle class="ptr-rim" cx="20" cy="20" r="13"/>
     ${[0, 45, 90, 135].map((a) => `<line class="ptr-spoke" x1="20" y1="7.5" x2="20" y2="32.5" transform="rotate(${a} 20 20)"/>`).join('')}

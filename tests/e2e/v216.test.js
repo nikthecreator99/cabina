@@ -122,7 +122,8 @@ test('Приватность: статус только выбранным; ок
   await toastHas(page, /Сохранено/);
   assert.equal(srv.db.statuses[ME], undefined);
   assert.equal((await privacy(page)).status, false);
-  assert.match(await page.locator('#pv-access').innerText(), /Мой статус[\s\S]*Видят: Никто[\s\S]*Где я[\s\S]*Видят: Никто/);
+  // экран перерисовывается после ответа сервера — ждём, а не читаем один раз
+  await page.waitForFunction(() => /Мой статус[\s\S]*Видят: Никто[\s\S]*Где я[\s\S]*Видят: Никто/.test(document.querySelector('#pv-access')?.innerText || ''));
   // «где я» без статуса не выбрать
   await page.locator('[data-act=col-access][data-item=place]').click();
   await toastHas(page, /Сначала выберите, кто видит ваш статус/);

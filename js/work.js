@@ -66,6 +66,8 @@ export function renderRoutes() {
 // Набор ставок один (с 2.6): если ставка меняется — человек просто вписывает новую. Надбавка за класс — только машинисту.
 const payRole = () => S.profile.role || 'assistant';
 // средний за час: поле и переключатель, пояснение — по кнопке «!»
+// тестовый режим «оплата по сменам» (2.18): посмотреть, какой была бы зарплата при такой системе
+export const SHIFT_INFO = 'У каждой поездки своя норма — часы дня явки по производственному календарю (обычно 8 ч, в предпраздничный день 7 ч, в выходной 0). Сверх нормы первые 2 часа оплачиваются в полуторном размере, остальное — в двойном. Все надбавки и премия — как обычно, переработка за месяц в этом режиме не считается.';
 const AVG_INFO = 'Это примерно вся ваша зарплата до вычета НДФЛ, делённая на отработанные часы. Если включить «Считать зарплату по среднему», все рабочие часы умножаются на эту сумму — без отдельных доплат и надбавок. Позже CABINA поможет посчитать ваш средний.';
 export function renderTariffs() {
   const raw = paySet(S.settings.pay, payRole());
@@ -99,7 +101,12 @@ export function renderTariffs() {
         ${rates.length > 1 || (rates[0] && rates[0].from) ? `<div class="rate-hist"><div class="mini-label">История ставки</div>${rates.map((r) => `<div class="rate-row"><span>${r.from ? `с ${dateText(r.from)}` : rates.length > 1 ? 'раньше' : 'всегда'}</span><b>${fmtRub(r.rate, true)}</b>${rates.length > 1 ? `<button class="icon-btn danger sm" data-act="rate-del" data-i="${cfg.rates.indexOf(r)}" aria-label="Удалить ставку ${fmtRub(r.rate, true)}">${small(I.trash, 16)}</button>` : ''}</div>`).join('')}</div>` : ''}
       </div>
       ${fields.filter((f) => !f.deduct && !f.group).map((f) => field(f)).join('')}
-    </div>`}
+    </div>
+    <div class="group-title">Проверка другой системы оплаты</div>
+    <div class="panel pay-panel" id="pay-shift"><div class="pay-field">
+      <div class="switch-row"><div class="grow t1">Тестовый режим: оплата по сменам</div>
+        <button class="switch" role="switch" data-act="pay-shift" aria-checked="${cfg.shiftTest}" aria-label="Тестовый режим: оплата по сменам"></button></div>
+      <div class="hint">${esc(SHIFT_INFO)} Выключите, чтобы вернуться к обычному расчёту.</div></div></div>`}
     <div class="group-title">Больничный</div>
     <div class="panel pay-panel" id="pay-sick">${fields.filter((f) => f.group === 'sick').map((f) => field(f)).join('')}
       <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Больничный»: число дней больничного в месяце × оплата одного дня. НДФЛ с неё тоже вычитается.</div></div></div>
@@ -255,6 +262,12 @@ export async function workClick(act, b, ctx) {
       const m = b.getAttribute('aria-checked') === 'true' ? 'tariff' : 'avg';
       await savePaySet({ mode: m });
       toast(m === 'avg' ? (myPay().avgHour > 0 ? 'Заработок считается по среднему' : 'Впишите средний заработок за час') : 'Заработок считается по тарифной ставке');
+      return true;
+    }
+    case 'pay-shift': {
+      const on = b.getAttribute('aria-checked') !== 'true';
+      await savePaySet({ shiftTest: on });
+      toast(on ? 'Тестовый режим: зарплата считается по сменам' : 'Зарплата снова считается как обычно');
       return true;
     }
     case 'rate-del': {

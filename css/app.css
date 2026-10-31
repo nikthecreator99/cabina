@@ -1119,25 +1119,27 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
 @keyframes ptr-puff { 0% { opacity: .75; transform: translate(0, 0) scale(.6); } 100% { opacity: 0; transform: translate(-18px, -8px) scale(2); } }
 @keyframes ptr-chuh { 0% { opacity: 0; transform: translateY(2px); } 25%, 55% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-4px); } }
 
-/* светофор */
+/* светофор: тянете — красный (ярче, чем дальше тянете); отпустили — плавно жёлтый; обновилось — плавно зелёный */
 .ptr[data-style="light"] .ptr-bubble { padding: 6px 10px 0; border-radius: 18px; }
 .ptr-box { fill: #1a1f2b; stroke: rgba(255, 255, 255, .14); stroke-width: 1; }
 .ptr-mast { fill: var(--text-2); }
-.ptr-bulb { fill: #394052; transition: fill .15s ease; }
-.ptr-halo { opacity: 0; transition: opacity .15s ease; }
-.ptr-bulb.r, .ptr-halo.r { fill: #ff4d5e; }
-.ptr-halo.y { fill: #ffc83d; }
-.ptr-halo.g { fill: #34d27b; }
-.ptr-halo.r { opacity: calc(var(--p) * .35); }
-.ptr.armed .ptr-bulb.r, .ptr.loading .ptr-bulb.r, .ptr.done .ptr-bulb.r { fill: #394052; }
-.ptr.armed .ptr-halo.r, .ptr.loading .ptr-halo.r, .ptr.done .ptr-halo.r { opacity: 0; }
-.ptr.armed .ptr-bulb.y, .ptr.loading .ptr-bulb.y { fill: #ffc83d; }
-.ptr.armed .ptr-halo.y, .ptr.loading .ptr-halo.y { opacity: .35; }
-.ptr.loading .ptr-bulb.y, .ptr.loading .ptr-halo.y { animation: ptr-blink .9s steps(1) infinite; }
-.ptr.done .ptr-bulb.g { fill: #34d27b; }
-.ptr.done .ptr-halo.g { opacity: .35; }
-.ptr.fail .ptr-bulb.r { fill: #ff4d5e; }
-@keyframes ptr-blink { 50% { fill: #394052; opacity: 0; } }
+.ptr-bulb { fill: #394052; }
+.ptr-halo { opacity: .35; }
+.ptr-on { opacity: 0; }
+.ptr-on.r { fill: #ff4d5e; opacity: calc(.25 + var(--p) * .75); }
+.ptr-on.y { fill: #ffc83d; }
+.ptr-on.g { fill: #34d27b; }
+.ptr.loading .ptr-on.r { animation: ptr-red-out 1.5s ease forwards; }
+.ptr.loading .ptr-on.y { animation: ptr-yellow-in 1.5s ease forwards; }
+.ptr.done .ptr-on.r { opacity: 0; }
+.ptr.done .ptr-on.y { animation: ptr-fade-out .4s ease forwards; }
+.ptr.done .ptr-on.g { animation: ptr-fade-in .4s ease forwards; }
+.ptr.fail .ptr-on.r { opacity: 1; }
+.ptr.fail .ptr-on.y { opacity: 0; }
+@keyframes ptr-red-out { 0%, 35% { opacity: 1; } 60%, 100% { opacity: 0; } }
+@keyframes ptr-yellow-in { 0%, 35% { opacity: 0; } 60%, 100% { opacity: 1; } }
+@keyframes ptr-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ptr-fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* колесо */
 .ptr-wheel { transform: rotate(calc(var(--p) * 400deg)); }
@@ -1151,3 +1153,4 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
 /* выбор анимации в Настройках */
 .pull-pick .row[aria-pressed="true"] .t1::after { content: " ✓"; color: var(--ok); }
 #app.ptr-glide { transition: transform .24s ease; }
+.test-tag { padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }

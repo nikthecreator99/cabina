@@ -31,7 +31,7 @@ import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, coll
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
 
-export const VERSION = '2.17.0';
+export const VERSION = '2.18.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
@@ -227,7 +227,7 @@ function renderHome() {
   ].filter(Boolean);
   const linesHtml = lines.length ? `<div class="hero-lines">${lines.map(([k, l, v]) => `<div class="hl hl-${k}"><span>${l}:</span> <b>${v}</b></div>`).join('')}</div>` : '';
   let payHtml = '';
-  if (pay && pay.net > 0) payHtml = `<div class="hero-pay">${small(I.wallet, 16)} Заработано: <b class="money">${fmtRub(pay.net)}</b>${eyeBtn()}</div>`;
+  if (pay && pay.net > 0) payHtml = `<div class="hero-pay">${small(I.wallet, 16)} Заработано: <b class="money">${fmtRub(pay.net)}</b>${pay.shiftTest ? '<span class="test-tag" title="Тестовый режим: оплата по сменам">тест</span>' : ''}${eyeBtn()}</div>`;
   else if (!payCtx && (sum.monthTrips.length || isCurrent)) payHtml = `<button class="hero-pay set" data-act="set-rate">${small(I.wallet, 16)} Указать ставку ›</button>`;
 
   const absCount = sum.monthAbs.length;
