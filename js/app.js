@@ -32,11 +32,12 @@ import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
+import { renderHelp, helpListHtml } from './help.js';
 
-export const VERSION = '2.19.4';
+export const VERSION = '2.19.5';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
-const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null };
+const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
 const page = () => V.pages[V.pages.length - 1] || null;
 
 const p2 = (n) => String(n).padStart(2, '0');
@@ -362,7 +363,9 @@ function renderExtra() {
           <div class="grow"><div class="t1">Телефоны</div><div class="t2">${S.contacts.length ? `${S.contacts.length} ${plural(S.contacts.length, 'контакт', 'контакта', 'контактов')} · только в этом телефоне` : 'Нарядчик, дежурный, коллеги'}</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="extra-fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
           <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>
-      </div>`;
+      </div>
+      <div class="panel"><button class="row" data-act="go" data-page="help" id="extra-help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
+        <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button></div>`;
   }
   return html;
 }
@@ -480,6 +483,7 @@ function renderSettings() {
     </div>
     <div class="group"><div class="group-title">О приложении</div>
       <div class="panel">
+        <button class="row" data-act="go" data-page="help" id="settings-help"><span class="ico" style="--c:var(--accent)">${I.help}</span><div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы и ответы</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
         <div class="row"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Подсказки</div><div class="t2">Короткие объяснения при первом открытии</div></div>
           <button class="switch" role="switch" id="tours-sw" aria-checked="${!toursOff()}" aria-label="Показывать подсказки" data-act="tours-toggle"></button></div>
@@ -491,7 +495,9 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()) };
+// «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
+const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
 let tabFace = { key: null, icon: null };
 function renderTabbar() {
@@ -561,11 +567,30 @@ function go(name) {
   if (name === 'account') accountEnter().then(() => page() === 'account' && rerender());
   if (name === 'colleagues') setTimeout(() => app.querySelector('#col-name:placeholder-shown')?.focus(), 50);
   if (name === 'team') teamReset();
+  if (name === 'help') { V.helpQ = ''; V.helpOpen = new Set(); }
   V.pages.push(name);
   render();
   window.scrollTo(0, 0);
 }
 function back() { V.pages.pop(); render(); window.scrollTo(0, 0); }
+// «Открыть» из «Помощи»: прокрутить к нужной строке и ненадолго подсветить её
+function showSpot(sel) {
+  setTimeout(() => {
+    const t = app.querySelector(sel);
+    const el = t?.closest('.row, .panel') || t;
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('spot-flash');
+    setTimeout(() => el.classList.remove('spot-flash'), 2200);
+  }, 350);
+}
+// какие ответы человек открыл — чтобы после перерисовки они остались открытыми (toggle не всплывает — ловим при погружении)
+app.addEventListener('toggle', (e) => {
+  const d = e.target;
+  if (!d.matches?.('details.faq')) return;
+  if (d.dataset.auto) { delete d.dataset.auto; return; } // открыт поиском при отрисовке, а не человеком
+  if (d.open) V.helpOpen.add(d.dataset.id); else V.helpOpen.delete(d.dataset.id);
+}, true);
 
 // Подсказки первого запуска для экранов (не поверх открытых окон)
 let tourTimer = null;
@@ -673,7 +698,8 @@ app.addEventListener('click', async (e) => {
   if (await accountClick(act, b, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   switch (act) {
-    case 'go': go(b.dataset.page); break;
+    case 'go': go(b.dataset.page); if (b.dataset.focus) showSpot(b.dataset.focus); break;
+    case 'help-clear': V.helpQ = ''; rerender(); app.querySelector('#help-q')?.focus(); break;
     case 'back': back(); break;
     case 'stats': go('stats'); break;
     case 'set-rate': openTariffsPage(); break;
@@ -783,6 +809,15 @@ app.addEventListener('input', (e) => {
   if (avatarInput(e.target)) return;
   if (colleaguesInput(e.target)) return;
   if (fixInput(e.target)) return;
+  if (e.target.id === 'help-q') {
+    V.helpQ = e.target.value;
+    app.querySelector('#help-list').innerHTML = helpListHtml(V.helpQ, V.helpOpen, helpCtx());
+    const head = e.target.parentElement;
+    const x = head.querySelector('.search-x');
+    if (V.helpQ && !x) head.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="help-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);
+    else if (!V.helpQ && x) x.remove();
+    return;
+  }
   if (e.target.id === 'trip-q') {
     V.tripQ = e.target.value;
     app.querySelector('#search-list').innerHTML = searchResultsHtml(V.tripQ);

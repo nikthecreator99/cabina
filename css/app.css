@@ -1270,3 +1270,20 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 .share-ttl { margin: 0; color: var(--text-2); font-size: 14px; text-align: center; }
 .share-ttl svg { vertical-align: -3px; margin-right: 2px; }
 #col-sec .search + .group-title { margin-top: 16px; }
+
+/* Помощь (2.19.5): частые вопросы, ответ раскрывается под вопросом */
+.faq-groups { display: flex; flex-direction: column; gap: 14px; }
+.faq { border-bottom: 1px solid var(--line); }
+.faq:last-child { border-bottom: 0; }
+.faq summary { display: flex; align-items: center; gap: 10px; padding: 14px; min-height: 56px; font-weight: 600; line-height: 1.3; cursor: pointer; list-style: none; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq-q { flex: 1; min-width: 0; }
+.faq summary::after { content: "›"; margin-left: auto; flex: none; font-size: 22px; color: var(--muted); transition: transform .15s; }
+.faq[open] summary::after { transform: rotate(90deg); }
+.faq-a { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 0 14px 16px; color: var(--text-2); font-size: 15px; line-height: 1.45; }
+.faq-a p { margin: 0; }
+.faq-a b { color: var(--text); }
+.faq-go { width: auto; max-width: 100%; }
+.faq-none, .faq-foot { text-align: center; padding: 4px 8px; }
+.spot-flash { animation: spotFlash 2.2s ease; }
+@keyframes spotFlash { 0%, 65% { box-shadow: inset 0 0 0 2px var(--accent); background-color: color-mix(in srgb, var(--accent) 10%, transparent); } 100% { box-shadow: inset 0 0 0 2px transparent; } }
