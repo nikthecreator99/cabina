@@ -7,10 +7,11 @@ import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf } from 
 import { dateKeyOf, monthSummary, fmtDur, parseLocal } from './calc.js';
 import { ROLES, OVERREST_MAX } from './pay.js';
 import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
-import { careerOf, tenure, tenureText, todayKey } from './career.js';
+import { careerOf, careerSub, tenure, tenureText, todayKey } from './career.js';
 import { normPhone } from './phones.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { premiumOk, hasAvatar } from './avatar-edit.js';
+import { awardsStripHtml } from './awards.js';
 
 const CLASSES = ['3', '2', '1'];
 // Должность в профиле: для расчёта заработка важны только помощник и машинист, «Другая» — для поиска коллег
@@ -108,7 +109,23 @@ export function renderProfile(colleagues = '') {
     </section>
     ${colleagues}
     ${tiles}
+    ${awardsStripHtml()}
     <div class="notice ok">${I.shield}<div><b>Профиль хранится в этом телефоне.</b> Коллеги видят только то, что вы сами включили в «Приватности». Профиль попадает в резервную копию — не пересылайте её другим людям.</div></div>`;
+}
+
+// 2.19: депо пишут по-разному («тд64», «тд 64», «Тд-64»). Код депо (буквы + номер) приводим к виду «ТД-64»;
+// латиницу, похожую на кириллицу, — к кириллице. Название словами («Малошуйка») не трогаем.
+const LAT = { A: 'А', B: 'В', C: 'С', D: 'Д', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', Y: 'У' };
+export function normDepot(v) {
+  const s = String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const m = /^([a-zа-яё]{1,5})[\s\-\u2010-\u2015_.]*(\d{1,4})(?:\s+(.+))?$/i.exec(s);
+  if (!m) return s;
+  let code = m[1].toUpperCase().replace(/Ё/g, 'Е');
+  if (/[A-Z]/.test(code)) {
+    code = code.replace(/CH/g, 'Ч').replace(/[A-Z]/g, (c) => LAT[c] || '?');
+    if (code.includes('?')) return s;
+  }
+  return `${code}-${m[2]}${m[3] ? ` ${m[3]}` : ''}`;
 }
 
 export function renderProfileEdit() {
@@ -126,10 +143,11 @@ export function renderProfileEdit() {
         <div class="hint">Машинисту можно указать класс — от него считается надбавка за класс.</div></div>
       ${p.role === 'driver' ? `<div class="pay-field"><div class="label">Класс</div>
         <div class="seg" id="pr-klass">${CLASSES.map((k) => `<button data-act="pr-klass" data-klass="${k}" aria-pressed="${p.klass === k}">${k} класс</button>`).join('')}</div></div>` : ''}
-      <div class="pay-field"><label for="pr-depot">Депо</label><input class="input" id="pr-depot" maxlength="60" autocomplete="off" placeholder="Название вашего депо" value="${esc(p.depot)}"></div>
+      <div class="pay-field"><label for="pr-depot">Депо</label><input class="input" id="pr-depot" maxlength="60" autocomplete="off" placeholder="Например, ТЧ-13" value="${esc(p.depot)}"></div>
       <div class="pay-field"><label for="pr-phone">Номер телефона</label><input class="input" id="pr-phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" placeholder="+7 900 000-00-00" value="${esc(p.phone)}">
         <div class="hint">Хранится только в этом телефоне и никому не передаётся.</div></div>
     </div>
+    <div class="panel"><button class="row" data-act="go" data-page="career" id="pr-career"><span class="ico" style="--c:var(--warn)">${I.briefcase}</span><div class="grow"><div class="t1">Карьера</div><div class="t2">${careerSub()}</div></div>${small(I.right, 18)}</button></div>
     <div class="notice ok">${I.shield}<div><b>Коллеги — только с аккаунтом и только по вашему выбору.</b> На наш сервер в России уходят имя, должность и то, что вы разрешили в Настройках аккаунта → «Приватность». Поездки, заработок, номер поезда и локомотива, точное время явки и телефон не уходят. Причину отвлечения — больничный, отпуск или медкомиссия — коллеги не увидят никогда, только «На отвлечении».</div></div>`;
 }
 
@@ -151,7 +169,7 @@ export async function profileClick(act, b) {
 export async function profileChange(e) {
   const t = e.target;
   if (t.id === 'pr-name') { await saveProfile({ name: t.value.trim().slice(0, 60) }); return true; }
-  if (t.id === 'pr-depot') { await saveProfile({ depot: t.value.trim().slice(0, 60) }); return true; }
+  if (t.id === 'pr-depot') { const depot = normDepot(t.value); if (t.value !== depot) t.value = depot; await saveProfile({ depot }); return true; }
   if (t.id === 'pr-phone') { await saveProfile({ phone: normPhone(t.value) }); return true; }
   return false;
 }

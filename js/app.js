@@ -1,5 +1,5 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
-import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
 import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen } from './tour.js';
-import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour, privacyTour, pullTour } from './tours.js';
+import { homeTour, swipeTour, routesTour, extraTour, docsTour, settingsTour, notesTour, workTour, tariffsTour, housesTour, statsTour, profileTour, profileEditTour, avatarTour, avatarCharsTour, tabsTour, fixTileTour, fixTour, careerTour, searchTour, phonesTileTour, calDayTour, slipPdfTour, moneyTour, statsMoreTour, sickPayTour, payModeTour, pendingTour, accountTileTour, colleaguesTour, colleaguesPageTour, privacyTour, pullTour, shareTour, awardsTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -22,7 +22,7 @@ import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
-import { careerSub, renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
+import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml } from './account.js';
 import { consumeAuthRedirect, touch, session } from './auth.js';
@@ -30,11 +30,13 @@ import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, coll
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
+import { renderAwards, openAward } from './awards.js';
+import { openShareSheet, checkShareHash, shareable } from './share.js';
 
-export const VERSION = '2.18.0';
+export const VERSION = '2.19.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
-const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null };
+const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null };
 const page = () => V.pages[V.pages.length - 1] || null;
 
 const p2 = (n) => String(n).padStart(2, '0');
@@ -138,10 +140,11 @@ function tripRow(t, mk, payCtx) {
     st.holiday ? `<span class="chip" style="--c:var(--holiday)">${small(I.calStar, 13)} ${fmtDur(st.holiday, { short: true })}</span>` : '',
     (t.passenger || []).length ? `<span class="chip" style="--c:var(--medical)">${small(I.passenger, 13)} пасс.</span>` : '',
   ].join('');
-  return `<div class="swipe" data-swipe="${esc(t.id)}">
+  const sel = V.sel ? (shareable(t) ? (V.sel.has(t.id) ? 'true' : 'false') : 'off') : null;
+  return `<div class="swipe ${sel ? 'sel-mode' : ''}" data-swipe="${esc(t.id)}">
   <button class="swipe-del" data-act="trip-del" data-id="${esc(t.id)}" aria-label="Удалить поездку" tabindex="-1">${I.trash}<span>Удалить</span></button>
-  <button class="trip swipe-row ${live ? 'is-live' : ''}" data-act="trip" data-id="${esc(t.id)}">
-    <div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
+  <button class="trip swipe-row ${live ? 'is-live' : ''}" data-act="trip" data-id="${esc(t.id)}"${sel ? ` aria-pressed="${sel === 'true'}"${sel === 'off' ? ' data-off="1"' : ''}` : ''}>
+    ${sel ? '<span class="sel-dot" aria-hidden="true"></span>' : ''}<div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
       <div class="trip-time">${pending ? `Явка в ${hm(st.start)}` : `${hm(st.start)} — ${live ? 'сейчас' : hm(st.end)}`}</div>
       <div class="trip-route">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
@@ -273,8 +276,28 @@ function renderHome() {
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.train}</div><b>В ${MONTHS_PREP[V.m - 1]} поездок нет</b><p>Нажмите «Добавить поездку» — время, ночные и праздничные часы посчитаются автоматически.</p></div>`}
-  </div>`;
+  </div>${V.sel ? selBar(trips) : ''}`;
 }
+
+// Выбор поездок долгим нажатием (2.19): отправить напарнику QR-кодом или ссылкой
+function selBar(trips) {
+  const n = V.sel.size;
+  const all = trips.filter(shareable);
+  const allOn = all.length && all.every((t) => V.sel.has(t.id));
+  return `<div class="sel-bar" role="toolbar" aria-label="Выбор поездок">
+    <button class="icon-btn" data-act="sel-cancel" aria-label="Отменить выбор">${I.x}</button>
+    <div class="grow"><b>${n ? `Выбрано: ${n}` : 'Выберите поездки'}</b>${all.length > 1 ? `<button class="link-btn" data-act="sel-all">${allOn ? 'Снять все' : 'Весь месяц'}</button>` : ''}</div>
+    <button class="btn btn-primary btn-sm" data-act="sel-share" ${n ? '' : 'disabled'}>${small(I.share, 16)} Поделиться</button></div>`;
+}
+function startSel(id) {
+  const t = S.trips.find((x) => x.id === id);
+  if (!shareable(t)) { toast('Отправить можно только законченную поездку'); return; }
+  swipe.closeAll();
+  V.sel = new Set([id]);
+  try { navigator.vibrate?.(15); } catch {}
+  rerender();
+}
+function endSel() { if (!V.sel) return; V.sel = null; rerender(); }
 
 // ---------------------------------------------------------------- дополнительно
 function notesGroups() {
@@ -415,9 +438,6 @@ function renderSettings() {
         <button class="row" data-act="lock-settings" id="lock-row"><span class="ico" style="--c:var(--accent)">${I.lock}</span><div class="grow"><div class="t1">Код для входа</div><div class="t2">${lockOn() ? 'Включён' : 'Выключен'}</div></div>${small(I.right, 18)}</button>
       </div>
     </div>
-    <div class="group"><div class="group-title">Карьера</div>
-      <div class="panel"><button class="row" data-act="go" data-page="career"><span class="ico" style="--c:var(--warn)">${I.briefcase}</span><div class="grow"><div class="t1">Карьера</div><div class="t2">${careerSub()}</div></div>${small(I.right, 18)}</button></div>
-    </div>
     <div class="group"><div class="group-title">Данные и резервная копия</div>
       <div class="notice">${I.alert}<div><b>Данные хранятся только на этом устройстве.</b> Если удалить приложение или очистить данные браузера без резервной копии, поездки, отвлечения, профиль и документы будут потеряны.</div></div>
       <div class="panel">
@@ -455,7 +475,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues };
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
 let tabFace = { key: null, icon: null };
 function renderTabbar() {
@@ -476,6 +496,8 @@ function renderTabbar() {
 // иначе экран «дёргается»
 function render({ still = false } = {}) {
   const p = page();
+  if (V.sel && (p || V.tab !== 'home')) V.sel = null;
+  document.body.classList.toggle('selecting', !!V.sel);
   app.classList.toggle('still', still);
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
@@ -537,9 +559,9 @@ function scheduleTours() {
     else if (p === 'career') careerTour();
     else if (p === 'colleagues') { if (app.querySelector('#col-form')) colleaguesPageTour(); }
     else if (p) return;
-    else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
+    else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.swipe > .trip:not(.is-live)')) shareTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
-    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('.col-search')) colleaguesTour(); if (app.querySelector('#col-list')) pullTour(); }
+    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('#pr-awards')) awardsTour(); if (app.querySelector('.col-search')) colleaguesTour(); if (app.querySelector('#col-list')) pullTour(); }
   }, 500);
 }
 export { scheduleTours };
@@ -549,14 +571,18 @@ initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.le
 
 function openTariffsPage() { go('work'); V.pages.push('tariffs'); render(); }
 setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => (document.getElementById(id) || document.getElementById('pay-avg'))?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
-setNavigator((startStr) => {
+function navTo(startStr) {
   const ms = parseLocal(startStr);
   if (!Number.isFinite(ms)) return;
   const d = new Date(ms);
   V.y = d.getUTCFullYear(); V.m = d.getUTCMonth() + 1;
   if (V.tab !== 'home' || V.pages.length) { V.tab = 'home'; V.pages = []; }
   render();
-});
+}
+setNavigator(navTo);
+// поездки от напарника добавлены — показать их месяц; из окна награды — экран «Награды»
+document.addEventListener('cabina:imported', (e) => navTo(e.detail));
+document.addEventListener('cabina:go', (e) => { if (e.detail === 'awards') go('awards'); });
 
 function shiftMonth(delta) {
   let m = V.m + delta;
@@ -582,6 +608,7 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
 
 // ---------------------------------------------------------------- действия
 const swipe = attachSwipe(app);
+attachLongPress(app, '.swipe > .trip.swipe-row', (row) => { if (!V.sel && V.tab === 'home' && !V.pages.length) startSel(row.dataset.id); });
 const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll(), openAbsenceForm, myDataHtml };
 
 async function doExport() {
@@ -626,7 +653,28 @@ app.addEventListener('click', async (e) => {
     case 'next': shiftMonth(1); break;
     case 'today': goToday(); render(); break;
     case 'add-trip': openTripForm(); break;
-    case 'trip': openTripForm(id); break;
+    case 'trip':
+      if (V.sel && b.classList.contains('swipe-row')) {
+        if (b.dataset.off) { toast('Отправить можно только законченную поездку'); break; }
+        if (V.sel.has(id)) V.sel.delete(id); else V.sel.add(id);
+        rerender();
+      } else openTripForm(id);
+      break;
+    case 'sel-cancel': endSel(); break;
+    case 'sel-all': {
+      const sum = monthSummary(V.y, V.m, S.trips, S.absences);
+      const all = sum.monthTrips.filter(shareable);
+      const allOn = all.every((t) => V.sel.has(t.id));
+      all.forEach((t) => (allOn ? V.sel.delete(t.id) : V.sel.add(t.id)));
+      rerender();
+      break;
+    }
+    case 'sel-share': {
+      const list = S.trips.filter((t) => V.sel?.has(t.id));
+      openShareSheet(list, { onDone: endSel });
+      break;
+    }
+    case 'aw-open': openAward(b.dataset.id); break;
     case 'trip-del': {
       const t = S.trips.find((x) => x.id === id);
       if (!t) break;
@@ -813,6 +861,9 @@ async function start() {
   render();
   if (!S.onboarded) showOnboarding();
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
+  // ссылка с поездками от напарника (данные после «#» — сервер их не видел)
+  checkShareHash();
+  window.addEventListener('hashchange', () => checkShareHash());
   // аккаунт: отметка «заходил сегодня» для статистики (раз в день; без аккаунта ничего не отправляется)
   touch(VERSION).catch(() => {});
   // премиум-персонаж: права с сервера (своя отметка у каждого адреса сайта); изменились — перерисовать персонажа

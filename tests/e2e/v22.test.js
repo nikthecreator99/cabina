@@ -68,7 +68,7 @@ test('закрепление состава: башмаки по таблице,
 test('карьера: дата устройства, должности, оклад, напоминание о преданности на главной', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
-  await page.locator('[data-page=settings]').click();
+  await page.locator('.screen [data-page=profile-edit]').click();
   await page.locator('[data-page=career]').click();
   await page.fill('#cr-hired', '2021-12-15');
   await page.locator('#cr-hired').dispatchEvent('change');
@@ -114,9 +114,11 @@ test('удаление должности спрашивает «Да / Нет»
   const { context, page, errors } = await openApp(env);
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveProfile({ career: { hired: '2010-05-01', jobs: [{ id: 'j1', role: 'other', title: 'Слесарь', from: '2010-05-01' }] } }); });
   await tab(page, 'profile');
+  // 2.19: «Карьера» — в «Редактировать профиль» (в Настройках её больше нет)
   await page.locator('[data-page=settings]').click();
-  // 2.8: «Карьера» — сразу в Настройках, профиль меняется только с экрана «Профиль»
-  assert.equal(await page.locator('[data-page=profile-settings], .screen [data-page=profile-edit]').count(), 0);
+  assert.equal(await page.locator('.screen [data-page=career]').count(), 0);
+  await page.locator('[data-act=back]').click();
+  await page.locator('.screen [data-page=profile-edit]').click();
   assert.match(await text(page, '[data-page=career]'), /Стаж 16 лет 5 месяцев/);
   await page.locator('[data-page=career]').click();
   await page.locator('[data-act=job-edit]').click();

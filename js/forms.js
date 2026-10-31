@@ -12,6 +12,8 @@ import { dayInfo } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
+import { openReceive } from './share.js';
+import { awardSnapshot, awardNews, celebrate } from './awards.js';
 import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, studyTour, routeNormsTour, routeTimesTour } from './tours.js';
 
 export { computeHomeRest };
@@ -219,7 +221,7 @@ export function openTripForm(tripId) {
   const title = existing ? (wasLive ? (isPending(existing) ? 'Ждёт явки' : 'Поездка в пути') : `Поездка ${dayMonth(parseLocal(existing.start))}`) : 'Новая поездка';
 
   const body = `
-    ${existing ? '<div class="summary-top" id="tf-summary"></div>' : ''}
+    ${existing ? '<div class="summary-top" id="tf-summary"></div>' : `<button class="btn btn-ghost btn-sm recv-btn" type="button" data-act="tf-receive">${I.qr} Получить поездки от напарника</button>`}
     <div class="field">
       <div class="label">Маршрут <span class="opt">· необязательно</span></div>
       <button class="pick" type="button" data-act="pick-route">${I.route}<span class="grow" id="tf-route-label"></span>${I.right}</button>
@@ -540,6 +542,7 @@ export function openTripForm(tripId) {
       refreshAll(); return;
     }
     const act = b.dataset.act;
+    if (act === 'tf-receive') { closeLayer(el); openReceive(); return; }
     if (act === 'pick-kind') { F.kindOpen = !F.kindOpen; renderKind(); return; }
     if (act === 'pick-route') {
       const res = await pickRoute(F.routeId);
@@ -596,6 +599,7 @@ export function openTripForm(tripId) {
       } else if (linkedNote) noteOp = { del: linkedNote.id };
       d.updatedAt = Date.now();
       delete d._stats; delete d._statsAt;
+      const before = d.end ? awardSnapshot() : null;
       try {
         await saveTrip(d, noteOp);
       } catch (ex) {
@@ -604,6 +608,8 @@ export function openTripForm(tripId) {
       }
       closeLayer(el);
       navigateToMonth(d.start);
+      // новая награда или рекорд — поздравляем (считается в телефоне)
+      if (before) { const news = awardNews(before); if (news) setTimeout(() => celebrate(news), 700); }
       toast(!d.end && parseLocal(d.start) > nowLocal() ? 'Явка сохранена' : !d.end ? 'Поездка в пути сохранена' : wasLive ? 'Поездка завершена' : existing ? 'Изменения сохранены' : 'Поездка добавлена');
     }
   });

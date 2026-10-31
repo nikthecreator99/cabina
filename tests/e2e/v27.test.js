@@ -114,6 +114,8 @@ test('подсказка про нормы показывается при от�
   await workPage(page, 'routes');
   await page.locator('.route-pts[data-id=r1]').click();
   await page.waitForSelector('.tour', { timeout: 3000 });
+  // текст подсказки появляется чуть позже самой рамки — ждём его, а не рамку
+  await page.waitForFunction(() => document.querySelector('.tour .tour-body')?.innerText.trim(), null, { timeout: 3000 });
   assert.match(await text(page, '.tour'), /Тяжёлый поезд[\s\S]*Впишите нормы участка/);
   await page.locator('.tour .tour-next').click();
   await page.waitForSelector('.tour', { state: 'detached' });

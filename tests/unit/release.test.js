@@ -31,7 +31,12 @@ test('список «Что нового» заполнен и идёт от н�
 
 test('офлайн-кэш содержит все файлы приложения, и все они существуют', () => {
   for (const p of shell) if (p !== './') assert.ok(existsSync(new URL(p, root)), `нет файла ${p}`);
-  for (const f of readdirSync(new URL('js/', root))) assert.ok(shell.includes(`js/${f}`), `js/${f} не добавлен в SHELL в sw.js`);
+  for (const f of readdirSync(new URL('js/', root), { withFileTypes: true })) {
+    if (f.isDirectory()) {
+      // сторонние библиотеки (2.19): каждый .js тоже должен быть в SHELL, чтобы работать без интернета
+      for (const v of readdirSync(new URL(`js/${f.name}/`, root)).filter((n) => n.endsWith('.js'))) assert.ok(shell.includes(`js/${f.name}/${v}`), `js/${f.name}/${v} не добавлен в SHELL в sw.js`);
+    } else assert.ok(shell.includes(`js/${f.name}`), `js/${f.name} не добавлен в SHELL в sw.js`);
+  }
   assert.ok(shell.includes('css/app.css'));
   assert.ok(shell.includes('data/calendar.json'));
   assert.ok(!shell.includes('data/changelog.json'), 'список изменений всегда берётся с сервера');

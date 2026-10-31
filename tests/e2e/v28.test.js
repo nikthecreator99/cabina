@@ -64,12 +64,14 @@ test('поездка «в пути»: сохраняется кнопкой «В
   await context.close();
 });
 
-test('профиль меняется в одном месте: в Настройках — сразу «Карьера»', async () => {
+test('профиль меняется в одном месте; «Карьера» (с 2.19) — в «Редактировать профиль»', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
   assert.equal(await page.locator('.screen [data-page=profile-edit]').count(), 1);
   await page.locator('[data-page=settings]').click();
-  assert.equal(await page.locator('[data-page=profile-settings], .screen [data-page=profile-edit]').count(), 0);
+  assert.equal(await page.locator('[data-page=profile-settings], .screen [data-page=profile-edit], .screen [data-page=career]').count(), 0);
+  await page.locator('[data-act=back]').click();
+  await page.locator('.screen [data-page=profile-edit]').click();
   await page.locator('.screen [data-page=career]').click();
   await page.waitForSelector('#cr-hired');
   assert.deepEqual(errors, []);

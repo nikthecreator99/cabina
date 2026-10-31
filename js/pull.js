@@ -4,7 +4,7 @@
 
 export const PULL_STYLES = [
   { id: 'spin', name: 'Круг', text: 'Крутящийся круг, как в большинстве приложений' },
-  { id: 'train', name: 'Поезд', text: 'Паровозик выезжает, дымит и «чух-чух»' },
+  { id: 'train', name: 'Поезд', text: 'Паровозик выезжает и дымит' },
   { id: 'light', name: 'Светофор', text: 'Тянете — горит красный, потом плавно жёлтый, а когда обновилось — зелёный' },
   { id: 'wheel', name: 'Колесо', text: 'Колесо локомотива раскручивается' },
 ];
@@ -26,7 +26,6 @@ const ART = {
     <line class="ptr-rail" x1="0" y1="39.5" x2="120" y2="39.5"/>
     <g class="ptr-loco">
       <g class="ptr-smoke"><circle cx="68" cy="7" r="3"/><circle cx="68" cy="7" r="3"/><circle cx="68" cy="7" r="3"/></g>
-      <text class="ptr-chuh c1" x="78" y="5">чух</text><text class="ptr-chuh c2" x="97" y="-1">чух</text>
       <rect class="ptr-dark" x="64" y="9" width="8" height="10" rx="1"/><rect class="ptr-dark" x="62" y="7" width="12" height="3" rx="1.5"/>
       <rect class="ptr-body" x="38" y="17" width="40" height="14" rx="6"/>
       <rect class="ptr-body" x="24" y="10" width="18" height="21" rx="3"/>

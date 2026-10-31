@@ -11,7 +11,7 @@ import { S, saveProfile, nowLocal, onChange } from './store.js';
 import { DAY } from './calc.js';
 import { session, rpc, restGet, errorText } from './auth.js';
 import { CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, consentHtml, policyHtml, publishConsentHtml, legalReady } from './legal.js';
-import { statusFacts, privacyOf } from './profile.js';
+import { statusFacts, privacyOf, normDepot } from './profile.js';
 import { routeEnds } from './rest.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { premiumOk, hasAvatar } from './avatar-edit.js';
@@ -80,7 +80,7 @@ export function cardPayload(p = S.profile, { findable = false, premium = false }
   return {
     p_name: name,
     p_role: own(ROLE_NAMES, p.role) ? p.role : null,
-    p_depot: pv.depot ? cleanText(p.depot) || null : null,
+    p_depot: pv.depot ? cleanText(normDepot(p.depot)) || null : null,
     p_avatar: pv.avatar && hasAvatar(p) ? normalizeAvatar(p.avatar, { premium }) : null,
     p_searchable: findable,
   };
@@ -764,7 +764,7 @@ export async function colleaguesSubmit(e) {
   const btn = document.getElementById('col-submit');
   if (btn) { btn.disabled = true; btn.lastChild.textContent = ' Ищем…'; }
   let r;
-  try { r = await rpc('find_colleagues', { p_name: cleanText(C.q.name), p_depot: cleanText(C.q.depot) || null, p_role: C.q.role || null }); } finally { C.searching = false; }
+  try { r = await rpc('find_colleagues', { p_name: cleanText(C.q.name), p_depot: cleanText(normDepot(C.q.depot)) || null, p_role: C.q.role || null }); } finally { C.searching = false; }
   if (!r?.ok) { hooks.rerender(); showErr(colError(r, 'search')); return true; }
   C.results = arr(r.data).map(cleanCard).filter((c) => c && c.id !== C.sub).slice(0, 20);
   document.activeElement?.blur?.();

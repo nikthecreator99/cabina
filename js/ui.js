@@ -55,6 +55,8 @@ export const I = {
   chart: sv('<path d="M4 20h16"/><rect x="6" y="11" width="3" height="7" rx="1"/><rect x="11" y="6" width="3" height="12" rx="1"/><rect x="16" y="13" width="3" height="5" rx="1"/>'),
   search: sv('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
   camera: sv('<path d="M4 8.5A2 2 0 0 1 6 6.5h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/>'),
+  qr: sv('<rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h2.5v2.5H14zM18 18h2.5v2.5H18zM14 19.5h1.5M19.5 14v1.5M17 17h1"/>'),
+  link: sv('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
   medal: sv('<circle cx="12" cy="15" r="5.5"/><path d="M8 3.5 11 9.6M16 3.5 13 9.6M7 3.5h3M14 3.5h3"/><path d="m12 12.4.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z" fill="currentColor" stroke-width="1"/>'),
   briefcase: sv('<rect x="3.5" y="7.5" width="17" height="12" rx="2.2"/><path d="M9 7.5v-2a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2M3.5 12.5h17M11 12.5v2h2v-2"/>'),
   learn: sv('<path d="M2.5 9.2 12 4.5l9.5 4.7L12 14z"/><path d="M6.5 11.3v4.3c1.6 1.5 3.5 2.2 5.5 2.2s3.9-.7 5.5-2.2v-4.3M21.5 9.2v5.3"/>'),
@@ -311,6 +313,28 @@ export async function saveToDevice(blob, filename) {
   return 'saved';
 }
 
+// ---- Долгое нажатие (≈0,5 с) по строке: onLong(row). Сдвинули палец — это прокрутка или свайп, не нажатие.
+// После срабатывания обычное «нажатие» (click) этой строки гасится, чтобы не открылась форма.
+export function attachLongPress(root, selector, onLong, ms = 520) {
+  // swallow — «съесть» клик, который браузер может прислать, когда палец отпустили после долгого нажатия.
+  // Новое касание его отменяет: следующее нажатие человека не должно пропасть.
+  let p = null; let swallow = 0;
+  const cancel = () => { if (p) clearTimeout(p.timer); p = null; };
+  root.addEventListener('pointerdown', (e) => {
+    cancel();
+    swallow = 0;
+    const row = e.target.closest(selector);
+    if (!row || !root.contains(row) || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    p = { x: e.clientX, y: e.clientY, id: e.pointerId, timer: setTimeout(() => { p = null; swallow = Date.now() + 1500; onLong(row); }, ms) };
+  });
+  root.addEventListener('pointermove', (e) => { if (p && e.pointerId === p.id && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) cancel(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => root.addEventListener(t, cancel));
+  window.addEventListener('scroll', cancel, { passive: true });
+  root.addEventListener('click', (e) => { if (Date.now() < swallow && e.target.closest(selector)) { swallow = 0; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+  // долгое нажатие в браузере открывает своё меню — на этих строках оно не нужно
+  root.addEventListener('contextmenu', (e) => { if (e.target.closest(selector)) e.preventDefault(); });
+}
+
 // ---- Свайп влево по строке списка (.swipe > .swipe-row) открывает кнопку удаления ----
 // Возвращает { closeAll, busy }. Клик сразу после свайпа и тап по открытой строке «съедаются».
 export function attachSwipe(root, W = 92) {
@@ -326,6 +350,7 @@ export function attachSwipe(root, W = 92) {
   }
   const closeAll = (except) => opened().forEach((s) => { if (s !== except) set(s, 0, true); });
   root.addEventListener('pointerdown', (e) => {
+    if (document.body.classList.contains('selecting')) return; // режим выбора поездок: свайп выключен
     const row = e.target.closest('.swipe > .swipe-row');
     if (!row || !root.contains(row) || (e.pointerType === 'mouse' && e.button !== 0)) { if (!e.target.closest('.swipe-del')) closeAll(); return; }
     const el = row.parentElement;
