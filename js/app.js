@@ -1,7 +1,7 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
 import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
-import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY } from './calc.js';
+import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
 import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
@@ -30,10 +30,10 @@ import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
-import { renderAwards, renderRecords, openAward } from './awards.js';
+import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 
-export const VERSION = '2.19.3';
+export const VERSION = '2.19.4';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null };
@@ -521,6 +521,17 @@ function render({ still = false } = {}) {
   else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml())}</div>`;
   renderTabbar();
   scheduleTours();
+  checkAccountAward();
+}
+// «Свой человек»: как только в телефоне появился вход в аккаунт — награда (один раз; поздравление — когда нет окон)
+let accountAwardBusy = false;
+function checkAccountAward() {
+  if (accountAwardBusy || S.profile?.accountAward || !session() || layerCount()) return;
+  accountAwardBusy = true;
+  const before = awardSnapshot();
+  grantAccountAward(dateKeyOf(nowLocal()))
+    .then((ok) => { const news = ok && awardNews(before); if (news) setTimeout(() => celebrate(news), 700); })
+    .catch(() => {}).finally(() => { accountAwardBusy = false; });
 }
 // перерисовать без «прыжка» экрана (после изменения на том же экране)
 // Перерисовка после сохранения: поле, в котором человек сейчас печатает, остаётся в фокусе и с его текстом

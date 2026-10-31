@@ -2,7 +2,7 @@
 // Два вида (со слов Никиты): со ступенями — бронза, серебро, золото, собирать долго; и повторяемые — без ступеней,
 // даются каждый раз и копятся счётчиком «×N» (Новый год в поездке, поездка от 12 часов…). Закрытые — тёмные силуэты.
 // Награда — состояние, а не запись: её всегда можно пересчитать из поездок (в резервную копию отдельно не попадает).
-import { S, statsOf, isLive, myPay, routeOf, locoKey, normNum } from './store.js';
+import { S, statsOf, isLive, myPay, routeOf, locoKey, normNum, saveProfile } from './store.js';
 import { parseLocal, MIN, DAY, monthKeyOf, dateKeyOf, fmtDur } from './calc.js';
 import { isHoliday } from './calendar.js';
 import { isHeavy } from './pay.js';
@@ -63,6 +63,12 @@ const ART = {
   party: `<path d="M15 51l9-24 15 15z" fill="#ffb020"/><path d="M19 40l9 9M22 32l11 11" stroke="#ff5a3c" stroke-width="2.4"/>
     <rect x="38" y="14" width="4" height="4" rx="1" fill="#3b82f6" transform="rotate(20 40 16)"/><rect x="45" y="27" width="4" height="4" rx="1" fill="#4fbf6a" transform="rotate(-25 47 29)"/>
     <circle cx="31" cy="17" r="2" fill="#ff5a3c"/><circle cx="48" cy="18" r="1.8" fill="#fff"/><path d="M36 24c3-2 6-2 8 0M40 35c2-2 5-3 8-2" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+  // пропуск с фотографией и зелёной галочкой — «Свой человек» (аккаунт CABINA)
+  pass: `<rect x="13" y="17" width="38" height="28" rx="4" fill="#fff" transform="rotate(-6 32 31)"/>
+    <g transform="rotate(-6 32 31)"><rect x="13" y="17" width="38" height="7" rx="3" fill="#ff5a3c"/><rect x="13" y="21" width="38" height="3" fill="#ff5a3c"/>
+    <rect x="17" y="27" width="11" height="13" rx="1.5" fill="#d9e2ec"/><circle cx="22.5" cy="31.5" r="2.6" fill="#6f7b88"/><path d="M18.5 39.5c.6-3 2.2-4.4 4-4.4s3.4 1.4 4 4.4z" fill="#6f7b88"/>
+    <path d="M31 29h15M31 33h12M31 37h9" stroke="#9aa3ad" stroke-width="1.8" stroke-linecap="round"/></g>
+    <circle cx="45" cy="45" r="7.5" fill="#2e9e55" stroke="#fff" stroke-width="2"/><path d="M41.5 45.2l2.4 2.4 4.6-4.8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
   tea: `<path d="M27 15c-2-3 2-4 0-7M33 15c-2-3 2-4 0-7" stroke="#fff" fill="none" stroke-width="1.6" opacity=".8" stroke-linecap="round"/><path d="M37 11l-4 15" stroke="#eee" stroke-width="1.6"/>
     <path d="M23 18h18l-2 23H25z" fill="#fff" opacity=".9"/><path d="M24.5 23h15l-1.6 17h-11.8z" fill="#c8641e"/>
     <path d="M42 31c7 0 7 11 0 11" fill="none" stroke="#c9ccd1" stroke-width="3"/><path d="M22 29h20l-2 17H24z" fill="#c9ccd1" stroke="#6f7b88" stroke-width="1.5"/>
@@ -74,7 +80,7 @@ const ART = {
 // kind: count — штуки, km — километры, dur — минуты. repeat — без ступеней, даётся каждый раз, показываем «×N».
 const kmText = (v) => `${Math.round(v).toLocaleString('ru-RU')} км`;
 const hText = (min) => `${Math.floor(min / 60).toLocaleString('ru-RU')} ч`;
-export const AWARD_GROUPS = [['trips', 'Поездки'], ['km', 'Путь'], ['time', 'Время'], ['holidays', 'Праздники']];
+export const AWARD_GROUPS = [['trips', 'Поездки'], ['km', 'Путь'], ['time', 'Время'], ['holidays', 'Праздники'], ['special', 'Особые']];
 export const AWARDS = [
   { id: 'first', g: 'trips', art: 'key', color: 'special', name: 'Добро пожаловать в кабину', how: 'Первая записанная поездка', fun: 'Ключ от кабины ваш. Дальше — только вперёд.', key: 'trips', goals: [1], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
   { id: 'trips', g: 'trips', art: ['s50', 's300', 's1000'], name: 'Маршрутные листы', how: 'Записанные поездки', fun: 'Маршрутными листами уже можно обклеить кабину.', key: 'trips', goals: [50, 300, 1000], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
@@ -92,6 +98,8 @@ export const AWARDS = [
   { id: 'pass', g: 'time', art: 'case', name: 'Профессиональный пассажир', how: 'Следования пассажиром', fun: 'Проводники здороваются первыми.', key: 'pass', goals: [20, 100, 300], unit: (n) => plural(n, 'следование', 'следования', 'следований') },
   { id: 'newyear', g: 'holidays', art: 'tree', color: 'repeat', name: 'Дед Мороз', how: 'Встретить Новый год в поездке. Даётся за каждый такой Новый год.', fun: 'С праздником, коллега!', key: 'newyear', repeat: true, goals: [1] },
   { id: 'holiday', g: 'holidays', art: 'party', color: 'repeat', name: 'Праздник в кабине', how: 'Работа в официальный праздничный день. Даётся за каждый такой день.', fun: 'Пока все отдыхали, вы работали.', key: 'holiday', repeat: true, goals: [1] },
+  // 2.19.4, просьба Никиты: за аккаунт CABINA. flag — «да или нет», без счёта и полоски прогресса
+  { id: 'account', g: 'special', art: 'pass', color: 'special', name: 'Свой человек', how: 'Создать аккаунт CABINA. Сейчас — по приглашению.', fun: 'Пропуск выдан — добро пожаловать в команду!', key: 'account', flag: true, goals: [1] },
 ];
 export const MEDALS_TOTAL = AWARDS.reduce((s, a) => s + a.goals.length, 0);
 
@@ -123,7 +131,7 @@ export function computeAwards(trips = S.trips) {
     .sort((a, b) => a.st.end - b.st.end);
   const routes = new Map(S.routes.map((r) => [r.id, r]));
   const cfg = myPay();
-  const c = { trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
+  const c = { account: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
   const aw = Object.fromEntries(AWARDS.map((a) => [a.id, { tier: 0, n: 0, days: [], last: null }]));
   const locos = new Set(); const years = new Set(); const hdays = new Set();
   const months = {}; const monthTrips = {}; const byRoute = new Map();
@@ -181,6 +189,10 @@ export function computeAwards(trips = S.trips) {
     }
     check(day);
   }
+  // «Свой человек»: отметка в телефоне (profile.accountAward — день получения), с сервера ничего не берём.
+  // Из резервной копии — непроверенное, поэтому только строка-дата.
+  const acc = S.profile?.accountAward;
+  if (typeof acc === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(acc)) { c.account = 1; Object.assign(aw.account, { tier: 1, days: [acc] }); }
   // рекорд «самая быстрая»: по маршруту, где хотя бы 3 поездки, — та, что короче всех относительно обычной (медианы)
   for (const { list, sorted } of byRoute.values()) {
     if (list.length < FAST_MIN_TRIPS) continue;
@@ -193,6 +205,14 @@ export function computeAwards(trips = S.trips) {
   return { c, aw, records: rec };
 }
 const medalsOf = (aw) => AWARDS.reduce((s, a) => s + aw[a.id].tier, 0);
+
+// Отметить «Свой человек», когда в телефоне есть вход в аккаунт. Хранится только день; на сервер не уходит.
+// После выхода или удаления аккаунта награда остаётся: отзыв согласия ничем не наказывается (152-ФЗ, ст. 9).
+export async function grantAccountAward(day) {
+  if (S.profile?.accountAward || !/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return false;
+  await saveProfile({ accountAward: day });
+  return true;
+}
 
 // Что изменилось после сохранения: новые ступени, повторы («×N») и новый рекорд «самая долгая поездка»
 export function awardSnapshot() {
@@ -290,7 +310,7 @@ export function renderAwards() {
   const { aw, records } = computeAwards();
   const n = medalsOf(aw);
   return `${pageHead('Награды', { back: true })}
-    <p class="lead-hint">Получено ${n} из ${MEDALS_TOTAL}. У наград со ступенями — бронза, серебро и золото. Остальные можно получать снова и снова: «×3» — сколько раз. Считаются по вашим поездкам в этом телефоне, никуда не отправляются.</p>
+    <p class="lead-hint">Получено ${n} из ${MEDALS_TOTAL}. У наград со ступенями — бронза, серебро и золото. Остальные можно получать снова и снова: «×3» — сколько раз. Считаются в этом телефоне по вашим записям, никуда не отправляются.</p>
     ${recordsRowHtml(records)}
     ${AWARD_GROUPS.map(([g, title]) => `<div class="group"><div class="group-title">${title}</div><div class="aw-grid">
       ${AWARDS.filter((a) => a.g === g).map((a) => `<button class="aw ${aw[a.id].tier ? '' : 'locked'}" data-act="aw-open" data-id="${a.id}" aria-label="${esc(awardLabel(a, aw[a.id]))}">${pic(a, aw[a.id], 64)}<span class="aw-name">${esc(a.name)}</span>${pips(a, aw[a.id])}</button>`).join('')}
@@ -298,7 +318,7 @@ export function renderAwards() {
 }
 
 function progressHtml(a, s, c) {
-  if (a.repeat || s.tier >= a.goals.length) return '';
+  if (a.repeat || a.flag || s.tier >= a.goals.length) return '';
   const v = c[a.key] || 0;
   const goal = a.goals[s.tier];
   const pct = Math.min(100, (v / goal) * 100);
