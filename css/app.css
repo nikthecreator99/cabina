@@ -1243,3 +1243,13 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 .sel-mode > .trip { grid-template-columns: 24px 44px minmax(0, 1fr) auto; gap: 10px; }
 .still .sel-bar { animation: none; }
 @media (max-width: 360px) { .sel-bar .btn-primary svg { display: none; } .sel-bar .btn-primary { padding-inline: 14px; } .sel-bar .link-btn { padding: 0 6px; } }
+
+/* 2.19.1: профиль — строка «Мои коллеги», экран «Коллеги» по статусам, рекорды отдельным экраном */
+.col-badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: #c4262c; color: #fff; font-size: 12.5px; font-weight: 800;
+  display: inline-grid; place-items: center; flex: none; font-variant-numeric: tabular-nums; }
+#col-sec .search { margin-bottom: 4px; }
+#col-sec .col-offers + .search { margin-top: 14px; }
+#col-sec .col-search { margin-top: 14px; }
+.col-gt { margin-top: 14px; }
+.col-gt .hint { font-weight: 600; }
+.aw-rec-panel { margin-top: 10px; }

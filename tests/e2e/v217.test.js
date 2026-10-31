@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
-import { ME, ANNA, ready } from './mock-colleagues.js';
+import { ME, ANNA, ready, openTeam } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -31,12 +31,12 @@ async function drag(page, { x = 195, y0 = 200, y1 = 420, dx = 0, steps = 12, rel
 const statusReads = (srv) => srv.log.filter((r) => r.path === '/rest/v1/statuses').length;
 const two = { consents: [{ document: 'privacy-2', withdrawn_at: null }], links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }] };
 
-test('свайп вниз в профиле — свежий статус коллеги без перезапуска; короткий свайп и свайп вбок не обновляют', async () => {
+test('свайп вниз у коллег — свежий статус коллеги без перезапуска; короткий свайп и свайп вбок не обновляют', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, two, (db) => {
     db.statuses[ANNA] = { kind: 'trip', place: 'Сосновка', dest: 'Ольховка', part: 'morning', until_at: null, after_kind: null, updated_at: '2026-10-20T06:10:00Z' };
   });
-  await tab(page, 'profile');
+  await openTeam(page);
   await page.locator('#col-list').waitFor();
   assert.match(await text(page, '#col-list'), /Сосновка → Ольховка/);
   // коллега вернулась домой — на сервере уже новый статус

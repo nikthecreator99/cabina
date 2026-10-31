@@ -112,7 +112,7 @@ test('профиль: статус по порядку — в пути, на о�
   await seed(page, { trips: [{ id: 'a', start: '2026-10-19T04:00', end: '2026-10-19T10:00', restType: 'home', homeChoice: 'queue' }] });
   await tab(page, 'profile');
   assert.match(await text(page, '#pr-status'), /Между поездками/);
-  assert.match(await text(page, '.profile-tiles'), /1\s+поездка в октябре/);
+  assert.equal(await page.locator('.profile-tiles').count(), 0, 'свои часы и поездки в профиле не показываем (2.19.1)');
   await seed(page, { trips: [{ id: 'b', start: '2026-10-19T22:00', end: '2026-10-20T06:00', restType: 'home', homeChoice: 'dayOff', dayOffMin: 3600 }] });
   await tab(page, 'profile');
   assert.match(await text(page, '#pr-status'), /На выходном\s*до 22 окт, 18:00/);

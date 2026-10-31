@@ -26,14 +26,14 @@ import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml 
 import { medReminder, medBannerHtml, medClick } from './med.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml } from './account.js';
 import { consumeAuthRedirect, touch, session } from './auth.js';
-import { initColleagues, colleaguesHtml, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
+import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
-import { renderAwards, openAward } from './awards.js';
+import { renderAwards, renderRecords, openAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 
-export const VERSION = '2.19.0';
+export const VERSION = '2.19.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null };
@@ -475,7 +475,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues };
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
 let tabFace = { key: null, icon: null };
 function renderTabbar() {
@@ -533,6 +533,7 @@ function go(name) {
   if (name === 'settings') refreshStorage().then(() => page() === 'settings' && rerender());
   if (name === 'account') accountEnter().then(() => page() === 'account' && rerender());
   if (name === 'colleagues') setTimeout(() => app.querySelector('#col-name:placeholder-shown')?.focus(), 50);
+  if (name === 'team') teamReset();
   V.pages.push(name);
   render();
   window.scrollTo(0, 0);
@@ -558,16 +559,17 @@ function scheduleTours() {
     else if (p === 'avatar') { avatarTour(); avatarCharsTour(); }
     else if (p === 'career') careerTour();
     else if (p === 'colleagues') { if (app.querySelector('#col-form')) colleaguesPageTour(); }
+    else if (p === 'team') { if (app.querySelector('#col-list')) pullTour(); }
     else if (p) return;
     else if (V.tab === 'home') { homeTour(); searchTour(); tabsTour(); if (app.querySelector('.rest-banner.pending')) pendingTour(); if (app.querySelector('.swipe')) swipeTour(); if (app.querySelector('.swipe > .trip:not(.is-live)')) shareTour(); if (app.querySelector('.hero-pay .eye-btn')) moneyTour(flipOn()); }
     else if (V.tab === 'extra') (V.extra === 'docs' ? docsTour() : V.extra === 'notes' ? notesTour() : V.extra === 'fix' ? fixTour() : V.extra ? null : (extraTour(), phonesTileTour(), fixTileTour()));
-    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('#pr-awards')) awardsTour(); if (app.querySelector('.col-search')) colleaguesTour(); if (app.querySelector('#col-list')) pullTour(); }
+    else if (V.tab === 'profile') { profileTour(); if (app.querySelector('#pr-awards')) awardsTour(); if (app.querySelector('#col-entry')) colleaguesTour(); }
   }, 500);
 }
 export { scheduleTours };
 // Изменения данных: поле поиска не перерисовываем, чтобы не сбивать набор текста
 onChange(() => rerender());
-initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.length) || ['colleagues', 'privacy', 'account'].includes(page()) });
+initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.length) || ['team', 'colleagues', 'privacy', 'account'].includes(page()) });
 
 function openTariffsPage() { go('work'); V.pages.push('tariffs'); render(); }
 setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => (document.getElementById(id) || document.getElementById('pay-avg'))?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });

@@ -36,7 +36,6 @@ test('явка заранее: «Ждёт явки», «До явки остал
   assert.match(await text(page, '.hero'), /0ч00мин/);
   await tab(page, 'profile');
   assert.match(await text(page, '#pr-status'), /Скоро явка/);
-  assert.match(await text(page, '.profile-tiles'), /0\s+поездок в октябре/, 'до явки поездка в счёт не идёт');
   // вторая открытая поездка невозможна, а явка дальше 3 суток — ошибка
   await tab(page, 'home');
   await page.locator('.trip').first().click();

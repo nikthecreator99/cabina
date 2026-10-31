@@ -1,6 +1,6 @@
 // Награды и рекорды (2.19, просьба Никиты): считаются в телефоне по записанным поездкам, никуда не отправляются.
-// Ступени — бронза, серебро, золото: собирать долго, не за пару месяцев. Что может повториться (Новый год в поездке,
-// поездка от 12 часов…), — со счётчиком «×N»: награда даётся каждый раз. Закрытые — тёмные силуэты.
+// Два вида (со слов Никиты): со ступенями — бронза, серебро, золото, собирать долго; и повторяемые — без ступеней,
+// даются каждый раз и копятся счётчиком «×N» (Новый год в поездке, поездка от 12 часов…). Закрытые — тёмные силуэты.
 // Награда — состояние, а не запись: её всегда можно пересчитать из поездок (в резервную копию отдельно не попадает).
 import { S, statsOf, isLive, myPay, routeOf, locoKey, normNum } from './store.js';
 import { parseLocal, MIN, DAY, monthKeyOf, dateKeyOf, fmtDur } from './calc.js';
@@ -18,7 +18,7 @@ const H = 60;
 // ---- рисунки: 64×64, круг-медаль цвета ступени и картинка поверх ----
 export const TIER_NAMES = ['Бронза', 'Серебро', 'Золото'];
 const TIER_KEYS = ['bronze', 'silver', 'gold'];
-const TIER = { bronze: ['#b8733d', '#7d4a22'], silver: ['#9ea9b5', '#66727f'], gold: ['#e6b325', '#a67a0c'], special: ['#4f8fe6', '#2a5ea8'], legend: ['#7fd3e6', '#3d8fa3'] };
+const TIER = { bronze: ['#b8733d', '#7d4a22'], silver: ['#9ea9b5', '#66727f'], gold: ['#e6b325', '#a67a0c'], special: ['#4f8fe6', '#2a5ea8'], repeat: ['#7c5cd6', '#4f35a3'], legend: ['#7fd3e6', '#3d8fa3'] };
 const txt = (x, y, s, size = 9, fill = '#222') => `<text x="${x}" y="${y}" text-anchor="middle" font-family="Onest, sans-serif" font-size="${size}" font-weight="800" fill="${fill}">${s}</text>`;
 const ties = (y, x0, x1, step = 6) => { let s = ''; for (let x = x0; x <= x1; x += step) s += `<rect x="${x}" y="${y}" width="3" height="3" rx=".6" fill="#fff" opacity=".75"/>`; return s; };
 const sheets = (n) => `<rect x="19" y="15" width="22" height="29" rx="2.5" fill="#fff" opacity=".55" transform="rotate(-9 30 30)"/>
@@ -71,27 +71,27 @@ const ART = {
 
 // ---- список наград ----
 // goals — ступени: три (бронза, серебро, золото) или одна (особая награда, цвет color).
-// kind: count — штуки, km — километры, dur — минуты. repeat — даётся каждый раз, показываем «×N».
+// kind: count — штуки, km — километры, dur — минуты. repeat — без ступеней, даётся каждый раз, показываем «×N».
 const kmText = (v) => `${Math.round(v).toLocaleString('ru-RU')} км`;
 const hText = (min) => `${Math.floor(min / 60).toLocaleString('ru-RU')} ч`;
 export const AWARD_GROUPS = [['trips', 'Поездки'], ['km', 'Путь'], ['time', 'Время'], ['holidays', 'Праздники']];
 export const AWARDS = [
   { id: 'first', g: 'trips', art: 'key', color: 'special', name: 'Добро пожаловать в кабину', how: 'Первая записанная поездка', fun: 'Ключ от кабины ваш. Дальше — только вперёд.', key: 'trips', goals: [1], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
   { id: 'trips', g: 'trips', art: ['s50', 's300', 's1000'], name: 'Маршрутные листы', how: 'Записанные поездки', fun: 'Маршрутными листами уже можно обклеить кабину.', key: 'trips', goals: [50, 300, 1000], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
-  { id: 'iron', g: 'trips', art: 'iron', name: 'Железная пятая точка', how: 'Поездка 12 часов и дольше. Даётся за каждую такую поездку.', fun: '12 часов в кресле машиниста — тут любая точка станет железной.', key: 'iron', repeat: true, goals: [1, 10, 30] },
-  { id: 'rocket', g: 'trips', art: 'rocket', name: 'Ракета', how: 'Поездка на 15% быстрее обычного по этому маршруту (когда по нему уже есть 3 поездки). Даётся каждый раз.', fun: 'Пролетели участок быстрее обычного.', key: 'rocket', repeat: true, goals: [1, 10, 30] },
-  { id: 'heavy', g: 'trips', art: 'weight', name: 'Тяжеловес', how: 'Поезд тяжелее или длиннее нормы участка (норма — в маршруте). Даётся за каждый такой поезд.', fun: 'Локомотив кряхтел, но вёз.', key: 'heavy', repeat: true, goals: [1, 30, 100] },
+  { id: 'iron', g: 'trips', art: 'iron', color: 'repeat', name: 'Железная пятая точка', how: 'Поездка 12 часов и дольше. Даётся за каждую такую поездку.', fun: '12 часов в кресле машиниста — тут любая точка станет железной.', key: 'iron', repeat: true, goals: [1] },
+  { id: 'rocket', g: 'trips', art: 'rocket', color: 'repeat', name: 'Ракета', how: 'Поездка на 15% быстрее обычного по этому маршруту (когда по нему уже есть 3 поездки). Даётся каждый раз.', fun: 'Пролетели участок быстрее обычного.', key: 'rocket', repeat: true, goals: [1] },
+  { id: 'heavy', g: 'trips', art: 'weight', name: 'Тяжеловес', how: 'Поезда тяжелее или длиннее нормы участка (норма — в маршруте)', fun: 'Локомотив кряхтел, но вёз.', key: 'heavy', goals: [10, 50, 200], unit: (n) => plural(n, 'поезд', 'поезда', 'поездов') },
   { id: 'loco', g: 'trips', art: 'loco', name: 'Знаток техники', how: 'Разные локомотивы — по серии и номеру', fun: 'У каждого локомотива свой характер, и вы с ними знакомы.', key: 'locos', goals: [10, 50, 150], unit: (n) => plural(n, 'локомотив', 'локомотива', 'локомотивов') },
   { id: 'km', g: 'km', art: ['k10', 'earth', 'k100'], name: 'Вёрсты', how: 'Пройденный путь по расстояниям маршрутов', fun: 'Километр к километру — и вот уже тысячи.', key: 'km', kind: 'km', goals: [10000, 40075, 100000], notes: ['', 'вокруг Земли', ''] },
   { id: 'moon', g: 'km', art: 'moon', color: 'legend', name: 'До Луны', how: '384 400 км — среднее расстояние до Луны', fun: 'Приехали! Дальше рельсы не проложены.', key: 'km', kind: 'km', goals: [384400] },
   { id: 'hours', g: 'time', art: 'tea', name: 'Часы в кабине', how: 'Всё отработанное время', fun: 'Чай в подстаканнике — лучший напарник.', key: 'work', kind: 'dur', goals: [500 * H, 2000 * H, 10000 * H] },
   { id: 'owl', g: 'time', art: 'owl', name: 'Ночная сова', how: 'Ночные часы — с 22:00 до 6:00', fun: 'Совы завидуют.', key: 'night', kind: 'dur', goals: [100 * H, 500 * H, 1000 * H] },
   { id: 'lark', g: 'time', art: 'lark', name: 'Жаворонок', how: 'Явки с 3 до 6 утра', fun: 'Будильник вас боится.', key: 'lark', goals: [10, 50, 150], unit: (n) => plural(n, 'явка', 'явки', 'явок') },
-  { id: 'cabin', g: 'time', art: 'cal', name: 'Живу в кабине', how: 'Месяц, в котором 200 часов работы и больше. Даётся за каждый такой месяц.', fun: 'Дома спрашивают, кто это.', key: 'cabin', repeat: true, goals: [1, 6, 12] },
-  { id: 'wait', g: 'time', art: 'sand', name: 'Ждём-с', how: 'Ожидание следования 4 часа и дольше за одну поездку. Даётся каждый раз.', fun: 'Терпение — железное.', key: 'wait', repeat: true, goals: [1, 10, 30] },
+  { id: 'cabin', g: 'time', art: 'cal', color: 'repeat', name: 'Живу в кабине', how: 'Месяц, в котором 200 часов работы и больше. Даётся за каждый такой месяц.', fun: 'Дома спрашивают, кто это.', key: 'cabin', repeat: true, goals: [1] },
+  { id: 'wait', g: 'time', art: 'sand', color: 'repeat', name: 'Ждём-с', how: 'Ожидание следования 4 часа и дольше за одну поездку. Даётся каждый раз.', fun: 'Терпение — железное.', key: 'wait', repeat: true, goals: [1] },
   { id: 'pass', g: 'time', art: 'case', name: 'Профессиональный пассажир', how: 'Следования пассажиром', fun: 'Проводники здороваются первыми.', key: 'pass', goals: [20, 100, 300], unit: (n) => plural(n, 'следование', 'следования', 'следований') },
-  { id: 'newyear', g: 'holidays', art: 'tree', name: 'Дед Мороз', how: 'Встретить Новый год в поездке. Даётся за каждый такой Новый год.', fun: 'С праздником, коллега!', key: 'newyear', repeat: true, goals: [1, 3, 5] },
-  { id: 'holiday', g: 'holidays', art: 'party', name: 'Праздник в кабине', how: 'Работа в официальный праздничный день. Даётся за каждый такой день.', fun: 'Пока все отдыхали, вы работали.', key: 'holiday', repeat: true, goals: [1, 10, 30] },
+  { id: 'newyear', g: 'holidays', art: 'tree', color: 'repeat', name: 'Дед Мороз', how: 'Встретить Новый год в поездке. Даётся за каждый такой Новый год.', fun: 'С праздником, коллега!', key: 'newyear', repeat: true, goals: [1] },
+  { id: 'holiday', g: 'holidays', art: 'party', color: 'repeat', name: 'Праздник в кабине', how: 'Работа в официальный праздничный день. Даётся за каждый такой день.', fun: 'Пока все отдыхали, вы работали.', key: 'holiday', repeat: true, goals: [1] },
 ];
 export const MEDALS_TOTAL = AWARDS.reduce((s, a) => s + a.goals.length, 0);
 
@@ -250,12 +250,13 @@ const order = (aw) => [...AWARDS].sort((a, b) => (aw[b.id].tier > 0) - (aw[a.id]
   || (aw[b.id].last || aw[b.id].days.at(-1) || '').localeCompare(aw[a.id].last || aw[a.id].days.at(-1) || ''));
 export function awardsStripHtml() {
   if (!S.trips.length) return '';
-  const { aw } = computeAwards();
+  const { aw, records } = computeAwards();
   const n = medalsOf(aw);
   const shown = order(aw).slice(0, 6);
   return `<div class="group" id="pr-awards"><div class="group-title">Награды <span class="hint">${n} из ${MEDALS_TOTAL}</span></div>
     <button class="panel aw-strip" data-act="go" data-page="awards" aria-label="Все награды: получено ${n} из ${MEDALS_TOTAL}">
-      ${shown.map((a) => `<span class="aw-mini ${aw[a.id].tier ? '' : 'locked'}">${pic(a, aw[a.id], 44)}</span>`).join('')}<span class="chev">${small(I.right, 18)}</span></button></div>`;
+      ${shown.map((a) => `<span class="aw-mini ${aw[a.id].tier ? '' : 'locked'}">${pic(a, aw[a.id], 44)}</span>`).join('')}<span class="chev">${small(I.right, 18)}</span></button>
+    ${recordsRowHtml(records, 'pr-records')}</div>`;
 }
 
 // ---- экран «Награды» ----
@@ -269,23 +270,36 @@ function recordsHtml(rec) {
   if (rec.monthHours) rows.push(['Больше всего часов за месяц', fmtDur(rec.monthHours.min, { short: true }), monthName(rec.monthHours.mk)]);
   if (rec.monthTrips) rows.push(['Больше всего поездок за месяц', `${rec.monthTrips.n}`, monthName(rec.monthTrips.mk)]);
   if (!rows.length) return '';
-  return `<div class="group" id="aw-records"><div class="group-title">Рекорды</div><div class="panel">
+  return `<div class="panel" id="aw-records">
     ${rows.map(([t, v, sub]) => `<div class="row"><span class="ico" style="--c:var(--warn)">${I.medal}</span><div class="grow"><div class="t1">${esc(t)}</div><div class="t2">${esc(sub)}</div></div><b class="num">${esc(v)}</b></div>`).join('')}
-  </div></div>`;
+  </div>`;
+}
+// Строка «Рекорды» — открывает экран с рекордами (в профиле и на экране наград)
+function recordsRowHtml(rec, id = 'aw-rec-row') {
+  if (!rec.longest) return '';
+  return `<div class="panel aw-rec-panel"><button class="row" data-act="go" data-page="records" id="${id}"><span class="ico" style="--c:var(--warn)">${I.medal}</span>
+    <div class="grow"><div class="t1">Рекорды</div><div class="t2">Самая долгая поездка — ${esc(fmtDur(rec.longest.min))}</div></div>${small(I.right, 18)}</button></div>`;
+}
+export function renderRecords() {
+  const { records } = computeAwards();
+  const body = recordsHtml(records);
+  return `${pageHead('Рекорды', { back: true })}
+    ${body || `<div class="empty"><div class="em-ico">${I.medal}</div><b>Рекордов пока нет</b><p>Они появятся после первой законченной поездки.</p></div>`}
+    ${body ? '<p class="lead-hint">Самая быстрая — по сравнению с обычным временем по этому маршруту, когда по нему есть хотя бы 3 поездки.</p>' : ''}`;
 }
 export function renderAwards() {
   const { aw, records } = computeAwards();
   const n = medalsOf(aw);
   return `${pageHead('Награды', { back: true })}
-    <p class="lead-hint">Получено ${n} из ${MEDALS_TOTAL}: у большинства наград три ступени — бронза, серебро и золото. Считаются по вашим поездкам в этом телефоне, никуда не отправляются.</p>
-    ${recordsHtml(records)}
+    <p class="lead-hint">Получено ${n} из ${MEDALS_TOTAL}. У наград со ступенями — бронза, серебро и золото. Остальные можно получать снова и снова: «×3» — сколько раз. Считаются по вашим поездкам в этом телефоне, никуда не отправляются.</p>
+    ${recordsRowHtml(records)}
     ${AWARD_GROUPS.map(([g, title]) => `<div class="group"><div class="group-title">${title}</div><div class="aw-grid">
       ${AWARDS.filter((a) => a.g === g).map((a) => `<button class="aw ${aw[a.id].tier ? '' : 'locked'}" data-act="aw-open" data-id="${a.id}" aria-label="${esc(awardLabel(a, aw[a.id]))}">${pic(a, aw[a.id], 64)}<span class="aw-name">${esc(a.name)}</span>${pips(a, aw[a.id])}</button>`).join('')}
     </div></div>`).join('')}`;
 }
 
 function progressHtml(a, s, c) {
-  if (s.tier >= a.goals.length) return '';
+  if (a.repeat || s.tier >= a.goals.length) return '';
   const v = c[a.key] || 0;
   const goal = a.goals[s.tier];
   const pct = Math.min(100, (v / goal) * 100);
@@ -317,7 +331,7 @@ export function openAward(id) {
       ${got ? `<p class="aw-fun">${esc(a.fun)}</p>` : ''}
       ${gotLine ? `<p class="ok-line">${gotLine}</p>` : ''}
       ${tiersHtml(a, s)}${progressHtml(a, s, c)}${done}
-      ${!got && a.goals.length === 1 ? '<p class="t2">Пока не получена.</p>' : ''}
+      ${!got && a.goals.length === 1 ? `<p class="t2">${a.repeat ? 'Пока не получали.' : 'Пока не получена.'}</p>` : ''}
       ${kmHint}</div>`,
   }));
   return el;

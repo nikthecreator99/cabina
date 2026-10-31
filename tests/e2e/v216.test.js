@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, waitNoLayers, seed } from './helpers.js';
-import { ME, ANNA, OLEG, ready, openPrivacy, chooseAccess } from './mock-colleagues.js';
+import { ME, ANNA, OLEG, ready, openPrivacy, chooseAccess, openTeam } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -22,15 +22,18 @@ const two = {
 };
 const meCard = (db) => { db.cards[ME] = { user_id: ME, name: 'Иван Тестовый', role: 'assistant', depot: null, avatar: null, searchable: false }; };
 
-test('Настройки аккаунта — вверху Настроек; в профиле только поиск и коллеги; в поиске нет «Другая»', async () => {
+test('Настройки аккаунта — вверху Настроек; в профиле строка «Мои коллеги», у коллег поиск и список; в поиске нет «Другая»', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, two, meCard);
   await tab(page, 'profile');
+  await page.locator('#col-entry').getByText('2 коллеги').waitFor();
+  assert.equal(await page.locator('.screen [data-page=account]').count(), 0, 'строки аккаунта в профиле нет');
+  await page.locator('#col-entry').click();
   const sec = page.locator('#col-sec');
   await sec.locator('#col-list').waitFor();
-  assert.match(await sec.innerText(), /Коллеги[\s\S]*Найти коллегу[\s\S]*Анна Тестовая[\s\S]*Олег Пробный/i);
-  assert.equal(await sec.locator('.switch, [data-act=col-leave]').count(), 0, 'переключателей и «Выйти» в профиле нет');
-  assert.equal(await page.locator('.screen [data-page=account]').count(), 0, 'строки аккаунта в профиле нет');
+  assert.match(await sec.innerText(), /Анна Тестовая[\s\S]*Олег Пробный[\s\S]*Найти нового коллегу/i);
+  assert.equal(await sec.locator('.switch, [data-act=col-leave]').count(), 0, 'переключателей и «Выйти» здесь нет');
+  await page.locator('[data-act=back]').click();
   // Настройки: первая группа — аккаунт
   await page.locator('.screen [data-page=settings]').click();
   const first = page.locator('.screen .group').first();
@@ -40,8 +43,7 @@ test('Настройки аккаунта — вверху Настроек; в 
   await acc.locator('#acc-col').waitFor();
   assert.match(await acc.innerText(), /Настройки аккаунта[\s\S]*Коллеги[\s\S]*Приватность[\s\S]*Выйти из «Коллег»[\s\S]*Мои данные/i);
   // поиск: должность — любая, машинист или помощник
-  await page.locator('[data-act=back]').click();
-  await page.locator('[data-act=back]').click();
+  await openTeam(page);
   await page.locator('.col-search').click();
   assert.deepEqual(await page.locator('[data-act=col-role]').allInnerTexts(), ['Любая', 'Машинист', 'Помощник']);
   assert.deepEqual(realErrors(errors), []);
@@ -80,7 +82,7 @@ test('Приватность: статус только выбранным; ок
   await waitNoLayers(page);
 
   // окно Олега: статус выключен, «где я» недоступно
-  await tab(page, 'profile');
+  await openTeam(page);
   await page.locator(`[data-act=col-open][data-id="${OLEG}"]`).click();
   const w = sheet(page);
   assert.match(await w.innerText(), /Что видит Олег Пробный[\s\S]*Мой статус[\s\S]*Где я[\s\S]*Сначала включите статус/i);
@@ -110,7 +112,7 @@ test('Приватность: статус только выбранным; ок
   await chooseAccess(page, 'status', 'all');
   await toastHas(page, /Сохранено/);
   assert.match(await page.locator('#pv-access').innerText(), /Видят: Все коллеги/);
-  await tab(page, 'profile');
+  await openTeam(page);
   await page.locator(`[data-act=col-open][data-id="${OLEG}"]`).click();
   await sheet(page).locator('[data-item=status]').click();
   await until(() => srv.calls('set_access').some((c) => c.body.p_item === 'status' && !c.body.p_all && c.body.p_ids?.length === 1 && c.body.p_ids[0] === ANNA), '«все» без Олега');
@@ -135,7 +137,7 @@ test('статус включён, а показывать некому (выб�
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, two, meCard);
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveProfile({ privacy: { ...(s.S.profile.privacy || {}), status: true } }); });
-  await tab(page, 'profile');
+  await openTeam(page);
   await page.locator('#col-list').waitFor();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.privacy.status === false);
   assert.equal(srv.calls('set_status').length, 0, 'статус не ушёл');
@@ -183,8 +185,9 @@ test('сервер ещё без шага 3 (миграция 0003): «Колл�
   // статус был включён в 2.15
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveProfile({ privacy: { ...(s.S.profile.privacy || {}), status: true } }); });
   await page.reload(); await page.waitForSelector('.screen');
-  await tab(page, 'profile');
+  await openTeam(page);
   await page.locator('#col-sec').getByText(/ещё не включён/).waitFor();
+  await tab(page, 'profile');
   await page.locator('.screen [data-page=settings]').click();
   await page.locator('.screen [data-page=account]').click();
   await page.locator('.screen [data-page=privacy]').click();
@@ -214,7 +217,7 @@ test('Приватность и выбор коллег — на 320 px в об�
     assert.ok(await fits(), `выбор коллег, ${theme}`);
     await sheet(page).locator('button[data-close]').first().click();
     await waitNoLayers(page);
-    await tab(page, 'profile');
+    await openTeam(page);
     await page.locator(`[data-act=col-open][data-id="${ANNA}"]`).click();
     assert.ok(await fits(), `окно коллеги, ${theme}`);
     const sw = await sheet(page).locator('[data-item=status]').boundingBox();

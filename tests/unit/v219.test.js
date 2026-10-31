@@ -42,7 +42,7 @@ test('награды: первая поездка, «Железная пятая
   const { aw, c, records } = computeAwards();
   assert.deepEqual(aw.first.days, ['2026-10-01']);
   assert.equal(aw.iron.n, 2, '12 ч 30 мин и ровно 12 ч');
-  assert.equal(aw.iron.tier, 1, 'бронза с первой, серебро — с 10-й');
+  assert.equal(aw.iron.tier, 1, 'повторяемая: без ступеней, есть с первой поездки');
   assert.deepEqual(aw.iron.days, ['2026-10-03']);
   assert.equal(aw.iron.last, '2026-10-07');
   assert.equal(c.km, 16000);
@@ -66,7 +66,7 @@ test('награды: ночная сова, часы, разные локомо
   assert.equal(aw.cabin.n, 1, 'в октябре ровно 200 ч');
   assert.equal(aw.cabin.tier, 1);
   assert.equal(aw.newyear.n, 3);
-  assert.equal(aw.newyear.tier, 2, 'три Новых года — серебро, пять — золото');
+  assert.equal(aw.newyear.tier, 1, 'повторяемая — без ступеней, только счётчик');
   assert.equal(aw.holiday.n, 3, 'три разных 1 января');
   assert.equal(aw.hours.tier, 0, '230 ч — до 500 ещё далеко');
 });
@@ -85,7 +85,9 @@ test('награды: «Ракета» — каждый раз, когда бы�
   assert.equal(aw.rocket.n, 4, '6 ч против обычных 10 ч, потом обычное сползает к 6 ч');
   assert.deepEqual(aw.rocket.days, [day(4)]);
   assert.equal(aw.wait.n, 1, 'ожидание 4 ч 10 мин');
-  assert.equal(aw.heavy.n, 1, '6100 т при норме 5199 т');
+  assert.equal(c.heavy, 1, '6100 т при норме 5199 т');
+  assert.equal(aw.heavy.tier, 0, 'тяжеловес — со ступенями: бронза с 10 поездов, без «×N»');
+  assert.equal(aw.heavy.n, 0);
   assert.equal(c.pass, 1);
   assert.equal(aw.pass.tier, 0);
   assert.equal(c.km, 0);
@@ -110,12 +112,13 @@ test('поздравление: новая ступень — окном, пов
   assert.equal(news2.record, 0, '12 ч 30 мин короче 13 ч');
 });
 
-test('награды: у каждой три ступени по возрастанию или одна особая, рисунки есть для всех ступеней', () => {
+test('награды: три ступени по возрастанию — без счётчика; повторяемые — одна, со счётчиком; рисунки для всех ступеней', () => {
   assert.equal(new Set(AWARDS.map((a) => a.id)).size, AWARDS.length, 'id наград не повторяются');
   for (const a of AWARDS) {
     assert.ok(a.goals.length === 3 || (a.goals.length === 1 && a.color), a.id);
     for (let i = 1; i < a.goals.length; i++) assert.ok(a.goals[i] > a.goals[i - 1], a.id);
-    if (a.repeat) assert.equal(a.goals[0], 1, `${a.id}: повторяемая — бронза с первого раза`);
+    if (a.repeat) assert.deepEqual(a.goals, [1], `${a.id}: повторяемая — без ступеней (просьба Никиты), только «×N»`);
+    if (a.goals.length === 3) assert.ok(!a.repeat, `${a.id}: у наград со ступенями счётчика нет`);
     for (let t = 0; t <= a.goals.length; t++) {
       const svg = awardArt(a.id, 64, t);
       assert.match(svg, /^<svg/);
@@ -223,4 +226,26 @@ test('QR-код: 20 поездок в одной ссылке помещаютс
   const { items } = await decodeShare(codeFrom(url), NOW);
   assert.equal(items.length, 20);
   assert.equal(items[19].trip.locoNumber, '1019');
+});
+
+test('2.19.1 «Мои коллеги»: порядок — в пути, на отдыхе, на выходном и на очереди, остальные; поиск по имени и депо', async () => {
+  const { teamGroup, teamMatch, TEAM_GROUPS } = await import('../../js/colleagues.js');
+  const now = Date.parse('2026-10-20T09:00:00Z');
+  const h = 3600e3;
+  assert.deepEqual(TEAM_GROUPS, ['В пути', 'На отдыхе', 'На выходном и на очереди', 'Остальные']);
+  assert.equal(teamGroup({ kind: 'trip' }, now), 0);
+  assert.equal(teamGroup({ kind: 'rest', until: now + h, after: 'wait' }, now), 1);
+  assert.equal(teamGroup({ kind: 'rest', until: now - h, after: 'wait' }, now), 1, 'отдых вышел — ждёт явку в доме отдыха');
+  assert.equal(teamGroup({ kind: 'wait' }, now), 1);
+  assert.equal(teamGroup({ kind: 'dayoff', until: now + h, after: 'between' }, now), 2);
+  assert.equal(teamGroup({ kind: 'dayoff', until: now - h, after: 'between' }, now), 3, 'выходной кончился — между поездками');
+  assert.equal(teamGroup({ kind: 'between', note: 'queue', until: now + h }, now), 2, 'на очереди');
+  assert.equal(teamGroup({ kind: 'between', note: 'full', until: now + h }, now), 2, 'полный отдых');
+  assert.equal(teamGroup({ kind: 'between', note: 'queue', until: now - h }, now), 3);
+  assert.equal(teamGroup({ kind: 'soon' }, now), 3);
+  assert.equal(teamGroup({ kind: 'abs' }, now), 3);
+  assert.equal(teamGroup(null, now), 3, 'статус не показан');
+  const c = { card: { name: 'Пётр Иванов', depot: 'ТД-64' } };
+  for (const q of ['', 'петр', 'ПЁТР ив', 'тд64', 'тд-64', '64', 'td 64', 'иванов тд']) assert.equal(teamMatch(c, q), true, q);
+  for (const q of ['анна', 'тч-13', '65']) assert.equal(teamMatch(c, q), false, q);
 });

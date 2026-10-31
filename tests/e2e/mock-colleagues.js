@@ -132,6 +132,12 @@ export async function ready(context, page, init, tweak) {
 
 
 // Профиль → ⚙ Настройки → «Настройки аккаунта» → «Приватность»
+// С 2.19.1 коллеги — отдельным экраном: Профиль → «Мои коллеги»
+export async function openTeam(page) {
+  await page.locator('.tab[data-tab=profile]').click();
+  await page.locator('#col-entry').click();
+  await page.locator('#col-sec').waitFor();
+}
 export async function openPrivacy(page) {
   await page.locator('.tab[data-tab=profile]').click();
   await page.locator('.screen [data-page=settings]').click();

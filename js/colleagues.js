@@ -229,12 +229,12 @@ export function updatedText(at, nowAbs = Date.now(), off = tzOffset()) {
 // ---------------------------------------------------------------- состояние
 
 const C = { sub: null, snap: null, at: 0, failAt: 0, err: '', loading: null, busy: false,
-  q: { name: '', depot: '', role: '' }, results: null, searching: false };
+  q: { name: '', depot: '', role: '' }, results: null, searching: false, teamQ: '' };
 let hooks = { rerender: () => {}, go: () => {}, active: () => false };
 const SYNC_KEY = 'cabina-colleagues';
 
 function reset(sub) {
-  Object.assign(C, { sub, snap: null, at: 0, failAt: 0, err: '', loading: null, busy: false, q: { name: '', depot: '', role: '' }, results: null, searching: false });
+  Object.assign(C, { sub, snap: null, at: 0, failAt: 0, err: '', loading: null, busy: false, q: { name: '', depot: '', role: '' }, results: null, searching: false, teamQ: '' });
 }
 // Текущий вход; сменился человек или вышел — всё, что знали о коллегах, забываем
 function mine() {
@@ -534,31 +534,90 @@ function sentRow(o) {
     <button class="btn btn-plain btn-sm" data-act="col-cancel" ${idAttr(o.id)} aria-label="Отменить предложение: ${esc(o.card.name)}">Отменить</button></div>`;
 }
 
-function loadingHtml(head) {
+function loadingHtml() {
   const body = C.err
     ? `<div class="grow t2">${esc(C.err === 'server' ? SERVER_OFF : C.err === 'offline' ? 'Нет связи с сервером — коллег покажем, когда появится интернет.' : 'Не удалось загрузить коллег.')}</div><button class="btn btn-plain btn-sm" data-act="col-retry">Повторить</button>`
     : '<div class="grow t2">Загружаем коллег…</div>';
-  return `<div class="group col-sec" id="col-sec">${head}<div class="panel"><div class="row col-row">${body}</div></div></div>`;
+  return `<div class="panel"><div class="row col-row">${body}</div></div>`;
 }
 
-// Раздел «Коллеги» на экране «Профиль». Без аккаунта его нет.
+// Порядок в списке (просьба Никиты, 2.19.1): сверху — в пути, ниже — на отдыхе (и ждут явку в доме отдыха),
+// ещё ниже — на выходном, на очереди и на полном отдыхе, потом все остальные. Внутри — по имени.
+export const TEAM_GROUPS = ['В пути', 'На отдыхе', 'На выходном и на очереди', 'Остальные'];
+export function teamGroup(st, nowAbs = Date.now()) {
+  if (!st) return 3;
+  const kind = st.until != null && st.until <= nowAbs && st.after ? st.after : st.kind;
+  if (kind === 'trip') return 0;
+  if (kind === 'rest' || kind === 'wait') return 1;
+  if (kind === 'dayoff') return 2;
+  if (kind === 'between' && st.kind === 'between' && st.note && st.until != null && st.until > nowAbs) return 2;
+  return 3;
+}
+// Поиск среди своих: по имени и депо, без учёта регистра, «ё» и знаков («тд64» найдёт «ТД-64»)
+const fold = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, '');
+export function teamMatch(c, q) {
+  const words = String(q || '').toLowerCase().replace(/ё/g, 'е').split(/\s+/).map(fold).filter(Boolean);
+  if (!words.length) return true;
+  const hay = `${fold(c.card.name)} ${fold(c.card.depot)} ${fold(normDepot(c.card.depot))}`;
+  const depot = fold(normDepot(q)); // «td 64» → «тд64»
+  return words.every((w) => hay.includes(w)) || (depot.length > 1 && hay.includes(depot));
+}
+function teamListHtml(snap) {
+  const now = Date.now();
+  const list = snap.colleagues.filter((c) => teamMatch(c, C.teamQ));
+  if (!list.length) return `<div class="empty"><div class="em-ico">${I.search}</div><b>Никого не нашли</b><p>Поиск идёт по именам и депо ваших коллег.</p></div>`;
+  const groups = TEAM_GROUPS.map(() => []);
+  for (const c of list) groups[teamGroup(c.status, now)].push(c);
+  const titled = groups.filter((g) => g.length).length > 1;
+  return groups.map((g, i) => (g.length ? `${titled ? `<div class="group-title col-gt">${TEAM_GROUPS[i]} <span class="hint">${g.length}</span></div>` : ''}<div class="panel">${g.map(colleagueRow).join('')}</div>` : '')).join('');
+}
+
+// Строка «Коллеги» на экране «Профиль»: открывает экран со списком. Без аккаунта её нет.
 export function colleaguesHtml() {
   if (!legalReady() || !mine()) return '';
   ensureFresh();
-  const head = '<div class="group-title">Коллеги</div>';
   const snap = C.snap;
-  if (!snap) return loadingHtml(head);
+  let sub = 'Загружаем…'; let badge = '';
+  if (!snap) sub = C.err ? 'Нет связи с сервером' : 'Загружаем…';
+  else if (!snap.consent.main) sub = 'Нужно принять новую редакцию согласия';
+  else {
+    const n = snap.colleagues.length;
+    const onTrip = snap.colleagues.filter((c) => teamGroup(c.status) === 0).length;
+    sub = n ? `${n} ${plural(n, 'коллега', 'коллеги', 'коллег')}${onTrip ? ` · ${onTrip} в пути` : ''}` : 'Пока никого — найдите коллег по имени';
+    const k = snap.incoming.length;
+    if (k) badge = `<span class="col-badge" aria-label="Новых предложений: ${k}">${k}</span>`;
+  }
+  return `<div class="group" id="col-entry-sec"><div class="group-title">Коллеги</div>
+    <div class="panel"><button class="row" data-act="go" data-page="team" id="col-entry"><span class="ico" style="--c:var(--ok)">${I.users}</span>
+      <div class="grow"><div class="t1">Мои коллеги</div><div class="t2">${esc(sub)}</div></div>${badge}${small(I.right, 18)}</button></div></div>`;
+}
+
+export function teamReset() { C.teamQ = ''; }
+
+// Экран «Коллеги»: предложения, поиск среди своих, список по статусам, «Ждут ответа», «Найти нового коллегу»
+export function renderTeam() {
+  const head = pageHead('Коллеги', { back: true });
+  if (!legalReady() || !mine()) {
+    return `${head}<div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Коллеги работают через аккаунт: так предложения и статус доходят только до тех, кого вы добавили.</div></div>
+      <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
+  }
+  ensureFresh();
+  const snap = C.snap;
+  if (!snap) return `${head}<div class="col-sec" id="col-sec">${loadingHtml()}</div>`;
   if (!snap.consent.main) {
-    return `<div class="group col-sec" id="col-sec">${head}
+    return `${head}<div class="col-sec" id="col-sec">
       <div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились «Коллеги»: поиск коллег и статус для них. Чтобы пользоваться ими, прочитайте и примите согласие.</div></div>
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
-  return `<div class="group col-sec" id="col-sec">${head}
-    <button class="col-search" data-act="go" data-page="colleagues">${small(I.search, 20)}<span>Найти коллегу</span></button>
-    ${snap.incoming.length ? `<div class="panel col-offers">${snap.incoming.map(offerRow).join('')}</div>` : ''}
-    ${snap.colleagues.length ? `<div class="panel" id="col-list">${snap.colleagues.map(colleagueRow).join('')}</div>`
+  const q = C.teamQ;
+  const n = snap.colleagues.length;
+  return `${head}<div class="col-sec" id="col-sec">
+    ${snap.incoming.length ? `<div class="group-title">Предлагают стать коллегами</div><div class="panel col-offers">${snap.incoming.map(offerRow).join('')}</div>` : ''}
+    ${n > 1 ? `<div class="search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="team-q" placeholder="Поиск: имя или депо" autocomplete="off" enterkeyhint="search" value="${esc(q)}" aria-label="Поиск среди коллег">${q ? `<button class="search-x" data-act="col-team-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>` : ''}
+    ${n ? `<div id="col-list">${teamListHtml(snap)}</div>`
       : '<div class="hint col-empty">Пока никого. Найдите коллегу по имени и предложите стать коллегами — когда он согласится, появится здесь.</div>'}
     ${snap.outgoing.length ? `<div class="group-title">Ждут ответа</div><div class="panel">${snap.outgoing.map(sentRow).join('')}</div>` : ''}
+    <button class="col-search" data-act="go" data-page="colleagues">${small(I.search, 20)}<span>Найти нового коллегу</span></button>
   </div>`;
 }
 
@@ -746,6 +805,15 @@ function showErr(text, focusId) {
 }
 
 export function colleaguesInput(t) {
+  if (t.id === 'team-q') {
+    C.teamQ = t.value;
+    const box = document.getElementById('col-list');
+    if (box && C.snap) box.innerHTML = teamListHtml(C.snap);
+    const x = t.parentElement.querySelector('.search-x');
+    if (C.teamQ && !x) t.parentElement.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="col-team-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);
+    else if (!C.teamQ && x) x.remove();
+    return true;
+  }
   if (t.id === 'col-name') { C.q.name = t.value; return true; }
   if (t.id === 'col-depot') { C.q.depot = t.value; return true; }
   return false;
@@ -920,6 +988,7 @@ export async function colleaguesClick(act, b) {
     return true;
   }
   if (act === 'col-open') { openColleague(b.dataset.id); return true; }
+  if (act === 'col-team-clear') { C.teamQ = ''; hooks.rerender(); document.getElementById('team-q')?.focus(); return true; }
   if (act === 'col-retry') { C.err = ''; C.failAt = 0; loadColleagues({ force: true }); hooks.rerender(); return true; }
   if (C.busy) return true;
   C.busy = true;

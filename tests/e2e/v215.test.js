@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, waitNoLayers } from './helpers.js';
-import { ME, ANNA, OLEG, mockServer, setProfile, ready, openPrivacy, chooseAccess } from './mock-colleagues.js';
+import { ME, ANNA, OLEG, mockServer, setProfile, ready, openPrivacy, openTeam, chooseAccess } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -20,6 +20,8 @@ test('коллеги: новая редакция согласия, поиск, 
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page);
   await tab(page, 'profile');
+  await page.locator('#col-entry').getByText('Нужно принять новую редакцию согласия').waitFor();
+  await page.locator('#col-entry').click();
   const sec = page.locator('#col-sec');
   await sec.getByText('Новая редакция согласия').waitFor();
   assert.equal(srv.calls('give_consent').length, 0, 'без человека согласие не даётся');
@@ -34,7 +36,7 @@ test('коллеги: новая редакция согласия, поиск, 
   assert.deepEqual(srv.calls('give_consent')[0].body, { p_document: 'privacy-2' });
   await page.locator('.col-search').waitFor();
   assert.match(await sec.innerText(), /Пока никого/);
-  assert.equal(await sec.locator('.switch').count(), 0, 'переключателей в профиле нет — они в «Приватности»');
+  assert.equal(await sec.locator('.switch').count(), 0, 'переключателей у коллег нет — они в «Приватности»');
   assert.equal(srv.calls('save_card').length + srv.calls('set_status').length, 0, 'пока ничего не включено, карточка и статус не уходят');
 
   // поиск
@@ -84,6 +86,8 @@ test('коллеги: статус видит только коллега, бе�
     statuses: { [ANNA]: { kind: 'trip', place: 'Сосновка', dest: 'Ольховка', part: 'morning', until_at: null, after_kind: null, updated_at: '2026-10-20T06:10:00Z' } },
   }, (db) => { db.cards[ME] = { user_id: ME, name: 'Иван Тестовый', role: 'assistant', depot: null, avatar: null, searchable: false }; });
   await tab(page, 'profile');
+  await page.locator('#col-entry').getByText('1 коллега · 1 в пути').waitFor();
+  await openTeam(page);
   const list = page.locator('#col-list');
   await list.getByText('Анна Тестовая').waitFor();
   assert.match(await list.innerText(), /Анна Тестовая[\s\S]*В пути[\s\S]*Сосновка → Ольховка · с утра[\s\S]*обновлено в 09:10/);
@@ -105,7 +109,7 @@ test('коллеги: статус видит только коллега, бе�
   assert.match(await page.locator('.pv-preview').innerText(), /Так вас видят:[\s\S]*На отдыхе[\s\S]*Ольховка · до 14:00/);
   // перерисовка без изменений статус повторно не шлёт
   await page.reload(); await page.waitForSelector('.screen');
-  await tab(page, 'profile');
+  await openTeam(page);
   await page.locator('#col-list').waitFor();
   await page.waitForTimeout(400);
   assert.equal(srv.calls('set_status').length, 2, 'тот же статус второй раз не отправляется');
@@ -118,7 +122,7 @@ test('коллеги: статус видит только коллега, бе�
   assert.equal(await page.evaluate(async () => (await import('./js/store.js')).S.profile.privacy.status), false);
   assert.match(await page.locator('#pv-access').innerText(), /Мой статус[\s\S]*Видят: Никто/);
   // окно коллеги и «Удалить из коллег»
-  await tab(page, 'profile');
+  await openTeam(page);
   await page.locator('[data-act=col-open]').click();
   const s = sheet(page);
   assert.match(await s.innerText(), /Анна Тестовая[\s\S]*В пути[\s\S]*обновлено в 09:10[\s\S]*номер поезда/i);
@@ -140,6 +144,8 @@ test('коллеги: предложение мне — принять или о
     links: [{ from_id: OLEG, to_id: ME, state: 'pending' }, { from_id: ANNA, to_id: ME, state: 'pending' }],
   }, (db) => { db.cards[ANNA].name = '<img src=x onerror="window.__xss=1">Анна'; });
   await tab(page, 'profile');
+  await page.locator('#col-entry .col-badge').getByText('2').waitFor();
+  await page.locator('#col-entry').click();
   const offers = page.locator('.col-offers');
   await offers.getByText('Олег Пробный').waitFor();
   assert.match(await offers.innerText(), /<img src=x onerror="window.__xss=1">Анна/, 'разметка показана как текст');
@@ -209,7 +215,7 @@ test('без аккаунта раздела нет и на сервер нич�
   await setProfile(page, { name: 'Иван Тестовый' });
   await tab(page, 'profile');
   await page.waitForTimeout(300);
-  assert.equal(await page.locator('#col-sec').count(), 0);
+  assert.equal(await page.locator('#col-entry').count(), 0, 'без аккаунта строки «Мои коллеги» нет');
   assert.equal(await page.locator('.screen [data-page=account]').count(), 0, 'строки аккаунта в профиле больше нет');
   await page.locator('[data-page=profile-edit]').click();
   assert.equal(await page.locator('#pr-privacy').count(), 0, 'приватность — не в профиле, а в настройках аккаунта');
@@ -247,7 +253,7 @@ test('выход из аккаунта стирает статус с серве
   assert.equal(await page.evaluate(() => localStorage.getItem('cabina-colleagues')), null, 'в телефоне ничего о коллегах не осталось');
   await page.locator('[data-act=back]').click();
   await page.locator('[data-act=back]').click();
-  assert.equal(await page.locator('#col-sec').count(), 0);
+  assert.equal(await page.locator('#col-entry').count(), 0);
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });
@@ -265,8 +271,11 @@ test('экраны «Коллег» помещаются на 320 px в тёмн
     await seed(page, { settings: { theme } });
     await page.reload(); await page.waitForSelector('.screen');
     await tab(page, 'profile');
+    await page.locator('#col-entry .col-badge').waitFor();
+    assert.ok(await fits(), `профиль, ${theme}`);
+    await page.locator('#col-entry').click();
     await page.locator('#col-list').waitFor();
-    assert.ok(await fits(), `профиль с коллегами, ${theme}`);
+    assert.ok(await fits(), `экран «Коллеги», ${theme}`);
     const btn = await page.locator('.col-offers [data-act=col-accept]').boundingBox();
     assert.ok(btn.height >= 44, 'кнопки крупные');
     await page.locator('[data-act=col-open]').click();

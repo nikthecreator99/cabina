@@ -2,9 +2,9 @@
 // Экран «Профиль» — просмотр и «Коллеги»; изменить персонажа, имя, должность и депо — «Редактировать профиль».
 // «Приватность» с 2.16 — в Настройках аккаунта (colleagues.js): там же и кому из коллег что видно.
 // С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
-import { I, esc, small, pageHead, toast, confirmDialog, plural, whenShort, dayMonth, MONTHS_PREP } from './ui.js';
+import { I, esc, small, pageHead, toast, confirmDialog, whenShort, dayMonth } from './ui.js';
 import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf } from './store.js';
-import { dateKeyOf, monthSummary, fmtDur, parseLocal } from './calc.js';
+import { dateKeyOf, parseLocal } from './calc.js';
 import { ROLES, OVERREST_MAX } from './pay.js';
 import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
 import { careerOf, careerSub, tenure, tenureText, todayKey } from './career.js';
@@ -83,20 +83,11 @@ export function profileStatus(now = nowLocal()) {
 }
 
 // colleagues — раздел «Коллеги» (colleagues.js собирает его в app.js: так модули не зависят друг от друга по кругу)
+// colleagues — строка «Коллеги» (colleagues.js), передаётся из app.js без круговых импортов.
+// Свои часы и поездки здесь не показываем (просьба Никиты, 2.19.1): они на главной и в статистике.
 export function renderProfile(colleagues = '') {
   const p = S.profile;
   const st = profileStatus();
-  const now = new Date(nowLocal());
-  const y = now.getUTCFullYear(); const m = now.getUTCMonth() + 1;
-  const sum = monthSummary(y, m, S.trips, S.absences);
-  // поездка, которая ждёт явки, в счёт не идёт, пока не началась
-  const total = S.trips.filter((t) => !isPending(t)).length;
-  const inMonth = sum.monthTrips.filter((t) => !isPending(t)).length;
-  const tiles = S.trips.length ? `<div class="profile-tiles">
-      <div class="pt"><b class="num">${inMonth}</b><span>${plural(inMonth, 'поездка', 'поездки', 'поездок')} в ${MONTHS_PREP[m - 1]}</span></div>
-      <div class="pt"><b class="num">${fmtDur(sum.work, { short: true })}</b><span>отработано в ${MONTHS_PREP[m - 1]}</span></div>
-      <div class="pt"><b class="num">${total}</b><span>${plural(total, 'поездка', 'поездки', 'поездок')} всего</span></div>
-    </div>` : '';
   return `${pageHead('Профиль', { right: `<button class="icon-btn" data-act="go" data-page="settings" aria-label="Настройки">${I.gear}</button>` })}
     <section class="profile-card">
       <button class="avatar view big" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}</button>
@@ -107,9 +98,8 @@ export function renderProfile(colleagues = '') {
       ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
       <button class="btn btn-ghost btn-sm" data-act="go" data-page="profile-edit">${small(I.edit, 16)} Редактировать профиль</button>
     </section>
-    ${colleagues}
-    ${tiles}
     ${awardsStripHtml()}
+    ${colleagues}
     <div class="notice ok">${I.shield}<div><b>Профиль хранится в этом телефоне.</b> Коллеги видят только то, что вы сами включили в «Приватности». Профиль попадает в резервную копию — не пересылайте её другим людям.</div></div>`;
 }
 
