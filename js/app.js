@@ -34,7 +34,7 @@ import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celeb
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 import { renderHelp, helpListHtml } from './help.js';
 
-export const VERSION = '2.19.8';
+export const VERSION = '2.19.9';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };

@@ -7,7 +7,7 @@ import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf, legAt,
 import { dateKeyOf, parseLocal, hasLegs } from './calc.js';
 import { ROLES, OVERREST_MAX } from './pay.js';
 import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
-import { careerOf, careerSub, tenure, tenureText, todayKey } from './career.js';
+import { careerOf, careerSub, totalTenure, tenureText } from './career.js';
 import { normPhone } from './phones.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { premiumOk, hasAvatar } from './avatar-edit.js';
@@ -96,7 +96,7 @@ export function renderProfile(colleagues = '') {
       <div class="profile-name with-edit">${p.name ? `<span>${esc(p.name)}</span>` : '<span class="ph">Имя не указано</span>'}<button class="pr-edit" id="pr-edit" data-act="go" data-page="profile-edit" aria-label="Редактировать профиль">${small(I.edit, 18)}</button></div>
       <div class="profile-sub">${esc(subLine(p))}</div>
       ${p.phone ? `<div class="profile-sub">${small(I.call, 14)} <span class="nw">${esc(p.phone)}</span></div>` : ''}
-      ${(() => { const c = careerOf(p); const t = c.hired ? tenure(c.hired, todayKey()) : null; return t ? `<div class="profile-sub">${small(I.briefcase, 14)} Стаж ${tenureText(t)}</div>` : ''; })()}
+      ${(() => { const t = totalTenure(careerOf(p)); return t ? `<div class="profile-sub">${small(I.briefcase, 14)} Стаж ${tenureText(t)}</div>` : ''; })()}
       ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
     </section>
     ${awardsStripHtml()}
