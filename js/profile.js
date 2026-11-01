@@ -3,8 +3,8 @@
 // «Приватность» с 2.16 — в Настройках аккаунта (colleagues.js): там же и кому из коллег что видно.
 // С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
 import { I, esc, small, pageHead, toast, confirmDialog, whenShort, dayMonth } from './ui.js';
-import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf } from './store.js';
-import { dateKeyOf, parseLocal } from './calc.js';
+import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf, legAt, legEnds, legRoute } from './store.js';
+import { dateKeyOf, parseLocal, hasLegs } from './calc.js';
 import { ROLES, OVERREST_MAX } from './pay.js';
 import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
 import { careerOf, careerSub, tenure, tenureText, todayKey } from './career.js';
@@ -43,7 +43,8 @@ const subLine = (p) => [ROLES[p.role] ? ROLES[p.role] + (p.role === 'driver' && 
 export function statusFacts(now = nowLocal()) {
   const live = liveTrip();
   if (live && isPending(live, now)) return { kind: 'soon', trip: live, start: statsOf(live).start };
-  if (live) return { kind: 'trip', trip: live, start: statsOf(live).start };
+  // сменили локомотив — показываем плечо, по которому едут сейчас (2.19.7)
+  if (live) return { kind: 'trip', trip: live, start: statsOf(live).start, leg: legAt(live, now) };
   const today = dateKeyOf(now);
   const abs = S.absences.find((a) => a.start <= today && a.end >= today);
   if (abs) return { kind: 'abs', end: abs.end };
@@ -69,11 +70,12 @@ export function profileStatus(now = nowLocal()) {
   const f = statusFacts(now);
   if (!f) return null;
   // «В пути: Сумский Посад → Малошуйка · с 05:40» — откуда и куда
-  const path = (t) => { const e = routeEnds(t); return e ? `${e.from} → ${e.to}` : routeOf(t); };
+  const path = (t) => { if (hasLegs(t)) return routeOf(t); const e = routeEnds(t); return e ? `${e.from} → ${e.to}` : routeOf(t); };
+  const legPath = (l) => { const e = legEnds(l); return e ? `${e.from} → ${e.to}` : legRoute(l); };
   const st = (label, sub = '') => ({ kind: f.kind, label, sub });
   switch (f.kind) {
     case 'soon': return st('Скоро явка', [whenShort(f.start, now), path(f.trip)].filter(Boolean).join(' · '));
-    case 'trip': return st('В пути', [path(f.trip), `с\u00a0${when(f.start, now)}`].filter(Boolean).join(' · '));
+    case 'trip': return st('В пути', [f.leg ? legPath(f.leg) : path(f.trip), `с\u00a0${when(f.start, now)}`].filter(Boolean).join(' · '));
     case 'abs': return st('На отвлечении', `до ${dayMonth(parseLocal(`${f.end}T00:00`))} включительно`);
     case 'dayoff': return st('На выходном', `до ${when(f.until, now)}`);
     case 'rest': return st('На отдыхе', [f.house, `до ${when(f.until, now)}`].filter(Boolean).join(' · '));

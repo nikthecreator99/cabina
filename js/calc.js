@@ -35,13 +35,76 @@ export function mergeIntervals(list) {
   return out;
 }
 
+// Следование пассажиром без окончания (2.19.7, просьба Никиты): «едем пассажиром сейчас». Пока поездка «в пути»,
+// оно идёт до текущего момента, а когда у поездки появится окончание — заканчивается вместе с ней.
+export const closePass = (list, end) => (list || []).map((p) => (p.end ? p : { ...p, end: end || '' }));
+
 // Интервалы рабочего времени: поездка, следование пассажиром и ожидание следования пассажиром.
 // withWait: false — без ожидания (чтобы отдельно посчитать время ожидания).
 export function tripIntervals(trip, { withWait = true } = {}) {
   const list = [[parseLocal(trip.start), parseLocal(trip.end)]];
-  for (const p of trip.passenger || []) list.push([parseLocal(p.start), parseLocal(p.end)]);
+  for (const p of closePass(trip.passenger, trip.end)) list.push([parseLocal(p.start), parseLocal(p.end)]);
   if (withWait) for (const p of trip.waiting || []) list.push([parseLocal(p.start), parseLocal(p.end)]);
   return mergeIntervals(list);
+}
+
+// ---- Смена локомотива в поездке (2.19.7, просьба Никиты: «за поездку два плеча обслужили») ----
+// Сама поездка — первый локомотив: её routeId, routeLabel, locoType, locoNumber, weight, axles, length — как раньше.
+// legs — следующие локомотивы: [{ id, start ('YYYY-MM-DDTHH:mm' — когда сменили), routeId, routeLabel, locoType,
+// locoNumber, weight, axles, length }]. Плечо длится до следующей смены или до окончания поездки; вид движения общий.
+// Поездки без смены и прежние версии приложения видят только первый локомотив — как обычную поездку.
+export const LEGS_MAX = 4;
+export const LEG_NAMES = ['Второй', 'Третий', 'Четвёртый', 'Пятый'];
+const LEG_FIELDS = ['routeId', 'routeLabel', 'locoType', 'locoNumber', 'weight', 'axles', 'length'];
+export const hasLegs = (t) => Array.isArray(t?.legs) && t.legs.length > 0;
+// Все плечи по порядку: [{ start, end, kind, routeId, … }]; первое — сама поездка
+export function legsOf(t) {
+  const first = { id: t.id, start: t.start };
+  for (const k of LEG_FIELDS) first[k] = t[k];
+  const all = [first, ...(hasLegs(t) ? t.legs : [])];
+  return all.map((l, i) => ({ ...l, kind: t.kind, end: i + 1 < all.length ? all[i + 1].start : t.end }));
+}
+
+// [s, e] минус интервалы off (уже объединённые и отсортированные)
+function cutOut(s, e, off) {
+  const out = [];
+  let cur = s;
+  for (const [a, b] of off) {
+    if (b <= cur || a >= e) continue;
+    if (a > cur) out.push([cur, a]);
+    cur = Math.max(cur, b);
+    if (cur >= e) break;
+  }
+  if (cur < e) out.push([cur, e]);
+  return out;
+}
+// Работа на каждом локомотиве (плече) без следования и ожидания пассажиром, по месяцам.
+// Нужна для доплаты за тяжёлый поезд: у каждого локомотива свой поезд и своя норма.
+function legsDrive(t) {
+  const s = parseLocal(t.start); const e = parseLocal(t.end);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return t.legs.map(() => ({ work: 0, byMonth: {} })).concat({ work: 0, byMonth: {} });
+  const cuts = [s];
+  for (const l of t.legs) {
+    const x = parseLocal(l.start);
+    cuts.push(Math.min(e, Math.max(cuts[cuts.length - 1], Number.isFinite(x) ? x : e)));
+  }
+  cuts.push(e);
+  const off = mergeIntervals([...t.passenger, ...(t.waiting || [])].map((p) => [parseLocal(p.start), parseLocal(p.end)]));
+  return cuts.slice(0, -1).map((a, i) => {
+    const res = { work: 0, byMonth: {} };
+    for (const [x, y] of cutOut(a, cuts[i + 1], off)) {
+      let cur = x;
+      while (cur < y) {
+        const stop = Math.min(y, nextMonthStart(cur));
+        const mk = monthKeyOf(cur);
+        const m = (stop - cur) / MIN;
+        res.byMonth[mk] = (res.byMonth[mk] || 0) + m;
+        res.work += m;
+        cur = stop;
+      }
+    }
+    return res;
+  });
 }
 
 // Минуты объединения интервалов [{start, end}] по месяцам: { 'YYYY-MM': минуты }
@@ -97,10 +160,12 @@ function nextMonthStart(ms) {
 // Возвращает минуты: { work, night, holiday, restDay, wait, pass, start, end, byMonth: { 'YYYY-MM': {work, night, holiday, restDay, wait, pass} } }
 // restDay — время в выходные и праздничные дни по производственному календарю.
 // pass — следование пассажиром, wait — ожидание следования, не совпавшее со следованием (оба входят в work).
-// Остальное — работа на локомотиве.
+// Остальное — работа на локомотиве. У поездки со сменой локомотива ещё legs: [{ work, byMonth: { mk: минуты } }] —
+// работа на каждом локомотиве (без следования и ожидания), в сумме — та же работа на локомотиве.
 // Поездка «в пути» (без окончания) считается до момента liveEnd, если он передан.
 export function tripStats(trip, liveEnd) {
-  const t = !trip.end && Number.isFinite(liveEnd) && liveEnd > parseLocal(trip.start) ? { ...trip, end: fmtLocal(liveEnd) } : trip;
+  const t0 = !trip.end && Number.isFinite(liveEnd) && liveEnd > parseLocal(trip.start) ? { ...trip, end: fmtLocal(liveEnd) } : trip;
+  const t = { ...t0, passenger: closePass(t0.passenger, t0.end) };
   const iv = tripIntervals(t);
   const res = { work: 0, night: 0, holiday: 0, restDay: 0, wait: 0, pass: 0, byMonth: {}, start: NaN, end: NaN, intervals: iv, live: !trip.end };
   if (!iv.length) { res.start = parseLocal(trip.start); return res; }
@@ -130,6 +195,7 @@ export function tripStats(trip, liveEnd) {
     b.wait = Math.max(0, Math.min(b.work, passWait[mk] || 0) - b.pass);
     res.pass += b.pass; res.wait += b.wait;
   }
+  if (hasLegs(t)) res.legs = legsDrive(t);
   return res;
 }
 
@@ -146,11 +212,19 @@ export function validateTrip(trip, { live = false, now } = {}) {
     if (e < s) return 'Окончание поездки раньше начала. Проверьте даты и время.';
     if (e === s) return 'Поездка не может длиться 0 минут. Проверьте время окончания.';
   }
+  let open = 0;
   for (const [i, p] of (trip.passenger || []).entries()) {
     const ps = parseLocal(p.start);
     const pe = parseLocal(p.end);
     const n = i + 1;
-    if (!Number.isFinite(ps) || !Number.isFinite(pe)) return `Заполните начало и окончание следования пассажиром №${n} или удалите его.`;
+    if (!Number.isFinite(ps)) return `Заполните начало следования пассажиром №${n} или удалите его.`;
+    // без окончания: едут пассажиром сейчас; когда поездка закончится, следование закончится вместе с ней
+    if (!p.end) {
+      if (++open > 1) return 'Без окончания можно оставить только одно следование пассажиром — то, что идёт сейчас.';
+      if (trip.end && Number.isFinite(e) && ps >= e) return `Следование пассажиром №${n}: укажите окончание — оно началось после окончания поездки.`;
+      continue;
+    }
+    if (!Number.isFinite(pe)) return `Заполните окончание следования пассажиром №${n} или удалите его.`;
     if (pe <= ps) return `Следование пассажиром №${n}: окончание должно быть позже начала.`;
   }
   for (const [i, p] of (trip.waiting || []).entries()) {
@@ -159,6 +233,19 @@ export function validateTrip(trip, { live = false, now } = {}) {
     const n = i + 1;
     if (!Number.isFinite(ps) || !Number.isFinite(pe)) return `Заполните начало и окончание ожидания следования пассажиром №${n} или удалите его.`;
     if (pe <= ps) return `Ожидание следования пассажиром №${n}: окончание должно быть позже начала.`;
+  }
+  // смена локомотива: каждая — позже предыдущей (или начала поездки) и раньше окончания
+  const legs = Array.isArray(trip.legs) ? trip.legs : [];
+  if (legs.length > LEGS_MAX) return `В одной поездке — не больше ${LEGS_MAX + 1} локомотивов.`;
+  let prev = s;
+  for (const [i, l] of legs.entries()) {
+    const name = `${LEG_NAMES[i]} локомотив`;
+    const x = parseLocal(l?.start);
+    if (!Number.isFinite(x)) return `${name}: укажите дату и время смены локомотива или удалите его.`;
+    if (x <= prev) return i ? `${name}: смена должна быть позже, чем на ${LEG_NAMES[i - 1].toLowerCase()}.` : `${name}: смена должна быть позже начала поездки.`;
+    if (trip.end && Number.isFinite(e) && x >= e) return `${name}: смена должна быть раньше окончания поездки.`;
+    if (!trip.end && Number.isFinite(now) && x > now) return `${name}: время смены ещё не наступило. Проверьте дату и время.`;
+    prev = x;
   }
   return null;
 }

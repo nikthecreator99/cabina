@@ -1,7 +1,7 @@
 // Меню ☰ «Настройки работы»: маршруты, тарифные ставки и надбавки, дома отдыха, междусменный отдых.
 import { I, esc, small, pageHead, stepperHtml, openLayer, closeLayer, sheet, toast, confirmDialog, infoDialog, plural, MONTHS_GEN } from './ui.js';
-import { S, nowLocal, saveSettings, deleteRoute, myPay } from './store.js';
-import { fmtDur, fmtLocal } from './calc.js';
+import { S, nowLocal, saveSettings, deleteRoute, myPay, usesRoute } from './store.js';
+import { fmtDur, fmtLocal, legsOf } from './calc.js';
 import { openRouteForm } from './forms.js';
 import { restHouses, dayOffMin } from './rest.js';
 import { PAY_FIELDS, ROLES, payCfg, paySet, currentRate, hasRate, fmtRub } from './pay.js';
@@ -41,7 +41,8 @@ export function renderWork() {
 // ---------------------------------------------------------------- маршруты (компактные карточки)
 export function renderRoutes() {
   const use = new Map();
-  S.trips.forEach((t) => t.routeId && use.set(t.routeId, (use.get(t.routeId) || 0) + 1));
+  // маршрут после смены локомотива тоже считается: поездка по нему была
+  S.trips.forEach((t) => new Set(legsOf(t).map((l) => l.routeId).filter(Boolean)).forEach((id) => use.set(id, (use.get(id) || 0) + 1)));
   const list = [...S.routes].sort((a, b) => (use.get(b.id) || 0) - (use.get(a.id) || 0) || a.from.localeCompare(b.from, 'ru'));
   return `${pageHead('Маршруты', { back: true })}
     <div class="page-sub">${list.length ? `${list.length} ${plural(list.length, 'сохранённый маршрут', 'сохранённых маршрута', 'сохранённых маршрутов')}` : 'Сохраните маршруты, чтобы выбирать их одним касанием'}</div>
@@ -247,7 +248,7 @@ export async function workClick(act, b, ctx) {
     case 'route-del': {
       const r = S.routes.find((x) => x.id === b.dataset.id);
       if (!r) return true;
-      const used = S.trips.filter((t) => t.routeId === r.id).length;
+      const used = S.trips.filter((t) => usesRoute(t, r.id)).length;
       const ok = await confirmDialog({ title: 'Вы действительно хотите удалить маршрут?', text: `${r.from} → ${r.to}${used ? '. Поездки с этим маршрутом сохранят его название.' : ''}`, ok: 'Да', cancel: 'Нет' });
       if (ok) { await deleteRoute(r.id); toast('Маршрут удалён'); } else ctx.closeSwipes();
       return true;

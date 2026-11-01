@@ -1,6 +1,6 @@
 // Состояние приложения в памяти + сохранение в IndexedDB.
 import * as db from './db.js';
-import { tripStats, parseLocal, MIN } from './calc.js';
+import { tripStats, parseLocal, MIN, legsOf, hasLegs } from './calc.js';
 import { payCfg, overRestIntervals } from './pay.js';
 
 // minRest — общий минимальный отдых в пункте оборота, minShiftRest — минимальный междусменный отдых (мин).
@@ -101,18 +101,56 @@ export function nowLocal() {
 // Нормативное время маршрута (2.11), в минутах: от явки до начала приёмки в депо, всего от явки до отправления,
 // от окончания сдачи до окончания работы (walkMin). Только для справки: на часы и заработок не влияет.
 // handMin (сдача после прибытия) убрано в 2.11.1 по просьбе Никиты и больше не показывается.
+// У поездки со сменой локомотива приёмка и отправление — по маршруту первого локомотива, окончание работы — по последнему.
 export const TIME_NORMS = ['acceptMin', 'departMin', 'walkMin'];
 export function timeNorms(trip) {
-  const r = trip?.routeId && S.routes.find((x) => x.id === trip.routeId);
-  if (!r || !TIME_NORMS.some((k) => r[k] > 0)) return null;
-  return { accept: r.acceptMin || 0, depart: r.departMin || 0, walk: r.walkMin || 0 };
+  if (!trip) return null;
+  const route = (x) => (x?.routeId && S.routes.find((r) => r.id === x.routeId)) || null;
+  const first = route(trip);
+  const last = hasLegs(trip) ? route(trip.legs[trip.legs.length - 1]) : first;
+  const n = { accept: first?.acceptMin || 0, depart: first?.departMin || 0, walk: last?.walkMin || 0 };
+  return n.accept > 0 || n.depart > 0 || n.walk > 0 ? n : null;
 }
 export const routeText = (r) => (r ? `${r.from} → ${r.to}` : '');
-export function routeOf(trip) {
-  const r = trip.routeId && S.routes.find((x) => x.id === trip.routeId);
-  if (r) return routeText(r);
-  return trip.routeLabel || '';
+export const stationKey = (name) => String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+export const sameSt = (a, b) => stationKey(a) === stationKey(b);
+
+// Маршрут одного плеча (или поездки без смены локомотива): сохранённый маршрут или подпись
+export function legRoute(x) {
+  const r = x?.routeId && S.routes.find((y) => y.id === x.routeId);
+  return r ? routeText(r) : x?.routeLabel || '';
 }
+// Концы маршрута плеча: из сохранённого маршрута или из подписи «А → Б». null — маршрут не указан.
+export function legEnds(x) {
+  const r = x?.routeId && S.routes.find((y) => y.id === x.routeId);
+  if (r) return { from: r.from, to: r.to };
+  const m = String(x?.routeLabel || '').split(/\s*(?:→|—|->)\s*/);
+  return m.length === 2 && m[0] && m[1] ? { from: m[0].trim(), to: m[1].trim() } : null;
+}
+// Станции поездки по порядку: у смены локомотива — «А → Б → А». null — где-то нет маршрута или плечи не стыкуются.
+export function stationsOf(trip) {
+  const ends = legsOf(trip).map(legEnds);
+  if (!ends.every(Boolean) || ends.some((e, i) => i > 0 && !sameSt(ends[i - 1].to, e.from))) return null;
+  return [ends[0].from, ...ends.map((e) => e.to)];
+}
+export function routeOf(trip) {
+  if (!hasLegs(trip)) return legRoute(trip);
+  const st = stationsOf(trip);
+  return st ? st.join(' → ') : legsOf(trip).map(legRoute).filter(Boolean).join(', ');
+}
+// Плечо, на котором едут в момент ms (у поездки «в пути»)
+export function legAt(trip, ms) {
+  const legs = legsOf(trip);
+  let cur = legs[0];
+  for (const l of legs.slice(1)) if (parseLocal(l.start) <= ms) cur = l;
+  return cur;
+}
+// Маршрут есть в поездке — у первого локомотива или после смены
+export const usesRoute = (trip, id) => !!id && legsOf(trip).some((l) => l.routeId === id);
+// Локомотивы поездки по порядку — только те, где указан тип или номер: [{ type, number }]
+export const locosOf = (trip) => legsOf(trip).filter((l) => String(l.locoType || '').trim() || normNum(l.locoNumber))
+  .map((l) => ({ type: l.locoType || '', number: l.locoNumber || '' }));
+export const locosText = (trip) => locosOf(trip).map((l) => locoLabel(l.type, l.number)).join(', ');
 
 const LAT2CYR = { A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', Y: 'У' };
 export const normType = (t) => String(t || '').trim().toUpperCase().replace(/\s+/g, '').replace(/[ABCEHKMOPTXY]/g, (c) => LAT2CYR[c]);
@@ -131,7 +169,7 @@ export function knownTypes() {
   const seen = new Map();
   const add = (t, w) => { const k = normType(t); if (!k) return; if (!seen.has(k) || seen.get(k).w < w) seen.set(k, { label: String(t).trim(), w }); };
   S.locoTypes.forEach((t, i) => add(t, -1000 + i));
-  S.trips.forEach((t) => add(t.locoType, parseLocal(t.start) || 0));
+  S.trips.forEach((t) => { const w = parseLocal(t.start) || 0; for (const l of locosOf(t)) add(l.type, w); });
   S.notes.forEach((n) => add(n.type, n.createdAt || 0));
   return [...seen.values()].sort((a, b) => b.w - a.w).map((x) => x.label);
 }
@@ -209,12 +247,12 @@ async function askPersist() {
 
 export async function saveTrip(trip, noteOp) {
   const ops = [{ store: 'trips', put: clean(trip) }];
-  const t = String(trip.locoType || '').trim();
   let types = S.locoTypes;
-  if (t && !S.locoTypes.some((x) => normType(x) === normType(t))) {
-    types = [t, ...S.locoTypes].slice(0, 50);
-    ops.push({ store: 'meta', put: { id: 'locoTypes', list: types } });
+  for (const l of locosOf(trip)) {
+    const t = String(l.type || '').trim();
+    if (t && !types.some((x) => normType(x) === normType(t))) types = [t, ...types].slice(0, 50);
   }
+  if (types !== S.locoTypes) ops.push({ store: 'meta', put: { id: 'locoTypes', list: types } });
   if (noteOp?.put) ops.push({ store: 'notes', put: noteOp.put });
   if (noteOp?.del) ops.push({ store: 'notes', del: noteOp.del });
   await db.write(ops);
@@ -260,8 +298,9 @@ export const deleteNote = (id) => remove('notes', 'notes', id);
 export async function deleteRoute(id) {
   const r = S.routes.find((x) => x.id === id);
   const label = routeText(r);
-  // поездки сохраняют название маршрута
-  const affected = S.trips.filter((t) => t.routeId === id).map((t) => ({ ...t, routeId: null, routeLabel: label }));
+  // поездки сохраняют название маршрута — и у каждого локомотива после смены тоже
+  const off = (x) => (x.routeId === id ? { ...x, routeId: null, routeLabel: label } : x);
+  const affected = S.trips.filter((t) => usesRoute(t, id)).map((t) => ({ ...off(t), ...(hasLegs(t) ? { legs: t.legs.map(off) } : {}) }));
   await db.write([{ store: 'routes', del: id }, ...affected.map((t) => ({ store: 'trips', put: clean(t) }))]);
   S.routes = S.routes.filter((x) => x.id !== id);
   affected.forEach((t) => { t._stats = null; statsOf(t); const i = S.trips.findIndex((x) => x.id === t.id); S.trips[i] = t; });

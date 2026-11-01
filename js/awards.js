@@ -2,10 +2,10 @@
 // Два вида (со слов Никиты): со ступенями — бронза, серебро, золото, собирать долго; и повторяемые — без ступеней,
 // даются каждый раз и копятся счётчиком «×N» (Новый год в поездке, поездка от 12 часов…). Закрытые — тёмные силуэты.
 // Награда — состояние, а не запись: её всегда можно пересчитать из поездок (в резервную копию отдельно не попадает).
-import { S, statsOf, isLive, myPay, routeOf, locoKey, normNum, saveProfile } from './store.js';
-import { parseLocal, MIN, DAY, monthKeyOf, dateKeyOf, fmtDur } from './calc.js';
+import { S, statsOf, isLive, myPay, routeOf, locoKey, normNum, saveProfile, locosOf, legRoute } from './store.js';
+import { parseLocal, MIN, DAY, monthKeyOf, dateKeyOf, fmtDur, hasLegs, legsOf } from './calc.js';
 import { isHoliday } from './calendar.js';
-import { isHeavy } from './pay.js';
+import { heavyCount } from './pay.js';
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, plural, dayMonth, toast, MONTHS } from './ui.js';
 
 const IRON_MIN = 12 * 60; // «Железная пятая точка»: поездка от 12 часов (согласовано с Никитой)
@@ -133,7 +133,8 @@ const tierName = (a, tier) => (a.goals.length > 1 && tier > 0 ? TIER_NAMES[tier 
 // медиана уже отсортированного списка; вставка в отсортированный — двоичным поиском (быстро и на тысячах поездок)
 const median = (a) => { const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
 const insertSorted = (a, v) => { let lo = 0; let hi = a.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] <= v) lo = mid + 1; else hi = mid; } a.splice(lo, 0, v); };
-const routeKey = (t) => t.routeId || routeOf(t).toLowerCase();
+// у поездки со сменой локомотива — свой «маршрут» из всех плеч: её время с обычной поездкой по одному плечу не сравниваем
+const routeKey = (t) => (hasLegs(t) ? legsOf(t).map((l) => l.routeId || legRoute(l).toLowerCase()).join('+') : t.routeId || routeOf(t).toLowerCase());
 
 // trips — список поездок (по умолчанию все записанные).
 // Возвращает { c: итоги, aw: { id: { tier — сколько ступеней, n — сколько раз (у повторяемых), days — день каждой ступени, last } }, records }.
@@ -159,19 +160,20 @@ export function computeAwards(trips = S.trips) {
   for (const { t, st } of done) {
     const day = dateKeyOf(st.end);
     c.trips++;
-    const dist = Number(routes.get(t.routeId)?.distanceKm) || 0;
-    if (t.kind !== 'shunt') { if (dist > 0) c.km += dist; else c.noKm++; }
+    // километры — по маршруту каждого локомотива; если у какого-то нет расстояния — подсказка в награде
+    const dists = legsOf(t).map((l) => Number(routes.get(l.routeId)?.distanceKm) || 0);
+    if (t.kind !== 'shunt') { c.km += dists.reduce((a, b) => a + b, 0); if (dists.some((x) => !(x > 0))) c.noKm++; }
     c.work += st.work;
     c.night += st.night;
     c.pass += (t.passenger || []).length;
     const h = new Date(parseLocal(t.start)).getUTCHours();
     if (h >= 3 && h < 6) c.lark++;
-    if (normNum(t.locoNumber)) { locos.add(locoKey(t.locoType, t.locoNumber)); c.locos = locos.size; }
+    for (const l of locosOf(t)) if (normNum(l.number)) { locos.add(locoKey(l.type, l.number)); c.locos = locos.size; }
     if (st.work >= IRON_MIN) c.iron++;
     const wait = (t.waiting || []).reduce((s, w) => s + Math.max(0, (parseLocal(w.end) - parseLocal(w.start)) / MIN || 0), 0);
     if (wait >= WAIT_MIN) c.wait++;
     if (!rec.longest || st.work > rec.longest.min) rec.longest = { t, min: st.work };
-    if (isHeavy(t, cfg)) c.heavy++;
+    c.heavy += heavyCount(t, cfg);
     if (st.holiday > 0) {
       for (const [s, e] of st.intervals) for (let d = Math.floor(s / DAY); d * DAY < e; d++) { const k = dateKeyOf(d * DAY); if (isHoliday(k)) hdays.add(k); }
       c.holiday = hdays.size;

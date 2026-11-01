@@ -1,7 +1,7 @@
 // Поиск по поездкам: станции маршрута, локомотив (серия и номер), номер маршрута, вид движения, дата
 // и заметка к поездке. Совпадения подсвечены, нажатие открывает поездку. Ищет только в этом телефоне.
 import { I, esc, small, pageHead, highlight, searchWords, normSearch, MONTHS, MONTHS_GEN, hm, plural } from './ui.js';
-import { S, statsOf, routeOf, locoLabel, isLive, nowLocal } from './store.js';
+import { S, statsOf, routeOf, locoLabel, isLive, nowLocal, locosOf, locosText } from './store.js';
 import { fmtDur } from './calc.js';
 import { TRIP_KINDS, kindOf } from './forms.js';
 
@@ -21,7 +21,8 @@ export function tripHaystack(t) {
   const st = statsOf(t);
   const d = Number.isFinite(st.start) ? dateParts(st.start) : { text: '', alt: '' };
   const note = S.notes.find((n) => n.tripId === t.id)?.text || '';
-  return normSearch([routeOf(t), locoLabel(t.locoType, t.locoNumber), t.locoType, t.locoNumber, t.routeNo ? `маршрут ${t.routeNo}` : '',
+  const locos = locosOf(t).flatMap((l) => [locoLabel(l.type, l.number), l.type, l.number]);
+  return normSearch([routeOf(t), ...locos, t.routeNo ? `маршрут ${t.routeNo}` : '',
     TRIP_KINDS[kindOf(t)].label, d.text, d.alt, note].join(' '));
 }
 
@@ -45,7 +46,7 @@ export function searchResultsHtml(q) {
       const live = isLive(t);
       const thisYear = new Date(nowLocal()).getUTCFullYear();
       const d = Number.isFinite(st.start) ? dateParts(st.start).text.replace(` ${thisYear}`, '') : '';
-      const loco = locoLabel(t.locoType, t.locoNumber);
+      const loco = locosText(t);
       const note = S.notes.find((n) => n.tripId === t.id)?.text || '';
       const noteHit = note && words.some((w) => normSearch(note).includes(w));
       const kind = kindOf(t);

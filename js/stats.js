@@ -1,8 +1,8 @@
 // Статистика: поездная и заработная плата за месяц, квартал, год или всё время.
 // Показываются только блоки, где есть данные.
 import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, MONTHS_PREP, plural, sheet, openLayer, closeLayer, hm } from './ui.js';
-import { S, statsOf, nowLocal, routeOf, locoLabel, normType, normNum, myPay, refreshLive, isPending, overRestByTrip } from './store.js';
-import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN } from './calc.js';
+import { S, statsOf, nowLocal, routeOf, locoLabel, normType, normNum, myPay, refreshLive, isPending, overRestByTrip, legRoute, locosOf } from './store.js';
+import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN, legsOf } from './calc.js';
 import { dayInfo } from './calendar.js';
 import { payMonth, payTotal, overRestIntervals, hasRate, isAvg, rateOn, fmtRub, fmtH } from './pay.js';
 import { houseOf, dayOffIntervals } from './rest.js';
@@ -111,11 +111,14 @@ function collect(p) {
     if (!x) continue;
     for (const [mk, b] of Object.entries(statsOf(t).byMonth || {})) if (keys.has(mk)) x.min += b.work - (b.wait || 0);
   }
+  // у поездки со сменой локомотива каждое плечо — своё: свои километры и своя строка в «Плечах»
   for (const t of trips) {
-    const r = t.routeId && S.routes.find((x) => x.id === t.routeId);
-    if (r?.distanceKm) R.km += r.distanceKm;
-    const label = routeOf(t);
-    if (label) arms.set(label, (arms.get(label) || 0) + 1);
+    for (const l of legsOf(t)) {
+      const r = l.routeId && S.routes.find((x) => x.id === l.routeId);
+      if (r?.distanceKm) R.km += r.distanceKm;
+      const label = legRoute(l);
+      if (label) arms.set(label, (arms.get(label) || 0) + 1);
+    }
     for (const pi of t.passenger || []) { const s = parseLocal(pi.start); const e = parseLocal(pi.end); if (e > s) R.passenger += (e - s) / MIN; }
   }
   R.arms = [...arms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -156,17 +159,22 @@ function collect(p) {
 
 // Локомотивы периода по сериям: серия → номера → поездки. «Раз» — число поездок.
 // Поездка без номера идёт в серию строкой «Без номера», без серии — в «Серия не указана».
+// Поездка со сменой локомотива считается у каждого своего локомотива (на одном и том же — один раз).
 let LOCOS = [];
 function locoSeries(trips) {
   const series = new Map();
   for (const t of trips) {
-    const tk = normType(t.locoType); const nk = normNum(t.locoNumber);
-    if (!tk && !nk) continue;
-    const s = series.get(tk) || { key: tk || '—', label: String(t.locoType || '').trim() || 'Серия не указана', unknown: !tk, n: 0, nums: new Map() };
-    s.n++;
-    const n = s.nums.get(nk) || { key: `${tk}|${nk}`, label: nk ? `№${nk}` : 'Без номера', unknown: !nk, trips: [] };
-    n.trips.push(t);
-    s.nums.set(nk, n); series.set(tk, s);
+    const seen = new Set();
+    for (const l of locosOf(t)) {
+      const tk = normType(l.type); const nk = normNum(l.number);
+      if (seen.has(`${tk}|${nk}`)) continue;
+      const s = series.get(tk) || { key: tk || '—', label: String(l.type || '').trim() || 'Серия не указана', unknown: !tk, n: 0, nums: new Map() };
+      if (!seen.has(tk)) s.n++;
+      seen.add(`${tk}|${nk}`); seen.add(tk);
+      const n = s.nums.get(nk) || { key: `${tk}|${nk}`, label: nk ? `№${nk}` : 'Без номера', unknown: !nk, trips: [] };
+      n.trips.push(t);
+      s.nums.set(nk, n); series.set(tk, s);
+    }
   }
   const last = (n) => statsOf(n.trips[n.trips.length - 1]).start;
   LOCOS = [...series.values()].map((s) => ({ ...s, nums: [...s.nums.values()].sort((a, b) => (a.unknown - b.unknown) || b.trips.length - a.trips.length || last(b) - last(a)) }))
