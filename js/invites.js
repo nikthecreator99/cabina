@@ -1,5 +1,5 @@
 // Личные приглашения (2.20, решение Никиты): экран «Пригласить коллег» — ссылка с кодом и QR-код, сколько засчитано,
-// вещи для персонажа за 1, 5 и 10 засчитанных приглашений (решение Никиты, тред «Конструктор аватаров»).
+// вещи для персонажа за 1, 3, 5 и 10 засчитанных приглашений (решение Никиты, тред «Конструктор аватаров»).
 // Засчитано — приглашённый подтвердил почту и заходил в CABINA в 3 разных дня (так считает сервер).
 // На сервере: хеш кода, кто создал, срок. Пригласивший видит только числа — без почты, имён и дат приглашённых.
 // Код показывается один раз, в телефоне не хранится. Число засчитанных запоминается в телефоне и только растёт.
@@ -89,7 +89,7 @@ function tierHtml(t, counted) {
   const got = counted >= t.n;
   const base = hasAvatar() ? S.profile.avatar : {};
   const patch = Object.fromEntries(items.map((r) => [r.k, r.id]));
-  const pic = items.length ? avatarSvg({ ...base, ...patch }, { size: 72, crop: 'bust', bg: false, cls: 'inv-pic' }) : `<span class="inv-gift">${I.gift}</span>`;
+  const pic = items.length ? avatarSvg({ ...base, ...patch }, { size: 72, crop: 'bust', bg: items.some((r) => r.k === 'bg'), cls: 'inv-pic' }) : `<span class="inv-gift">${I.gift}</span>`;
   const names = items.length ? items.map((r, i) => (i ? r.name.toLowerCase() : r.name)).join(' и ') : 'Вещь для персонажа — скоро';
   return `<div class="inv-tier${got ? ' got' : ''}" data-n="${t.n}">${pic}
     <div class="grow"><div class="t1">${esc(t.title)} <span class="hint">· ${t.n} ${plural(t.n, 'приглашение', 'приглашения', 'приглашений')}</span></div>

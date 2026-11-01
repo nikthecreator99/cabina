@@ -117,6 +117,7 @@ export const OUTFITS = [
   { id: 'jacket', name: 'Пиджак', color: true, def: 1 },
   { id: 'sweater', name: 'Свитер', color: true, def: 9 },
   { id: 'kitel', name: 'Китель паровозника', reward: true },
+  { id: 'leather', name: 'Кожанка машиниста', reward: true },
 ];
 export const HATS = [
   { id: null, name: 'Нет' }, { id: 'cap', name: 'Кепка' }, { id: 'beanie', name: 'Шапка' }, { id: 'helmet', name: 'Каска' },
@@ -136,6 +137,7 @@ export const BG = [
   { id: 'sky', name: 'Небо', c: '#cddcf3' }, { id: 'rose', name: 'Роза', c: '#f3d3d6' }, { id: 'lilac', name: 'Сирень', c: '#ddd3f2' },
   { id: 'peach', name: 'Персик', c: '#f8d9c2' }, { id: 'night', name: 'Ночь', c: '#262c3d' }, { id: 'pine', name: 'Хвоя', c: '#1f3b36' },
   { id: 'sunset', name: 'Закат', scene: true }, { id: 'ocean', name: 'Океан', scene: true, premium: true }, { id: 'depot', name: 'Депо', scene: true, premium: true },
+  { id: 'beam', name: 'Прожектор', scene: true, reward: true },
 ];
 // Премиум-персонажи: пока только робот (свой, не похожий на известных роботов из мультфильмов)
 export const CHARS = [
@@ -174,18 +176,19 @@ export const R_TOPS = [
 ];
 // Премиум-детали: примерить можно, сохранить пока нельзя
 export const PREMIUM = { hat: ['peaked'], bg: ['ocean', 'depot'], mazut: true, chars: ['robot', 'horse', 'skeleton'] };
-// Вещи за приглашения (2.20, решение Никиты: 1 — «Напарник», 5 — «Бригада», 10 — «Машинист-инструктор»).
+// Вещи за приглашения (2.20, решения Никиты 01.11: 1 — фон «Прожектор», 3 — кожанка машиниста, 5 — ушанка, 10 — китель и фуражка паровозника).
 // Открываются, когда засчитано n приглашённых коллег; примерить можно всегда, сохранить — когда открыто, без Премиума.
 // k — поле персонажа, id — вещь (у неё в списке флаг reward: true), off — что надеть вместо неоткрытой.
-// Пока вещи нет в LISTS (рисунок не влит или вещь ещё выбирают), её нельзя выбрать в редакторе, а ступень показывает «скоро».
-// Шарф за 1-е приглашение Никита попросил заменить (01.11): поток персонажа пришлёт новую вещь — тогда заменить запись и добавить её поле в LISTS.
+// Пока поля вещи нет в LISTS, её нельзя выбрать в редакторе, а ступень показывает «скоро».
 export const REWARDS = [
-  { k: 'scarf', id: 'light', n: 1, name: 'Шарф «Светофор»', off: null },
+  { k: 'bg', id: 'beam', n: 1, name: 'Фон «Прожектор»', off: 'mist' },
+  { k: 'outfit', id: 'leather', n: 3, name: 'Кожанка машиниста', off: 'vestO' },
   { k: 'hat', id: 'ushanka', n: 5, name: 'Ушанка', off: null },
   { k: 'outfit', id: 'kitel', n: 10, name: 'Китель паровозника', off: 'vestO' },
   { k: 'hat', id: 'retro', n: 10, name: 'Фуражка паровозника', off: null },
 ];
-export const REWARD_TIERS = [{ n: 1, title: 'Напарник' }, { n: 5, title: 'Бригада' }, { n: 10, title: 'Машинист-инструктор' }];
+// Название ступени 3 «Сменщик» — предложение Claude, Никита может переименовать
+export const REWARD_TIERS = [{ n: 1, title: 'Напарник' }, { n: 3, title: 'Сменщик' }, { n: 5, title: 'Бригада' }, { n: 10, title: 'Машинист-инструктор' }];
 const LISTS = { hat: () => HATS, outfit: () => OUTFITS, bg: () => BG };
 // Вещь нарисована и есть в своём списке
 export const rewardReady = (r) => !!LISTS[r.k] && LISTS[r.k]().some((x) => x.id === r.id);
@@ -256,6 +259,21 @@ function background(id, u) {
     `<path d="M0,150 Q30,146 60,150 T120,150 T180,150" fill="none" stroke="#63c1ea" stroke-width="2"/><path d="M0,166 Q100,150 200,166 V200 H0Z" fill="#f3d9a0"/>` +
     `<path d="M170,200 C168,170 172,140 180,110" fill="none" stroke="#7a5333" stroke-width="7" stroke-linecap="round"/>` +
     `<g fill="#2f9b55"><path d="M180,110 C160,98 140,104 128,118 C146,108 162,108 180,112Z"/><path d="M180,110 C190,92 204,90 214,96 C202,98 192,104 181,112Z"/><path d="M180,110 C176,90 162,80 146,82 C162,88 172,98 179,112Z"/><path d="M180,110 C196,108 210,118 212,132 C202,120 192,116 180,113Z"/></g>`;
+  if (id === 'beam') {
+    // ночь, рельсы уходят вдаль, прожектор локомотива светит из-за спины
+    let st = '';
+    for (const [x, y, r] of [[18, 22, 1.1], [44, 12, .8], [70, 30, .7], [132, 16, .9], [158, 34, .7], [184, 14, 1.1], [26, 58, .7], [176, 62, .8], [8, 92, .6], [194, 96, .6]]) st += `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity=".85"/>`;
+    return `<linearGradient id="${u}sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070b18"/><stop offset=".7" stop-color="#18213c"/><stop offset="1" stop-color="#262a3a"/></linearGradient>` +
+      `<radialGradient id="${u}gl" cx="100" cy="118" r="96" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff8d6" stop-opacity=".95"/><stop offset=".22" stop-color="#ffe38a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd25a" stop-opacity="0"/></radialGradient>` +
+      `<linearGradient id="${u}bm" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#fff1b0" stop-opacity=".55"/><stop offset="1" stop-color="#fff1b0" stop-opacity="0"/></linearGradient>` +
+      `<rect width="200" height="200" fill="url(#${u}sk)"/>${st}` +
+      `<g fill="url(#${u}bm)"><path d="M92,118 L-30,-10 L40,-10Z"/><path d="M108,118 L160,-10 L230,-10Z"/><path d="M96,118 L78,-10 L122,-10 L104,118Z" opacity=".7"/></g>` +
+      `<circle cx="100" cy="118" r="96" fill="url(#${u}gl)"/>` +
+      `<path d="M0,150 H200 V200 H0Z" fill="#141826"/>` +
+      `<g stroke="#4a5163" stroke-width="3"><path d="M8,200 L96,150 M192,200 L104,150"/></g><g stroke="#2a3040" stroke-width="2.4">${[156, 164, 175, 190].map((y, i) => { const k = (y - 150) / 50; return `<path d="M${f1(100 - 8 - 94 * k)},${y} H${f1(100 + 8 + 94 * k)}"/>`; }).join('')}</g>` +
+      `<g stroke="#d9dfeb" stroke-width="1.2" opacity=".7"><path d="M8,200 L96,150 M192,200 L104,150"/></g>` +
+      `<rect x="20" y="96" width="2.4" height="58" fill="#3a4152"/><rect x="14.5" y="80" width="13.5" height="20" rx="5" fill="#222836"/><circle cx="21.2" cy="90" r="4" fill="#39e07a"/><circle cx="21.2" cy="90" r="9" fill="#39e07a" opacity=".22"/>`;
+  }
   // depot
   const loco = (x, c) => `<g transform="translate(${x} 0)"><rect x="-17" y="104" width="34" height="58" rx="7" fill="${c}"/><rect x="-13" y="112" width="26" height="16" rx="3" fill="#bfe3ff"/>` +
     `<rect x="-17" y="140" width="34" height="5" fill="#f2c14e"/><circle cx="-9" cy="152" r="3.4" fill="#fff6c0"/><circle cx="9" cy="152" r="3.4" fill="#fff6c0"/><circle cx="0" cy="108" r="2.6" fill="#fff6c0"/></g>`;
@@ -407,6 +425,20 @@ function clothes(a, u) {
     for (const y of [184, 195]) for (const x of [-9, 9]) s += `<circle cx="${100 + x}" cy="${y}" r="2.3" fill="${gold}"/><circle cx="${100 + x - .6}" cy="${y - .6}" r=".8" fill="#fff3c8"/>`;
     s += `<path d="M${L + 14},176 h14 v3 h-14Z" fill="${dk(k, .25)}"/>`;
     return { back, s: s + seams(dk(k, .4)) };
+  }
+  if (o.id === 'leather') {
+    // кожанка машиниста: чёрная кожа с бликами, отложной воротник, молния и карманы с клапанами
+    const k = '#26211f', hi = '#6b625c';
+    s += cel(u + 'sh', torso(sw, nw, 'crew', 4), '#3b3f48', '#2b2e35');
+    s += cel(u + 'cl', torso(sw, nw, 'v', 20), k, '#171413');
+    s += `<clipPath id="${u}lt"><path d="${torso(sw, nw, 'v', 20)}"/></clipPath><g clip-path="url(#${u}lt)" fill="none" stroke-linecap="round">` +
+      `<path d="M${L + 12},176 Q${L + 18},168 ${L + 30},166" stroke="${hi}" stroke-width="3" opacity=".7"/><path d="M${R - 12},176 Q${R - 18},168 ${R - 30},166" stroke="${hi}" stroke-width="3" opacity=".55"/>` +
+      `<path d="M${L + 8},196 Q${L + 10},188 ${L + 16},184" stroke="${hi}" stroke-width="2" opacity=".45"/></g>`;
+    s += `<path d="M${A - 2},149 L${A - 13},157 L${A - 6},171 L97,171 Z M${B + 2},149 L${B + 13},157 L${B + 6},171 L103,171 Z" fill="#332c29" stroke="#120f0e" stroke-width="1" stroke-linejoin="round"/>`;
+    s += `<path d="M${A - 9},156 L${A - 5},167" stroke="${hi}" stroke-width="1.6" opacity=".6"/>`;
+    s += `<path d="M100,171 V206" stroke="#b8bcc4" stroke-width="2"/><path d="M100,171 V206" stroke="#6d717a" stroke-width="2" stroke-dasharray="1.2 1.6"/><rect x="98.2" y="172" width="3.6" height="6" rx="1" fill="#d6dae1"/>`;
+    for (const sg of [-1, 1]) { const x = 100 + sg * 21; s += `<path d="M${x - 9},181 h18 v6 l-9,3 l-9,-3Z" fill="#332c29" stroke="#120f0e" stroke-width=".9"/><circle cx="${x}" cy="187" r="1.4" fill="#c9ced6"/>`; }
+    return { back, s: s + seams('#0d0b0a') };
   }
   // футболка, худи и поддёвка под жилетом
   s += cel(u + 'cl', torso(sw, nw, 'crew', o.id === 'hoodie' ? 6 : 7), c);
@@ -953,6 +985,7 @@ export function normalizeAvatar(src, { premium = false, invited = 0 } = {}) {
     o.mazut = false;
     // вещи за приглашения: пока засчитано меньше нужного — снимаются (примерить можно, сохранить нельзя)
     for (const r of lockedRewards(o, invited)) { o[r.k] = r.off; if (r.k === 'outfit') o.outfitC = null; }
+    o.scarf = null; // шарф больше не награда (Никита, 01.11: за 1-е приглашение — «Прожектор»); убрать вместе с полем scarf
   }
   return o;
 }

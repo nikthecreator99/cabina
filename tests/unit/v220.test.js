@@ -26,9 +26,11 @@ function withItems(fn) {
   try { return fn(); } finally { for (const [list, x] of add) list.splice(list.indexOf(x), 1); }
 }
 
-test('вещи за приглашения: ступени 1 «Напарник», 5 «Бригада», 10 «Машинист-инструктор» (решение Никиты)', () => {
-  assert.deepEqual(A.REWARD_TIERS.map((t) => [t.n, t.title]), [[1, 'Напарник'], [5, 'Бригада'], [10, 'Машинист-инструктор']]);
-  assert.deepEqual(A.REWARDS.map((r) => [r.k, r.id, r.n]), [['scarf', 'light', 1], ['hat', 'ushanka', 5], ['outfit', 'kitel', 10], ['hat', 'retro', 10]]);
+test('вещи за приглашения: 1 — фон «Прожектор», 3 — кожанка, 5 — ушанка, 10 — китель и фуражка (решения Никиты 01.11)', () => {
+  assert.deepEqual(A.REWARD_TIERS.map((t) => t.n), [1, 3, 5, 10]);
+  assert.deepEqual(A.REWARD_TIERS.map((t) => t.title), ['Напарник', 'Сменщик', 'Бригада', 'Машинист-инструктор']);
+  assert.deepEqual(A.REWARDS.map((r) => [r.k, r.id, r.n]), [['bg', 'beam', 1], ['outfit', 'leather', 3], ['hat', 'ushanka', 5], ['outfit', 'kitel', 10], ['hat', 'retro', 10]]);
+  for (const r of A.REWARDS) assert.ok(A.rewardReady(r), `${r.id} нарисована`);
   for (const r of A.REWARDS) assert.ok(A.REWARD_TIERS.some((t) => t.n === r.n), r.id);
 });
 
@@ -56,12 +58,15 @@ test('«Случайный» не надевает ни Премиум, ни в�
   }
 }));
 
-test('шарф за 1-е приглашение заменяют (Никита, 01.11): в редакторе его нет, ступень «скоро»; без приглашений снимается', () => {
-  const scarf = A.REWARDS.find((r) => r.k === 'scarf');
-  assert.equal(A.rewardReady(scarf), false);
-  assert.equal(A.normalizeAvatar({ scarf: 'light' }).scarf, null);
-  assert.equal(A.normalizeAvatar({ scarf: 'light' }, { invited: 0 }).scarf, null);
-  for (const id of ['ushanka', 'kitel', 'retro']) assert.ok(A.rewardReady(A.REWARDS.find((r) => r.id === id)), `${id} нарисована (2.19.6)`);
+test('фон и кожанка: без приглашений снимаются, с ними остаются; шарф больше не награда — без Премиума снимается всегда', () => {
+  let o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather', scarf: 'light' });
+  assert.equal(o.bg, 'mist'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, null);
+  o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather', scarf: 'light' }, { invited: 1 });
+  assert.equal(o.bg, 'beam'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, null);
+  o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather' }, { invited: 3 });
+  assert.equal(o.bg, 'beam'); assert.equal(o.outfit, 'leather');
+  const rnd = A.rng(7);
+  for (let i = 0; i < 300; i++) { const x = A.randomAvatar(rnd); assert.notEqual(x.bg, 'beam'); assert.notEqual(x.outfit, 'leather'); }
 });
 
 test('счёт засчитанных в телефоне: только целое число, только растёт; дни ступеней «Наставника»', async () => {
