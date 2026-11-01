@@ -2,8 +2,8 @@
 // Рабочий день — краткая сводка по поездкам этого дня (куда, сколько, ночные, локомотив, поезд) и «Открыть поездку».
 // Пустой день — можно поставить отвлечение или отметку «Выходной» (только отметка: на норму и заработок не влияет).
 import { I, esc, small, sheet, openLayer, closeLayer, toast, hm, dayMonth, WD } from './ui.js';
-import { S, statsOf, routeOf, locoLabel, myPay, overRestByTrip, setDayOff, isPending } from './store.js';
-import { fmtDur, parseLocal, dateKeyOf, DAY, MIN } from './calc.js';
+import { S, statsOf, routeOf, locoLabel, myPay, overRestByTrip, setDayOff, isPending, legRoute } from './store.js';
+import { fmtDur, parseLocal, dateKeyOf, DAY, MIN, legsOf, LEG_NAMES } from './calc.js';
 import { tripPay, hasRate, fmtRub } from './pay.js';
 import { dayOffIntervals } from './rest.js';
 import { TRIP_KINDS, ABS_TYPES, openTripForm, openAbsenceForm } from './forms.js';
@@ -27,9 +27,19 @@ function tripCard(t, key, ctx) {
   const st = statsOf(t);
   const kind = TRIP_KINDS[t.kind] || TRIP_KINDS.freight;
   const route = routeOf(t);
-  const loco = locoLabel(t.locoType, t.locoNumber);
-  const pass = (t.passenger || []).reduce((sum, p) => { const a = parseLocal(p.start); const b = parseLocal(p.end); return b > a ? sum + (b - a) / MIN : sum; }, 0);
-  const train = [t.weight ? `${t.weight.toLocaleString('ru-RU')} т` : '', t.axles ? `${t.axles} осей` : '', t.length ? `${t.length} усл. ваг.` : ''].filter(Boolean).join(' · ');
+  const legs = legsOf(t);
+  const pass = Number.isFinite(st.pass) ? st.pass : 0;
+  const trainOf = (l) => [l.weight ? `${Number(l.weight).toLocaleString('ru-RU')} т` : '', l.axles ? `${l.axles} осей` : '', l.length ? `${l.length} усл. ваг.` : ''].filter(Boolean).join(' · ');
+  // сменили локомотив: у каждого — свой маршрут, поезд и время смены
+  const legRow = (l, i) => {
+    const loco = locoLabel(l.locoType, l.locoNumber);
+    const train = trainOf(l);
+    const head = i ? `${LEG_NAMES[i - 1]} локомотив · с ${at(parseLocal(l.start), key)}` : 'Первый локомотив';
+    const sub = [legRoute(l), train].filter(Boolean).join(' · ');
+    return `<div class="kv"><span>${small(I.train, 14)} ${head}</span><b>${loco ? esc(loco) : 'не указан'}</b></div>${sub ? `<div class="hint">${esc(sub)}</div>` : ''}`;
+  };
+  const loco = legs.length > 1 ? '' : locoLabel(t.locoType, t.locoNumber);
+  const train = legs.length > 1 ? '' : trainOf(t);
   const pay = ctx ? tripPay(t, st, ctx.cfg, { overRestMin: ctx.or.get(t.id) || 0 }) : null;
   const kv = (label, value) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
   return `<section class="day-trip">
@@ -45,6 +55,7 @@ function tripCard(t, key, ctx) {
       ${t.routeNo ? kv('Номер маршрута', esc(t.routeNo)) : ''}
       ${pay && pay.net > 0 ? kv(`${small(I.wallet, 14)} Заработок`, `<span class="money">≈ ${fmtRub(pay.net)}</span>`) : ''}
     </div>
+    ${legs.length > 1 ? `<div class="day-legs">${legs.map(legRow).join('')}</div>` : ''}
     ${train ? `<div class="hint">Поезд: ${esc(train)}</div>` : ''}
     <button class="btn btn-ghost btn-sm" data-act="day-trip" data-id="${esc(t.id)}">Открыть поездку ${small(I.right, 16)}</button>
   </section>`;

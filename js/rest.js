@@ -1,22 +1,23 @@
 // Отдых: дома отдыха, отдых в пункте оборота, «На очередь», полный (домашний) отдых.
-import { S, statsOf, isLive } from './store.js';
-import { MIN, turnaroundRest, homeRestMulti, tripStats } from './calc.js';
+import { S, statsOf, isLive, legEnds, stationKey, sameSt } from './store.js';
+import { MIN, turnaroundRest, homeRestMulti, tripStats, legsOf } from './calc.js';
 
-// Концы маршрута поездки: из сохранённого маршрута или из подписи «А → Б»
+export { stationKey, sameSt };
+
+// Концы маршрута всей поездки: откуда (первый локомотив) и куда (последний). null — где-то маршрут не указан.
 export function routeEnds(trip) {
-  const r = trip.routeId && S.routes.find((x) => x.id === trip.routeId);
-  if (r) return { from: r.from, to: r.to };
-  const m = String(trip.routeLabel || '').split(/\s*(?:→|—|->)\s*/);
-  return m.length === 2 && m[0] && m[1] ? { from: m[0].trim(), to: m[1].trim() } : null;
+  const legs = legsOf(trip);
+  const a = legEnds(legs[0]);
+  const b = legs.length > 1 ? legEnds(legs[legs.length - 1]) : a;
+  return a && b ? { from: a.from, to: b.to } : null;
 }
-export const stationKey = (name) => String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
-export const sameSt = (a, b) => stationKey(a) === stationKey(b);
+// Станция прибытия: у поездки со сменой локомотива — по маршруту последнего локомотива
+const arrivalOf = (trip) => { const legs = legsOf(trip); return legEnds(legs[legs.length - 1])?.to || null; };
 
 // Дом отдыха — станция прибытия поездки с отдыхом в пункте оборота. null — маршрут не указан.
 export function houseOf(trip) {
   if (trip.restType !== 'turnaround') return null;
-  const e = routeEnds(trip);
-  return e ? e.to : null;
+  return arrivalOf(trip);
 }
 
 // Свой минимум дома отдыха или общий из настроек (минуты)
@@ -39,8 +40,9 @@ export function restHouses() {
   };
   for (const t of S.trips) { const h = houseOf(t); if (h) add(h, 1); }
   // станция прибытия маршрута — тоже дом отдыха, если по маршруту ещё не ездили или ездили с отдыхом в пункте оборота
+  const lastRoute = (t) => { const legs = legsOf(t); return legs[legs.length - 1].routeId; };
   for (const r of S.routes) {
-    const ts = S.trips.filter((t) => t.routeId === r.id);
+    const ts = S.trips.filter((t) => lastRoute(t) === r.id);
     if (!ts.length || ts.some((t) => t.restType === 'turnaround')) add(r.to);
   }
   for (const [k, v] of Object.entries(S.settings.houses || {})) if (!map.has(k)) add(v.name || k);

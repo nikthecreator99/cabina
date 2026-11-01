@@ -1,6 +1,6 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
-import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
+import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
 import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
@@ -34,7 +34,7 @@ import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celeb
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 import { renderHelp, helpListHtml } from './help.js';
 
-export const VERSION = '2.19.6';
+export const VERSION = '2.19.7';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -129,14 +129,15 @@ function tripRow(t, mk, payCtx) {
   const live = isLive(t);
   const pending = live && isPending(t);
   const s = new Date(st.start);
-  const loco = locoLabel(t.locoType, t.locoNumber);
+  // сменили локомотив — по значку на каждый (2.19.7)
+  const locos = locosOf(t).map((l) => locoLabel(l.type, l.number));
   const route = routeOf(t);
   const part = st.byMonth[mk];
   const partial = !live && part && Math.round(part.work) !== Math.round(st.work);
   const pay = payCtx ? tripPay(t, st, payCtx.cfg, { overRestMin: payCtx.or.get(t.id) || 0 }) : null;
   const chips = [
     pending ? `<span class="chip pending">${small(I.clock, 13)} Ждёт явки</span>` : live ? '<span class="chip live"><span class="live-dot"></span> В пути</span>' : '',
-    loco ? `<span class="chip loco">${small(I.train, 13)} ${esc(loco)}</span>` : '',
+    ...locos.map((loco) => `<span class="chip loco">${small(I.train, 13)} ${esc(loco)}</span>`),
     st.night ? `<span class="chip" style="--c:var(--night)">${small(I.moon, 13)} ${fmtDur(st.night, { short: true })}</span>` : '',
     st.holiday ? `<span class="chip" style="--c:var(--holiday)">${small(I.calStar, 13)} ${fmtDur(st.holiday, { short: true })}</span>` : '',
     (t.passenger || []).length ? `<span class="chip" style="--c:var(--medical)">${small(I.passenger, 13)} пасс.</span>` : '',
@@ -148,7 +149,7 @@ function tripRow(t, mk, payCtx) {
     ${sel ? '<span class="sel-dot" aria-hidden="true"></span>' : ''}<div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
       <div class="trip-time">${pending ? `Явка в ${hm(st.start)}` : `${hm(st.start)} — ${live ? 'сейчас' : hm(st.end)}`}</div>
-      <div class="trip-route">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
+      <div class="trip-route${locos.length > 1 || (t.legs || []).length ? ' multi' : ''}">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ''}
     </div>
     <div class="trip-right"><div class="dur">${pending ? '' : fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}${pay ? `<small class="earn money">≈ ${fmtRub(pay.net)}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
@@ -326,7 +327,7 @@ function notesListHtml() {
   if (!S.notes.length) return `<div class="empty"><div class="em-ico">${I.note}</div><b>Заметок пока нет</b><p>Добавляйте заметки о локомотивах прямо в поездке или здесь.</p></div>`;
   if (!arr.length) return `<div class="empty"><div class="em-ico">${I.search}</div><b>Ничего не найдено</b><p>Попробуйте другое слово или номер локомотива.</p></div>`;
   return arr.map((g) => {
-    const trips = S.trips.filter((t) => locoKey(t.locoType, t.locoNumber) === locoKey(g.type, g.number)).length;
+    const trips = S.trips.filter((t) => locosOf(t).some((l) => locoKey(l.type, l.number) === locoKey(g.type, g.number))).length;
     return `<section class="loco-group">
       <div class="loco-head"><span class="ico" style="color:var(--accent)">${I.train}</span>
         <div class="name">${highlight(locoLabel(g.type, g.number), words)}<small>Тип ${highlight(g.type, words)} · номер ${highlight(g.number, words)}${trips ? ` · поездок: ${trips}` : ''}</small></div>

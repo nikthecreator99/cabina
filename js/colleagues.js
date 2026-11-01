@@ -7,7 +7,7 @@
 // Номер поезда и локомотива, точное время явки, причина и даты отвлечения, телефон на сервер не уходят никогда.
 // Всё, что пришло с сервера, — непроверенное: текст только через esc(), персонаж — через normalizeAvatar.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, whenShort, plural, layerCount, MONTHS_GEN, hm } from './ui.js';
-import { S, saveProfile, nowLocal, onChange } from './store.js';
+import { S, saveProfile, nowLocal, onChange, legEnds } from './store.js';
 import { DAY } from './calc.js';
 import { session, rpc, restGet, errorText } from './auth.js';
 import { CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, consentHtml, policyHtml, publishConsentHtml, legalReady } from './legal.js';
@@ -55,7 +55,8 @@ export function statusPayload(f, off = tzOffset()) {
   const p = { p_kind: f.kind, p_place: null, p_dest: null, p_part: null, p_note: null, p_until: null };
   if (f.kind === 'soon') { p.p_part = partOf(f.start); p.p_until = iso(partStart(f.start)); }
   if (f.kind === 'trip') {
-    const e = f.trip ? routeEnds(f.trip) : null;
+    // сменили локомотив — станции того плеча, по которому едут сейчас (2.19.7); новых данных это не добавляет
+    const e = f.leg ? legEnds(f.leg) : f.trip ? routeEnds(f.trip) : null;
     if (e) { p.p_place = cleanText(e.from) || null; p.p_dest = cleanText(e.to) || null; }
     p.p_part = partOf(f.start);
   }

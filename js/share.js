@@ -2,11 +2,12 @@
 // Поездки передаются с телефона на телефон — QR-кодом на экране или ссылкой, — наш сервер их не видит:
 // данные стоят в ссылке после «#», а эту часть браузер на сервер не отправляет.
 // Уходит: время явки и окончания, маршрут и расстояние, вид движения, локомотив, вес/оси/длина, номер маршрута,
-// следование пассажиром и ожидание, вид отдыха. Не уходит: заработок, заметки, выбор «на очередь / выходной», отвлечения, профиль.
+// следование пассажиром и ожидание, вид отдыха, смена локомотива (2.19.7: время смены и то же самое про следующий локомотив).
+// Не уходит: заработок, заметки, выбор «на очередь / выходной», отвлечения, профиль.
 // Всё полученное — непроверенные данные: строгая проверка, новые id, человек сам выбирает, что добавить.
-import { S, saveTrip, saveRoute, statsOf, isLive, nowLocal } from './store.js';
-import { parseLocal, fmtLocal, MIN, validateTrip, fmtDur } from './calc.js';
-import { routeEnds, stationKey } from './rest.js';
+import { S, saveTrip, saveRoute, statsOf, isLive, nowLocal, legEnds, routeOf, sameSt, locosText } from './store.js';
+import { parseLocal, fmtLocal, MIN, validateTrip, fmtDur, closePass, legsOf, LEGS_MAX } from './calc.js';
+import { stationKey } from './rest.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
 import { I, esc, small, uid, openLayer, closeLayer, sheet, toast, plural, dayMonth, hm, WD } from './ui.js';
 
@@ -44,24 +45,31 @@ const mins = (s) => Math.round(parseLocal(s) / MIN);
 const iv = (list, s0) => (list || []).map((p) => [mins(p.start) - s0, mins(p.end) - mins(p.start)]).filter(([o, d]) => Number.isFinite(o) && d > 0);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n * 10) / 10 : undefined; };
 
+// Маршрут и локомотив с поездом — у поездки и у каждого следующего локомотива одинаково
+function packLeg(l, x) {
+  const ends = legEnds(l);
+  const r = l.routeId && S.routes.find((y) => y.id === l.routeId);
+  if (ends) { x.f = ends.from; x.to = ends.to; }
+  if (num(r?.distanceKm)) x.km = num(r.distanceKm);
+  if (l.locoType) x.lt = String(l.locoType);
+  if (l.locoNumber) x.ln = String(l.locoNumber);
+  if (num(l.weight)) x.w = num(l.weight);
+  if (num(l.axles)) x.ax = num(l.axles);
+  if (num(l.length)) x.l = num(l.length);
+  return x;
+}
 // Поездка → короткая запись (минуты от общей точки отсчёта)
 function packTrip(t, base) {
   const s = mins(t.start); const e = mins(t.end);
-  const ends = routeEnds(t);
-  const r = t.routeId && S.routes.find((x) => x.id === t.routeId);
-  const x = { a: s - base, d: e - s };
-  if (ends) { x.f = ends.from; x.to = ends.to; }
-  if (num(r?.distanceKm)) x.km = num(r.distanceKm);
+  const x = packLeg(t, { a: s - base, d: e - s });
   if (KINDS[t.kind]) x.k = KINDS[t.kind];
-  if (t.locoType) x.lt = String(t.locoType);
-  if (t.locoNumber) x.ln = String(t.locoNumber);
-  if (num(t.weight)) x.w = num(t.weight);
-  if (num(t.axles)) x.ax = num(t.axles);
-  if (num(t.length)) x.l = num(t.length);
   if (t.routeNo) x.rn = String(t.routeNo);
   if (t.restType === 'home') x.r = 'h'; else if (t.restType === 'turnaround') x.r = 't';
-  const p = iv(t.passenger, s); if (p.length) x.p = p;
+  const p = iv(closePass(t.passenger, t.end), s); if (p.length) x.p = p;
   const w = iv(t.waiting, s); if (w.length) x.wt = w;
+  // смена локомотива: s — через сколько минут от явки сменили
+  const g = legsOf(t).slice(1).map((l) => packLeg(l, { s: mins(l.start) - s })).filter((y) => Number.isFinite(y.s));
+  if (g.length) x.g = g;
   return x;
 }
 // Можно отправить только законченную поездку
@@ -124,13 +132,37 @@ function unpackTrip(x, base, nowMs) {
     createdAt: Date.now(),
   };
   if (KIND_BACK[x.k]) trip.kind = KIND_BACK[x.k];
-  const w = pos(x.w, 20000); if (w) trip.weight = w;
-  const ax = pos(x.ax, 2000); if (ax) trip.axles = Math.round(ax);
-  const l = pos(x.l, 1000); if (l) trip.length = l;
+  unpackTrain(x, trip);
   const rn = clean(x.rn, 20); if (rn) trip.routeNo = rn;
+  // смена локомотива: не больше LEGS_MAX, каждая позже предыдущей и раньше окончания; иначе поездку не берём
+  const legs = [];
+  if (x.g !== undefined) {
+    if (!Array.isArray(x.g) || x.g.length > LEGS_MAX) return null;
+    let prev = 0;
+    for (const g of x.g) {
+      if (!g || typeof g !== 'object' || Array.isArray(g)) return null;
+      const o = int(g.s, prev + 1, d - 1);
+      if (o == null) return null;
+      prev = o;
+      const leg = { id: uid(), start: fmtLocal((s + o) * MIN), routeId: null, routeLabel: '', locoType: clean(g.lt, 20), locoNumber: clean(g.ln, 12) };
+      unpackTrain(g, leg);
+      legs.push({ leg, ...stationsIn(g) });
+    }
+    if (legs.length) trip.legs = legs.map((y) => y.leg);
+  }
   if (validateTrip(trip)) return null;
+  return { trip, ...stationsIn(x), legs: legs.map(({ leg, ...e }) => e) };
+}
+// вес, оси, длина — только разумные числа
+function unpackTrain(x, to) {
+  const w = pos(x.w, 20000); if (w) to.weight = w;
+  const ax = pos(x.ax, 2000); if (ax) to.axles = Math.round(ax);
+  const l = pos(x.l, 1000); if (l) to.length = l;
+}
+// откуда и куда (обе станции или ничего) и расстояние
+function stationsIn(x) {
   const from = clean(x.f, 60); const to = clean(x.to, 60);
-  return { trip, from: from && to ? from : '', to: from && to ? to : '', km: pos(x.km, 20000) };
+  return { from: from && to ? from : '', to: from && to ? to : '', km: pos(x.km, 20000) };
 }
 
 // Возвращает { items: [{ trip, from, to, km, dup }], skipped } или бросает ошибку с понятным текстом.
@@ -175,27 +207,39 @@ function overlaps(trip) {
   });
 }
 
-// Добавить выбранные: маршрут — свой с теми же станциями, иначе создаём
+// Добавить выбранные: маршрут — свой с теми же станциями, иначе создаём (и у каждого следующего локомотива так же)
 export async function importItems(items) {
   const made = new Map();
+  const routeFor = async (e) => {
+    if (!e?.from || !e?.to) return null;
+    const key = `${stationKey(e.from)}|${stationKey(e.to)}`;
+    let r = made.get(key) || S.routes.find((x) => `${stationKey(x.from)}|${stationKey(x.to)}` === key);
+    if (!r) {
+      r = { id: uid(), from: e.from, to: e.to, distanceKm: e.km || null, createdAt: Date.now() };
+      await saveRoute(r);
+    }
+    made.set(key, r);
+    return r.id;
+  };
   let n = 0;
   for (const it of items) {
     const t = { ...it.trip, updatedAt: Date.now() };
-    if (it.from && it.to) {
-      const key = `${stationKey(it.from)}|${stationKey(it.to)}`;
-      let r = made.get(key) || S.routes.find((x) => `${stationKey(x.from)}|${stationKey(x.to)}` === key);
-      if (!r) {
-        r = { id: uid(), from: it.from, to: it.to, distanceKm: it.km || null, createdAt: Date.now() };
-        await saveRoute(r);
-      }
-      made.set(key, r);
-      t.routeId = r.id;
+    const rid = await routeFor(it);
+    if (rid) t.routeId = rid;
+    if (Array.isArray(t.legs)) {
+      t.legs = await Promise.all(t.legs.map(async (l, i) => { const id = await routeFor(it.legs?.[i]); return id ? { ...l, routeId: id } : l; }));
     }
     await saveTrip(t);
     n++;
   }
   return n;
 }
+// Станции присланной поездки: «А → Б → А» или через запятую, если плечи не стыкуются
+const itemRoute = (it) => {
+  const all = [it, ...(it.legs || [])];
+  if (all.every((e) => e.from) && all.every((e, i) => !i || sameSt(all[i - 1].to, e.from))) return [all[0].from, ...all.map((e) => e.to)].join(' → ');
+  return all.filter((e) => e.from).map((e) => `${e.from} → ${e.to}`).join(', ');
+};
 
 // ---- QR-код: SVG из модулей (рисует библиотека qrcode-generator, своя только разметка) ----
 let qrLib = null;
@@ -254,8 +298,8 @@ async function readQrFile(file) {
 // ---- окно «Поделиться» ----
 const tripLine = (t) => {
   const st = statsOf(t);
-  const e = routeEnds(t);
-  return `${dayMonth(st.start)}, ${WD[new Date(st.start).getUTCDay()]} · ${hm(parseLocal(t.start))}–${hm(parseLocal(t.end))}${e ? ` · ${e.from} → ${e.to}` : ''}`;
+  const r = routeOf(t);
+  return `${dayMonth(st.start)}, ${WD[new Date(st.start).getUTCDay()]} · ${hm(parseLocal(t.start))}–${hm(parseLocal(t.end))}${r ? ` · ${r}` : ''}`;
 };
 export async function openShareSheet(trips, { onDone } = {}) {
   const list = trips.filter(shareable);
@@ -374,8 +418,8 @@ export function openImportPreview({ items, skipped }, { link } = {}) {
   const row = (it, i) => {
     const t = it.trip;
     const s = parseLocal(t.start); const e = parseLocal(t.end);
-    const route = it.from ? `${it.from} → ${it.to}` : 'Маршрут не указан';
-    const loco = [t.locoType, t.locoNumber ? `№${t.locoNumber}` : ''].filter(Boolean).join(' ');
+    const route = itemRoute(it) || 'Маршрут не указан';
+    const loco = locosText(t);
     return `<button class="imp-row" data-act="imp-pick" data-i="${i}" aria-pressed="${pick.has(i)}"><span class="sel-dot" aria-hidden="true"></span>
       <span class="grow"><span class="t1">${esc(`${dayMonth(s)}, ${WD[new Date(s).getUTCDay()]} · ${hm(s)}–${hm(e)}`)}</span>
       <span class="t2">${esc(route)} · ${esc(fmtDur((e - s) / MIN, { short: true }))}${loco ? ` · ${esc(loco)}` : ''}</span>

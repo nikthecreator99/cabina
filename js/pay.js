@@ -19,7 +19,7 @@
 //  • режим «по среднему»: все рабочие часы × средний заработок за час, без отдельных доплат и надбавок;
 //  • тестовый режим «оплата по сменам» (2.18) — см. shiftOver.
 // Все суммы — в рублях, время на входе — в минутах.
-import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal } from './calc.js';
+import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal, hasLegs, legsOf } from './calc.js';
 import { dayInfo } from './calendar.js';
 
 export const ROLES = { assistant: 'Помощник машиниста', driver: 'Машинист' };
@@ -122,6 +122,18 @@ export function isHeavy(trip, cfg) {
   if (!n) return false;
   return (num(n.weight) > 0 && num(trip.weight) > num(n.weight)) || (num(n.length) > 0 && num(trip.length) > num(n.length));
 }
+// Сколько тяжёлых или длинных поездов в поездке: у смены локомотива — у каждого локомотива свой поезд (2.19.7)
+export const heavyCount = (trip, cfg) => legsOf(trip).filter((l) => isHeavy(l, cfg)).length;
+// Минуты на локомотиве с тяжёлым или длинным поездом — за всю поездку или за месяц mk.
+// У поездки со сменой локомотива — только часы тех локомотивов, у которых поезд тяжелее или длиннее нормы их маршрута.
+export function heavyMin(trip, st, cfg, mk) {
+  if (hasLegs(trip) && Array.isArray(st?.legs)) {
+    return legsOf(trip).reduce((sum, l, i) => sum + (isHeavy(l, cfg) ? (mk ? st.legs[i]?.byMonth[mk] || 0 : st.legs[i]?.work || 0) : 0), 0);
+  }
+  if (!isHeavy(trip, cfg)) return 0;
+  const part = mk ? st?.byMonth?.[mk] : st;
+  return part ? Math.max(0, part.work - (part.wait || 0) - (part.pass || 0)) : 0;
+}
 
 // Тестовый режим «оплата по сменам» (2.18, просьба Никиты: посмотреть, какой была бы зарплата при такой системе).
 // Норма каждой поездки — часы дня явки по производственному календарю (8 ч, предпраздничный 7 ч, выходной и праздник 0).
@@ -141,9 +153,10 @@ const shiftPay = (o, rate) => (o.first / 60) * rate * 0.5 + (o.rest / 60) * rate
 // Начисление за часы поездки (или её часть в месяце) без переработки:
 // ставка, следование, ожидание, ночные, вредность, класс, праздничные, тяжёлый поезд.
 // part — { work, night, holiday, wait, pass } в минутах. Работа на локомотиве = work − wait − pass.
+// heavy — минуты на локомотиве с тяжёлым или длинным поездом (heavyMin).
 // У резерва часы на локомотиве идут своей строкой, тоже по тарифу.
 // Пассажирский и манёвры пока оплачиваются как грузовой (доплаты за тяжёлый поезд манёврам не положены).
-function hoursPay(part, rate, cfg, trip) {
+function hoursPay(part, rate, cfg, trip, heavy = 0) {
   const h = part.work / 60;
   const w = (part.wait || 0) / 60;
   const p = (part.pass || 0) / 60;
@@ -158,7 +171,7 @@ function hoursPay(part, rate, cfg, trip) {
     harm: h * rate * cfg.harm / 100,
     klass: h * rate * cfg.klass / 100,
     holiday: (part.holiday / 60) * rate,
-    heavy: isHeavy(trip, cfg) ? drive * rate * cfg.heavy / 100 : 0,
+    heavy: (Math.min(drive * 60, heavy) / 60) * rate * cfg.heavy / 100,
   };
 }
 const sumObj = (o) => Object.values(o).reduce((s, v) => s + v, 0);
@@ -173,7 +186,7 @@ export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
   if (isAvg(cfg)) gross = (st.work / 60) * cfg.avgHour;
   else {
     const rate = rateOn(cfg, dateKeyOf(st.start));
-    const p = hoursPay(st, rate, cfg, trip);
+    const p = hoursPay(st, rate, cfg, trip, heavyMin(trip, st, cfg));
     const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3 + (cfg.shiftTest ? shiftPay(shiftOver(st), rate) : 0);
     gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
   }
@@ -190,7 +203,7 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   const acc = { base: 0, pass: 0, wait: 0, reserve: 0, night: 0, harm: 0, klass: 0, holiday: 0, heavy: 0 };
   let comp = 0;
   let reserveMin = 0;
-  let heavyMin = 0;
+  let heavyTotal = 0;
   const shift = { first: 0, rest: 0, pay1: 0, pay2: 0 }; // тестовый режим: сверх нормы смен, по месяцу явки
   for (const t of sum.monthTrips) {
     const st = statsOf(t);
@@ -202,11 +215,12 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
     }
     const part = st.byMonth[mk];
     if (!part) continue;
-    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t);
+    const hv = heavyMin(t, st, cfg, mk);
+    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t, hv);
     for (const k of Object.keys(acc)) acc[k] += p[k];
     const drive = Math.max(0, part.work - (part.wait || 0) - (part.pass || 0));
     if (t.kind === 'reserve') reserveMin += drive;
-    if (isHeavy(t, cfg)) heavyMin += drive;
+    heavyTotal += Math.min(drive, hv);
     if (!st.live && monthKeyOf(st.start) === mk) comp += cfg.trip;
   }
   const lastDay = `${mk}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
@@ -248,7 +262,7 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   L('harm', 'Вредность', acc.harm, { pct: cfg.harm, hours: h(sum.work) });
   L('klass', 'Надбавка за класс', acc.klass, { pct: cfg.klass, hours: h(sum.work) });
   L('holiday', 'Праздничные', acc.holiday, { pct: 100, hours: h(sum.holiday) });
-  L('heavy', 'Тяжёлые и длинносоставные поезда', acc.heavy, { pct: cfg.heavy, hours: h(heavyMin) });
+  L('heavy', 'Тяжёлые и длинносоставные поезда', acc.heavy, { pct: cfg.heavy, hours: h(heavyTotal) });
   L('overOther', 'Переработка', noAvg(overOther), { pct: 50, hours: O - Ow });
   L('overWeekend', 'Переработка в выходные', noAvg(overWeekend), { pct: 100, hours: Ow - hOw });
   L('shift1', 'Сверх нормы смены, первые 2 ч', noAvg(shift.pay1), { pct: 50, hours: h(shift.first) });

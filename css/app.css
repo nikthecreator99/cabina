@@ -270,6 +270,10 @@ button.stat:active { transform: scale(.98); }
 .trip-time .plus { font-size: 11px; color: var(--muted); font-weight: 600; vertical-align: super; }
 .trip-route { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 14px; min-width: 0; }
 .trip-route span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* со сменой локомотива маршрут длиннее («А → Б → А») — до трёх строк (2.19.7) */
+.trip-route.multi { align-items: flex-start; }
+.trip-route.multi > svg { margin-top: 2px; flex: none; }
+.trip-route.multi span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; line-height: 1.3; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { --c: var(--muted); display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .chip.loco { --c: var(--text-2); }
@@ -447,7 +451,20 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .add-btn::after { content: "+"; margin-left: auto; font-size: 22px; font-weight: 600; line-height: 1; color: var(--muted); }
 .add-btn:active { background: var(--card-2); }
 .add-btn + .add-btn, .add-btn + .hint, .list:not(:empty) + .add-btn, [hidden] + .add-btn { margin-top: 8px; }
-#tf-wait:empty, #tf-pass:empty, #tf-loco-notes:empty { display: none; }
+#tf-wait:empty, #tf-pass:empty, #tf-loco-notes:empty, #tf-legs:empty { display: none; }
+/* смена локомотива (2.19.7): карточка следующего локомотива */
+.interval.leg { gap: 8px; border-left: 3px solid var(--accent); }
+.interval.leg .interval-head > span { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: var(--text); }
+.interval.leg .interval-head > span svg { color: var(--accent); width: 20px; height: 20px; }
+.interval.leg .mini-label { display: block; margin-top: 4px; }
+.interval.leg .leg-loco .mini-label { margin: 4px 0 4px; }
+.interval.leg [data-leg-notes]:empty, .interval.leg [data-leg-train]:empty { display: none; }
+.interval.leg .train-row { margin-top: 0; }
+.interval.leg .link-btn { align-self: flex-start; }
+#tf-train-cap { margin-top: 2px; }
+.day-legs { display: grid; gap: 4px; margin-top: 10px; }
+.day-legs .kv b { font-size: 16px; }
+.day-legs .hint { margin: 0 0 6px; }
 .train-row { display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 8px; margin-top: 10px; }
 .train-row .mini-label { display: block; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #tf-train .add-btn, #tf-note-box .add-btn, #tf-note-field, #tf-routeno-field { margin-top: 10px; }
