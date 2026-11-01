@@ -124,8 +124,6 @@ export const HATS = [
   { id: 'peaked', name: 'Фуражка', premium: true },
   { id: 'ushanka', name: 'Ушанка', reward: true }, { id: 'retro', name: 'Фуражка паровозника', reward: true },
 ];
-// Шарф (награда за приглашение)
-export const SCARVES = [{ id: null, name: 'Нет' }, { id: 'light', name: 'Шарф «Светофор»', reward: true }];
 export const GLASSES = [
   { id: null, name: 'Нет' }, { id: 'round', name: 'Круглые' }, { id: 'square', name: 'Прямые' }, { id: 'wide', name: 'Широкие' },
   { id: 'aviator', name: 'Капли' }, { id: 'cat', name: 'Кошачьи' }, { id: 'sun', name: 'Тёмные' },
@@ -594,19 +592,6 @@ function hat(a, g, u) {
     `<path d="M${f1(cx - w * .9)},${f1(b)} Q${cx},${f1(b + 15)} ${f1(cx + w * .9)},${f1(b)} Q${cx},${f1(b + 4)} ${f1(cx - w * .9)},${f1(b)}Z" fill="#0d0f14"/><path d="M${f1(cx - w * .6)},${f1(b + 4)} Q${cx},${f1(b + 8)} ${f1(cx + w * .6)},${f1(b + 4)}" stroke="#4a5060" stroke-width="1.2" fill="none"/>` +
     `<g transform="translate(${cx} ${f1(b - 17)})"><path d="M-3,0 C-8,-4 -14,-3 -17,-1 C-12,-1 -9,1 -3,2Z M3,0 C8,-4 14,-3 17,-1 C12,-1 9,1 3,2Z" fill="#e0bd6e"/><circle r="4.4" fill="none" stroke="#e0bd6e" stroke-width="1.8"/><circle r="1.3" fill="#e0bd6e"/></g>`;
 }
-// Шарф «Светофор»: вокруг шеи, под подбородком; хвост спереди слева
-function scarf(a, u) {
-  if (a.scarf !== 'light') return '';
-  const { nw } = buildOf(a), C = ['#d8433b', '#f2c230', '#3f9a5b'], l = 100 - nw - 13, r = 100 + nw + 13;
-  const ring = `M${l},139 Q100,152 ${r},139 Q${r + 4},147 ${r + 1},156 Q100,172 ${l - 1},156 Q${l - 4},147 ${l},139Z`;
-  const tail = `M${l + 5},156 L${l + 20},157 L${l + 19},199 L${l + 3},198Z`;
-  let st = ''; for (let i = 0, x = l - 6; x < r + 6; i++, x += 9) st += `<rect x="${x}" y="128" width="9" height="50" fill="${C[i % 3]}"/>`;
-  let tl = ''; for (let i = 0, y = 154; y < 202; i++, y += 9) tl += `<rect x="${l - 2}" y="${y}" width="28" height="9" fill="${C[i % 3]}"/>`;
-  let fr = ''; for (let x = l + 4; x < l + 20; x += 3) fr += `<path d="M${f1(x)},198.5 v4" stroke="${C[(Math.round(x) % 3)]}" stroke-width="1.6" stroke-linecap="round"/>`;
-  return `<clipPath id="${u}sf"><path d="${ring}"/></clipPath><path d="${ring}" fill="${C[0]}"/><g clip-path="url(#${u}sf)">${st}<path d="${ring}" fill="#000" opacity=".14" transform="translate(3 4)"/></g>` +
-    `<clipPath id="${u}st"><path d="${tail}"/></clipPath><g clip-path="url(#${u}st)">${tl}<path d="M${l + 16},150 V202" stroke="#000" stroke-width="5" opacity=".12"/></g>${fr}` +
-    `<ellipse cx="${l + 13}" cy="158" rx="9.5" ry="7.5" fill="${C[1]}"/><path d="M${l + 7},156 q6,5 12,0" stroke="#000" stroke-width="1.1" fill="none" opacity=".22"/>`;
-}
 function ushanka(a, g, u) {
   const { bandY: b, w: w0, top } = hatGeom(a, g), w = w0 + 3, cx = g.cx, c = USHANKA_C[a.hatC] || USHANKA_C[0], fur = lt(c, .12), y1 = g.cy + 26;
   const fluff = (x0, x1, y, d) => { let p = ''; for (let x = x0; x < x1; x += 5) p += ` Q${f1(x + 2.5)},${f1(y - d)} ${f1(Math.min(x + 5, x1))},${f1(y)}`; return p; };
@@ -952,7 +937,6 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     mazut: a.mazut === true, bg: pick(a.bg, BG, 'mist'),
     metal: idx(a.metal, METAL_C, 0), glow: idx(a.glow, GLOW_C, 0), rEyes: pick(a.rEyes, R_EYES, 'lens'),
     rMouth: pick(a.rMouth, R_MOUTHS, 'smile'), rTop: a.rTop === null ? null : pick(a.rTop, R_TOPS, 'beacon'),
-    scarf: pick(a.scarf, SCARVES, null),
     coat: idx(a.coat, HORSE_C, 0), mane: pick(a.mane, H_MANES, 'short'), maneC: idx(a.maneC, HAIR_C, 0), blaze: pick(a.blaze, H_BLAZE, null),
     hExpr: pick(a.hExpr, H_EXPR, 'happy'), hEars: pick(a.hEars, H_EARS, 'up'),
     bone: idx(a.bone, BONE_C, 0), sEyes: pick(a.sEyes, S_EYES, 'tired'), sJaw: pick(a.sJaw, S_JAW, 'grin'), sExtra: pick(a.sExtra, S_EXTRA, null),
@@ -966,7 +950,6 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     // вещи за приглашения — пока приглашений нет, их нельзя сохранить (откроются вместе с приглашениями)
     if (OUTFITS.some((x) => x.reward && x.id === o.outfit)) { o.outfit = 'vestO'; o.outfitC = null; }
     if (HATS.some((x) => x.reward && x.id === o.hat)) o.hat = null;
-    o.scarf = null;
   }
   return o;
 }
@@ -1002,11 +985,10 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
   const neckSvg = `<clipPath id="${u}nk"><path d="${neck}"/></clipPath><path d="${neck}" fill="${dk(skin, .1)}"/><g clip-path="url(#${u}nk)"><path d="${g.path}" fill="${dk(skin, .3)}" transform="translate(0 6)"/></g>`;
   const head = cel(u + 'hd', g.path, skin, dk(skin, .14), -5, -3) +
     `<ellipse cx="${f1(g.cx - g.rx * .5)}" cy="${f1(g.cy - g.ry * .52)}" rx="${f1(g.rx * .28)}" ry="${f1(g.ry * .14)}" fill="${lt(skin, .4)}" opacity=".45" transform="rotate(-20 ${f1(g.cx - g.rx * .5)} ${f1(g.cy - g.ry * .52)})"/>`;
-  const sc = scarf(a, u);
   if (a.sex === 'horse') {
     const hg2 = horseGeom(a), coat = HORSE_C[a.coat], F2 = horseFace(a, hg2, coat, u);
     const hb = [
-      bg ? background(a.bg, u) : '', horseMane(a, hg2, false), cl.back, horseNeck(a, hg2, coat), cl.s, sc,
+      bg ? background(a.bg, u) : '', horseMane(a, hg2, false), cl.back, horseNeck(a, hg2, coat), cl.s,
       a.hat ? '' : horseEars(a, hg2, coat, u), cel(u + 'hd', hg2.path, coat, dk(coat, .2), -5, -3), F2.r, horseMane(a, hg2, true), mazut(a, hg2),
       glasses(a, F2.E, hg2), hat(a, hg2, u), a.hat ? horseEars(a, hg2, coat, u) : '', goggles(a, hg2), defenders(a, hg2),
     ].join('');
@@ -1015,7 +997,7 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
   if (a.sex === 'skeleton') {
     const bone = BONE_C[a.bone], S2 = skelFace(a, g, bone, u);
     const sb = [
-      bg ? background(a.bg, u) : '', cl.back, skelNeck(a, g, bone), cl.s, sc, S2.r, mazut(a, g),
+      bg ? background(a.bg, u) : '', cl.back, skelNeck(a, g, bone), cl.s, S2.r, mazut(a, g),
       glasses(a, S2.E, g), hat(a, g, u), goggles(a, g), defenders(a, g),
     ].join('');
     return wrap(sb, size, crop, cls);
@@ -1023,7 +1005,7 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
   if (a.sex === 'robot') {
     const m = METAL_C[a.metal], R = robotEyes(a, g, u);
     const rb = [
-      bg ? background(a.bg, u) : '', robotTop(a, g, m, u), cl.back, robotNeck(a, g, m), cl.s, sc,
+      bg ? background(a.bg, u) : '', robotTop(a, g, m, u), cl.back, robotNeck(a, g, m), cl.s,
       robotEars(a, g, m, u), robotHead(a, g, m, u), R.r, robotMouth(a, g), mazut(a, g),
       glasses(a, R, g), hat(a, g, u), goggles(a, g), defenders(a, g),
     ].join('');
@@ -1031,7 +1013,7 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
   }
   const body = [
     bg ? background(a.bg, u) : '', hairClip,
-    H.back, cl.back, neckSvg, cl.s, sc, H.braids || '',
+    H.back, cl.back, neckSvg, cl.s, H.braids || '',
     ears(a, g, skin, u), head,
     marks(a, g, skin, E), wrinkles(a, g, skin, E),
     E.r, Br.r, nose(a, g, skin, u), F.beard, mouth(a, g, skin, u), F.mous,

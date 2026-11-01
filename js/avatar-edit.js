@@ -128,7 +128,7 @@ function sections() {
   const who = () => {
     const open = E.chars || !!ch;
     return `<div class="av-chips">${chip('av-set', 'sex', 'm', 'Мужчина', a.sex === 'm')}${chip('av-set', 'sex', 'f', 'Женщина', f)}<button class="av-chip prem" data-act="av-chars" aria-pressed="${open}" aria-expanded="${open}">Премиум</button></div>` +
-      (open ? `<div class="av-chars">${row('chars', A.CHARS.map((c) => tile('sex', c.id, c.name, { variant: { hat: null, glasses: null, goggles: false, defenders: false, scarf: null }, prem: c.premium })).join(''))}${ch ? `<p class="av-say">«${esc(ch.say)}»</p>` : ''}</div>` : '');
+      (open ? `<div class="av-chars">${row('chars', A.CHARS.map((c) => tile('sex', c.id, c.name, { variant: { hat: null, glasses: null, goggles: false, defenders: false }, prem: c.premium })).join(''))}${ch ? `<p class="av-say">«${esc(ch.say)}»</p>` : ''}</div>` : '');
   };
   const cTiles = (k, list, variant, crop = 'face') => () => row(k, list.map((x) => tile(k, x.id, x.name, { variant, crop })).join(''));
   if (E.group === 'face' && a.sex === 'horse') {
