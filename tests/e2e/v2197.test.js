@@ -14,7 +14,7 @@ const top = (page) => page.locator('.layer').last();
 const fits = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const tripOf = (page, id) => page.evaluate(async (id) => { const t = (await import('./js/store.js')).S.trips.find((x) => x.id === id); return JSON.parse(JSON.stringify(t)); }, id);
 
-test('в пути: «Смена локомотива» — время «сейчас», обратный маршрут одним нажатием; пассажиром без окончания; потом окончание поездки', async () => {
+test('в пути: «Добавить локомотив» — время «сейчас», обратный маршрут одним нажатием; пассажиром без окончания; потом окончание поездки', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { routes: ROUTES, settings: { pay: PAY },
     trips: [{ id: 'v', routeId: 'ab', start: '2026-10-20T05:00', end: '', locoType: '2ЭС5К', locoNumber: '355', kind: 'freight', restType: null }] });

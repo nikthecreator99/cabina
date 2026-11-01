@@ -10,7 +10,7 @@ import { I, esc, small, pageHead, openLayer, closeLayer, sheet, plural, dayMonth
 
 const IRON_MIN = 12 * 60; // «Железная пятая точка»: поездка от 12 часов (согласовано с Никитой)
 const WAIT_MIN = 4 * 60; // «Ждём-с»: ожидание следования за одну поездку
-const CABIN_MIN = 200 * 60; // «Живу в кабине»: часов работы за месяц
+const CABIN_MIN = 200 * 60; // «Рвач» (до 2.19.8 — «Живу в кабине»): часов работы за месяц
 const FAST_RATIO = 0.85; // «Ракета»: на 15% быстрее обычного по этому маршруту
 const FAST_MIN_TRIPS = 3; // ...если до неё по маршруту уже было хотя бы 3 поездки
 const H = 60;
@@ -93,7 +93,7 @@ export const AWARDS = [
   { id: 'hours', g: 'time', art: 'tea', name: 'Часы в кабине', how: 'Всё отработанное время', fun: 'Чай в подстаканнике — лучший напарник.', key: 'work', kind: 'dur', goals: [500 * H, 2000 * H, 10000 * H] },
   { id: 'owl', g: 'time', art: 'owl', name: 'Ночная сова', how: 'Ночные часы — с 22:00 до 6:00', fun: 'Совы завидуют.', key: 'night', kind: 'dur', goals: [100 * H, 500 * H, 1000 * H] },
   { id: 'lark', g: 'time', art: 'lark', name: 'Жаворонок', how: 'Явки с 3 до 6 утра', fun: 'Будильник вас боится.', key: 'lark', goals: [10, 50, 150], unit: (n) => plural(n, 'явка', 'явки', 'явок') },
-  { id: 'cabin', g: 'time', art: 'cal', color: 'repeat', name: 'Живу в кабине', how: 'Месяц, в котором 200 часов работы и больше. Даётся за каждый такой месяц.', fun: 'Дома спрашивают, кто это.', key: 'cabin', repeat: true, goals: [1] },
+  { id: 'cabin', g: 'time', art: 'cal', color: 'repeat', name: 'Рвач', how: 'Месяц, в котором 200 часов работы и больше. Даётся за каждый такой месяц.', fun: 'Дома спрашивают, кто это.', key: 'cabin', repeat: true, goals: [1] },
   { id: 'wait', g: 'time', art: 'sand', color: 'repeat', name: 'Ждём-с', how: 'Ожидание следования 4 часа и дольше за одну поездку. Даётся каждый раз.', fun: 'Терпение — железное.', key: 'wait', repeat: true, goals: [1] },
   { id: 'pass', g: 'time', art: 'case', name: 'Профессиональный пассажир', how: 'Следования пассажиром', fun: 'Проводники здороваются первыми.', key: 'pass', goals: [20, 100, 300], unit: (n) => plural(n, 'следование', 'следования', 'следований') },
   { id: 'newyear', g: 'holidays', art: 'tree', color: 'repeat', name: 'Дед Мороз', how: 'Встретить Новый год в поездке. Даётся за каждый такой Новый год.', fun: 'С праздником, коллега!', key: 'newyear', repeat: true, goals: [1] },
