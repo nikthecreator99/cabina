@@ -289,7 +289,7 @@ export function openTripForm(tripId) {
     </div>
     <div class="field">
       <div class="list" id="tf-legs"></div>
-      <button type="button" class="add-btn" data-act="add-leg" id="tf-add-leg">${I.train} Смена локомотива</button>
+      <button type="button" class="add-btn" data-act="add-leg" id="tf-add-leg">${I.train} Добавить локомотив</button>
     </div>
     <div class="field">
       <div class="list" id="tf-wait"></div>

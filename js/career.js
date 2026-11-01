@@ -2,6 +2,8 @@
 // Правила (со слов Никиты, по Положению ОАО «РЖД»): за 3 года непрерывного стажа — 2 месячных оклада,
 // за 5 лет — 3, за 10 лет — 4, за 15 лет и далее каждые 5 лет — по 5 окладов.
 // Право возникает в день, когда исполняется стаж; выплата — с зарплатой за первый месяц следующего квартала.
+// Прошлая работа (2.19.9, просьба Никиты: работал, уволился, через несколько лет вернулся на ЖД): периоды до перерыва
+// с датами «с» и «по» входят в общий стаж на железной дороге; перерывы — нет. Вознаграждение — только от даты устройства.
 // Всё хранится только в этом телефоне (S.profile.career) и попадает в резервную копию вместе с профилем.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, uid, MONTHS, MONTHS_GEN, MONTHS_PREP } from './ui.js';
 import { S, saveProfile, saveSettings, nowLocal } from './store.js';
@@ -68,12 +70,40 @@ export function tenureText(t) {
   return parts.join(' ');
 }
 export const daysBetween = (a, b) => Math.round((msOf(b) - msOf(a)) / 86400000);
+export const nextDayKey = (k) => keyOf(msOf(k) + 86400000);
+export const prevDayKey = (k) => keyOf(msOf(k) - 86400000);
+
+// Стаж за прошлую работу: обе даты включительно (последний рабочий день тоже считается)
+export const periodTenure = (p) => tenure(p.from, nextDayKey(p.to));
+// Сложить стаж нескольких периодов: дни → месяцы по 30, месяцы → годы по 12 (как при подсчёте трудового стажа)
+export function addTenures(list) {
+  let y = 0; let m = 0; let d = 0;
+  for (const t of list) if (t) { y += t.y; m += t.m; d += t.d; }
+  m += Math.floor(d / 30); d %= 30;
+  y += Math.floor(m / 12); m %= 12;
+  return { y, m, d };
+}
+// Весь стаж на железной дороге: прошлая работа + нынешняя (от даты устройства до сегодня); перерывы не входят
+export function totalTenure(c, today = todayKey()) {
+  const parts = c.past.map(periodTenure);
+  if (c.hired) parts.push(tenure(c.hired, today));
+  return parts.some(Boolean) ? addTenures(parts) : null;
+}
 
 // ---------------------------------------------------------------- данные
+const text60 = (v) => (typeof v === 'string' ? v.trim().slice(0, 60) : '');
+// Прошлая работа из хранилища или резервной копии — только понятные поля, «с» не позже «по», новые сверху
+export const pastOf = (c) => (Array.isArray(c.past) ? c.past : [])
+  .filter((x) => x && typeof x === 'object' && typeof x.id === 'string' && x.id && isDateKey(x.from) && isDateKey(x.to) && x.from <= x.to)
+  .map((x) => ({ id: x.id.slice(0, 40), place: text60(x.place), role: ROLES[x.role] ? x.role : 'other', title: ROLES[x.role] ? '' : text60(x.title), from: x.from, to: x.to }))
+  .sort((a, b) => b.from.localeCompare(a.from));
 export const careerOf = (p = S.profile) => {
   const c = p.career && typeof p.career === 'object' ? p.career : {};
-  return { hired: isDateKey(c.hired) ? c.hired : '', jobs: Array.isArray(c.jobs) ? c.jobs.filter((j) => j && isDateKey(j.from)) : [], dismissed: c.dismissed || '' };
+  return { hired: isDateKey(c.hired) ? c.hired : '', jobs: Array.isArray(c.jobs) ? c.jobs.filter((j) => j && isDateKey(j.from)) : [], past: pastOf(c), dismissed: c.dismissed || '' };
 };
+const pastRole = (x) => ROLES[x.role] || x.title || '';
+// Прошлая работа, на которую приходится дата (для конца должности, начатой до перерыва)
+const pastAt = (c, k) => c.past.find((x) => x.from <= k && k <= x.to) || null;
 export const jobTitle = (j) => (ROLES[j.role] || String(j.title || '').trim() || 'Должность');
 const sortedJobs = (c) => [...c.jobs].sort((a, b) => b.from.localeCompare(a.from));
 // Оклад из набора ставок по должности в профиле
@@ -102,8 +132,7 @@ export function reminderHtml(r) {
 // ---------------------------------------------------------------- экраны
 // Подпись строки «Карьера» в «Редактировать профиль» (с 2.19; до этого — в Настройках)
 export function careerSub() {
-  const c = careerOf();
-  const t = c.hired ? tenure(c.hired, todayKey()) : null;
+  const t = totalTenure(careerOf());
   return t ? `Стаж ${tenureText(t)}` : 'Дата устройства, должности, вознаграждение за преданность';
 }
 
@@ -111,6 +140,7 @@ export function renderCareer() {
   const c = careerOf();
   const today = todayKey();
   const t = c.hired ? tenure(c.hired, today) : null;
+  const total = c.past.length ? totalTenure(c, today) : null;
   const oklad = myOklad();
   const jobs = sortedJobs(c);
   const ms = c.hired ? loyaltyMilestones(c.hired) : [];
@@ -138,8 +168,10 @@ export function renderCareer() {
     <div class="panel pay-panel">
       <div class="pay-field"><label for="cr-hired">Дата устройства на работу</label>
         <input type="date" class="input" id="cr-hired" value="${esc(c.hired)}" max="${today}">
-        <div class="hint">Начало непрерывного стажа в компании. От неё считается вознаграждение за преданность.</div></div>
-      ${t ? `<div class="pay-field"><div class="label">Непрерывный стаж</div><div class="career-tenure num">${tenureText(t)}</div></div>` : ''}
+        <div class="hint">Начало непрерывного стажа в компании. От неё считается вознаграждение за преданность. Если увольнялись и вернулись — дата последнего устройства, а прошлую работу добавьте ниже.</div></div>
+      ${t ? `<div class="pay-field"><div class="label">Непрерывный стаж</div><div class="career-tenure num" id="cr-tenure">${tenureText(t)}</div></div>` : ''}
+      ${total ? `<div class="pay-field"><div class="label">Всего на железной дороге</div><div class="career-tenure num" id="cr-total">${tenureText(total)}</div>
+        <div class="hint">Нынешняя и прошлая работа, перерывы не считаются.</div></div>` : ''}
       <div class="pay-field"><label for="cr-oklad">Оклад, ₽ в месяц</label>
         <div class="input-unit"><input class="input" id="cr-oklad" inputmode="decimal" autocomplete="off" value="${oklad ? esc(okladText(oklad)) : ''}" placeholder="Например, 48 000"><span>₽</span></div>
         <div class="hint">Нужен для расчёта вознаграждения за преданность.</div></div>
@@ -147,11 +179,19 @@ export function renderCareer() {
     ${nextHtml}
     <div class="sec-head"><h2>Должности</h2></div>
     ${jobs.length ? `<div class="panel" id="cr-jobs">${jobs.map((j, i) => {
-      const to = i > 0 ? jobs[i - 1].from : null;
-      return `<button class="row" data-act="job-edit" data-id="${esc(j.id)}"><span class="ico" style="--c:${i === 0 ? 'var(--ok)' : 'var(--muted)'}">${I.briefcase}</span>
-        <div class="grow"><div class="t1">${esc(jobTitle(j))}</div><div class="t2">с ${dateText(j.from)}${to ? ` по ${dateText(keyOf(msOf(to) - 86400000))}` : ' · сейчас'}</div></div>${small(I.edit, 18)}</button>`;
+      // должность заканчивается накануне следующей, а если начата на прошлой работе — не позже её окончания
+      let end = i > 0 ? prevDayKey(jobs[i - 1].from) : '';
+      const was = pastAt(c, j.from);
+      if (was && (!end || was.to < end)) end = was.to;
+      return `<button class="row" data-act="job-edit" data-id="${esc(j.id)}"><span class="ico" style="--c:${i === 0 && !end ? 'var(--ok)' : 'var(--muted)'}">${I.briefcase}</span>
+        <div class="grow"><div class="t1">${esc(jobTitle(j))}</div><div class="t2">с ${dateText(j.from)}${end ? ` по ${dateText(end)}` : ' · сейчас'}</div></div>${small(I.edit, 18)}</button>`;
     }).join('')}</div>` : '<div class="hint">Добавьте должности, чтобы видеть свой путь: например, «Помощник машиниста» с одной даты и «Машинист» — с другой.</div>'}
     <button class="btn btn-ghost" data-act="job-add">${I.plus} Добавить должность</button>
+    <div class="sec-head"><h2>Прошлая работа на ЖД</h2></div>
+    ${c.past.length ? `<div class="panel" id="cr-past">${c.past.map((x) => `<button class="row" data-act="past-edit" data-id="${esc(x.id)}"><span class="ico" style="--c:var(--muted)">${I.briefcase}</span>
+        <div class="grow"><div class="t1">${esc(x.place || 'Место не указано')}</div><div class="t2">${pastRole(x) ? `${esc(pastRole(x))} · ` : ''}${tenureText(periodTenure(x))}</div><div class="t2">с ${dateText(x.from)} по ${dateText(x.to)}</div></div>${small(I.edit, 18)}</button>`).join('')}</div>`
+      : '<div class="hint">Увольнялись и потом вернулись на железную дорогу? Добавьте, где и когда работали раньше: эти годы войдут в общий стаж.</div>'}
+    <button class="btn btn-ghost" data-act="past-add" id="cr-past-add">${I.plus} Добавить прошлую работу</button>
     ${ms.length ? `<div class="sec-head"><h2>Вознаграждение за преданность</h2></div>
     <div class="panel loyal-list">${shown.map((x) => `<div class="row ${x.date <= today ? 'done' : ''}"><span class="ico" style="--c:${x.date <= today ? 'var(--ok)' : 'var(--warn)'}">${x.date <= today ? I.check : I.medal}</span>
       <div class="grow"><div class="t1">${x.years} ${plural(x.years, 'год', 'года', 'лет')} — ${x.salaries} ${plural(x.salaries, 'оклад', 'оклада', 'окладов')}${amount(x)}</div><div class="t2">право ${dateText(x.date)} · выплата: ${monthText(x.payMonth)}</div></div></div>`).join('')}</div>` : ''}
@@ -202,10 +242,84 @@ function openJobForm(id) {
   });
 }
 
+// Прошлая работа: добавить или изменить. Где, должность, с какого и по какое число (оба дня включительно).
+function openPastForm(id) {
+  const c = careerOf();
+  const item = id ? c.past.find((x) => x.id === id) : null;
+  if (id && !item) return;
+  const st = { role: item ? item.role : S.profile.role || 'assistant' };
+  const opts = { ...ROLES, other: 'Другая' };
+  const today = todayKey();
+  const max = c.hired ? prevDayKey(c.hired) : today; // до даты устройства на нынешнее место
+  const el = openLayer(sheet({
+    title: item ? 'Прошлая работа' : 'Новая прошлая работа',
+    body: `<div class="field"><label class="label" for="pw-place">Где работали</label><input class="input" id="pw-place" maxlength="60" autocomplete="off" placeholder="Депо, город или станция" value="${esc(item?.place || '')}"></div>
+      <div class="field"><div class="label">Должность</div><div class="seg" id="pw-role">${Object.entries(opts).map(([k, v]) => `<button type="button" data-role="${k}" aria-pressed="${st.role === k}">${v}</button>`).join('')}</div></div>
+      <div class="field" id="pw-title-box" ${st.role === 'other' ? '' : 'hidden'}><label class="label" for="pw-title">Название</label><input class="input" id="pw-title" maxlength="60" placeholder="Например, слесарь" value="${esc(item?.title || '')}"></div>
+      <div class="field"><label class="label" for="pw-from">С какого числа</label><input type="date" class="input" id="pw-from" value="${esc(item?.from || '')}" max="${max}"></div>
+      <div class="field"><label class="label" for="pw-to">По какое число</label><input type="date" class="input" id="pw-to" value="${esc(item?.to || '')}" max="${max}"></div>
+      <div class="hint" id="pw-len"></div>`,
+    foot: `${item ? `<button class="btn btn-plain" data-act="pw-del">${small(I.trash, 18)} Удалить</button>` : ''}<button class="btn btn-primary" data-act="pw-save">Сохранить</button>`,
+  }));
+  const val = (sel) => el.querySelector(sel).value;
+  // сколько стажа даёт этот период — сразу видно, правильно ли вписаны даты
+  const showLen = () => {
+    const from = val('#pw-from'); const to = val('#pw-to');
+    el.querySelector('#pw-len').textContent = isDateKey(from) && isDateKey(to) && from <= to ? `Стаж за это время: ${tenureText(periodTenure({ from, to }))}` : '';
+  };
+  showLen();
+  el.addEventListener('input', showLen);
+  el.addEventListener('change', showLen);
+  el.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.role) {
+      st.role = b.dataset.role;
+      el.querySelectorAll('#pw-role button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      el.querySelector('#pw-title-box').hidden = st.role !== 'other';
+      return;
+    }
+    if (b.dataset.act === 'pw-del') {
+      if (await confirmDialog({ title: 'Вы действительно хотите удалить прошлую работу?', text: item.place || `с ${dateText(item.from)} по ${dateText(item.to)}`, ok: 'Да', cancel: 'Нет' })) {
+        const cur = careerOf();
+        await saveCareer({ ...cur, past: cur.past.filter((x) => x.id !== item.id) });
+        closeLayer(el); toast('Прошлая работа удалена');
+      }
+      return;
+    }
+    if (b.dataset.act !== 'pw-save') return;
+    const cur = careerOf();
+    const from = val('#pw-from'); const to = val('#pw-to');
+    const err = pastError(cur, { id: item?.id, from, to }, todayKey());
+    if (err) { toast(err, { error: true, ms: 4500 }); return; }
+    const place = val('#pw-place').trim().slice(0, 60);
+    const title = st.role === 'other' ? val('#pw-title').trim().slice(0, 60) : '';
+    const next = { id: item?.id || uid(), place, role: st.role, title, from, to };
+    const past = item ? cur.past.map((x) => (x.id === item.id ? next : x)) : [...cur.past, next];
+    await saveCareer({ ...cur, past });
+    closeLayer(el);
+    toast('Прошлая работа сохранена');
+  });
+}
+
+// Ошибка в датах прошлой работы (или null): обе даты, «с» не позже «по», не в будущем,
+// раньше даты устройства на нынешнее место и без пересечений с другой прошлой работой
+export function pastError(c, { id, from, to }, today) {
+  if (!isDateKey(from)) return 'Укажите, с какого числа';
+  if (!isDateKey(to)) return 'Укажите, по какое число';
+  if (to < from) return 'Окончание работы раньше начала. Проверьте даты';
+  if (to > today) return 'Окончание прошлой работы не может быть в будущем';
+  if (c.hired && to >= c.hired) return `Прошлая работа должна закончиться раньше даты устройства — ${dateText(c.hired)}`;
+  const other = c.past.find((x) => x.id !== id && x.from <= to && from <= x.to);
+  if (other) return `Даты пересекаются с другой прошлой работой${other.place ? `: ${other.place}` : ''} (с ${dateText(other.from)} по ${dateText(other.to)})`;
+  return null;
+}
+
 // Сохранить карьеру. Если текущая (последняя) должность — помощник или машинист, должность в профиле меняется вместе с ней:
 // от неё зависит набор тарифных ставок.
 async function saveCareer(c) {
-  const career = { hired: c.hired, jobs: c.jobs.map(({ id, role, title, from }) => ({ id, role, title, from })), dismissed: c.dismissed || '' };
+  const career = { hired: c.hired, jobs: c.jobs.map(({ id, role, title, from }) => ({ id, role, title, from })),
+    past: (c.past || []).map(({ id, place, role, title, from, to }) => ({ id, place, role, title, from, to })), dismissed: c.dismissed || '' };
   const patch = { career };
   const cur = sortedJobs(career).find((j) => j.from <= todayKey());
   if (cur && ROLES[cur.role] && cur.role !== S.profile.role) {
@@ -218,6 +332,8 @@ async function saveCareer(c) {
 export async function careerClick(act, b, ctx) {
   if (act === 'job-add') { openJobForm(null); return true; }
   if (act === 'job-edit') { openJobForm(b.dataset.id); return true; }
+  if (act === 'past-add') { openPastForm(null); return true; }
+  if (act === 'past-edit') { openPastForm(b.dataset.id); return true; }
   if (act === 'career-oklad') { const f = document.getElementById('cr-oklad'); f?.scrollIntoView({ block: 'center', behavior: 'smooth' }); f?.focus(); return true; }
   if (act === 'loyal-hide') {
     const r = loyaltyReminder();
@@ -245,6 +361,8 @@ export async function careerChange(e) {
   if (t.id !== 'cr-hired') return false;
   const v = t.value;
   if (v && (!isDateKey(v) || v > todayKey())) { toast('Дата устройства не может быть в будущем', { error: true }); t.value = careerOf().hired; return true; }
+  const lastTo = careerOf().past.reduce((m, x) => (x.to > m ? x.to : m), '');
+  if (v && lastTo && v <= lastTo) { toast(`Дата устройства должна быть позже прошлой работы — она закончилась ${dateText(lastTo)}`, { error: true, ms: 4500 }); t.value = careerOf().hired; return true; }
   await saveProfile({ career: { ...careerOf(), hired: v, dismissed: '' } });
   toast(v ? 'Дата устройства сохранена' : 'Дата устройства удалена');
   return true;
