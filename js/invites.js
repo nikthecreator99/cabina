@@ -90,7 +90,7 @@ function tierHtml(t, counted) {
   const base = hasAvatar() ? S.profile.avatar : {};
   const patch = Object.fromEntries(items.map((r) => [r.k, r.id]));
   const pic = items.length ? avatarSvg({ ...base, ...patch }, { size: 72, crop: 'bust', bg: false, cls: 'inv-pic' }) : `<span class="inv-gift">${I.gift}</span>`;
-  const names = items.length ? items.map((r) => r.name).join(' и ') : 'Вещь для персонажа — скоро';
+  const names = items.length ? items.map((r, i) => (i ? r.name.toLowerCase() : r.name)).join(' и ') : 'Вещь для персонажа — скоро';
   return `<div class="inv-tier${got ? ' got' : ''}" data-n="${t.n}">${pic}
     <div class="grow"><div class="t1">${esc(t.title)} <span class="hint">· ${t.n} ${plural(t.n, 'приглашение', 'приглашения', 'приглашений')}</span></div>
       <div class="t2">${esc(names)}</div></div>

@@ -38,7 +38,7 @@ const rewardLocked = (r) => !!r && !E.prem && !(invitedCount() >= r.n);
 const rwName = (n) => `за ${n} ${plural(n, 'приглашение', 'приглашения', 'приглашений')}`;
 
 const E = { a: null, base: '', hist: [], group: 'face', drag: false, prem: false, chars: false };
-const NUM = new Set(['skin', 'eyeC', 'hairC', 'beardC', 'outfitC', 'hatC', 'glassesC', 'lips', 'metal', 'glow']);
+const NUM = new Set(['skin', 'eyeC', 'hairC', 'beardC', 'outfitC', 'hatC', 'glassesC', 'lips', 'metal', 'glow', 'coat', 'maneC', 'bone']);
 const GROUPS = [['face', 'Лицо', I.face], ['hair', 'Волосы', I.hair], ['wear', 'Одежда', I.shirt], ['acc', 'Детали', I.glasses], ['bg', 'Фон', I.image]];
 const norm = (a) => A.normalizeAvatar(a, { premium: true });
 const changed = () => !!E.a && JSON.stringify(E.a) !== E.base;
@@ -129,21 +129,54 @@ function stageHtml() {
     <button class="av-fab r" data-act="av-undo"${E.hist.length ? '' : ' disabled'}><span>${I.undo}</span>Назад</button>
     ${parts.length ? `<div class="av-try">${small(I.lock, 14)} Примерка: ${esc(parts.join(', '))}</div>` : ''}`;
 }
-// у робота вместо волос — макушка (антенны, мигалка)
-const groupName = (k, t) => (k === 'hair' && E.a.sex === 'robot' ? 'Макушка' : t);
+// у робота вместо волос — макушка (антенны, мигалка), у коня — грива
+const groupName = (k, t) => (k !== 'hair' ? t : E.a.sex === 'robot' ? 'Макушка' : E.a.sex === 'horse' ? 'Грива' : t);
 const groupsHtml = () => GROUPS.map(([k, t, ic]) => `<button role="tab" data-act="av-group" data-g="${k}" aria-selected="${E.group === k}">${ic}<span>${groupName(k, t)}</span></button>`).join('');
 
 // Разделы панели: id (по нему раздел обновляется отдельно) и разметка — функцией, чтобы собирать только нужное
 function sections() {
   const a = E.a;
-  const f = a.sex === 'f', robot = a.sex === 'robot';
+  const f = a.sex === 'f', robot = a.sex === 'robot', ch = A.CHARS.find((c) => c.id === a.sex);
   const S_ = (id, title, body, note) => ({ id, html: () => sec(id, title, body(), note) });
-  // «Кто вы»: мужчина, женщина или премиум-персонажи (пока только робот)
+  // «Кто вы»: мужчина, женщина или премиум-персонажи (робот, конь, скелет) — у каждого своя фраза
   const who = () => {
-    const open = E.chars || robot;
+    const open = E.chars || !!ch;
     return `<div class="av-chips">${chip('av-set', 'sex', 'm', 'Мужчина', a.sex === 'm')}${chip('av-set', 'sex', 'f', 'Женщина', f)}<button class="av-chip prem" data-act="av-chars" aria-pressed="${open}" aria-expanded="${open}">Премиум</button></div>` +
-      (open ? `<div class="av-chars">${row('chars', A.CHARS.map((c) => tile('sex', c.id, c.name, { variant: { hat: null, glasses: null, goggles: false, defenders: false }, prem: c.premium })).join(''))}</div>` : '');
+      (open ? `<div class="av-chars">${row('chars', A.CHARS.map((c) => tile('sex', c.id, c.name, { variant: { hat: null, glasses: null, goggles: false, defenders: false, scarf: null }, prem: c.premium })).join(''))}${ch ? `<p class="av-say">«${esc(ch.say)}»</p>` : ''}</div>` : '');
   };
+  const cTiles = (k, list, variant, crop = 'face') => () => row(k, list.map((x) => tile(k, x.id, x.name, { variant, crop })).join(''));
+  if (E.group === 'face' && a.sex === 'horse') {
+    const clean = { hat: null, glasses: null, goggles: false, defenders: false };
+    return [
+      S_('sex', 'Кто вы', who),
+      S_('coat', 'Масть', () => swatches('coat', A.HORSE_C, a.coat)),
+      S_('hExpr', 'Выражение', cTiles('hExpr', A.H_EXPR, clean)),
+      S_('blaze', 'Отметина на лбу', cTiles('blaze', A.H_BLAZE, { ...clean, mane: 'short' })),
+      S_('hEars', 'Уши', cTiles('hEars', A.H_EARS, clean, 'top')),
+      S_('props', 'Пропорции', () => range('faceW', 'Морда') + range('eyeS', 'Глаза') + range('eyeGap', 'Между глаз')),
+    ];
+  }
+  if (E.group === 'hair' && a.sex === 'horse') {
+    return [
+      S_('mane', 'Грива', () => grid(A.H_MANES.map((x) => tile('mane', x.id, x.name, { crop: 'top', variant: { hat: null, goggles: false } })).join(''))),
+      S_('maneC', 'Цвет гривы', () => swatches('maneC', A.HAIR_C, a.maneC)),
+    ];
+  }
+  if (E.group === 'face' && a.sex === 'skeleton') {
+    const clean = { hat: null, glasses: null, goggles: false, defenders: false };
+    return [
+      S_('sex', 'Кто вы', who),
+      S_('bone', 'Цвет кости', () => swatches('bone', A.BONE_C, a.bone), 'зелёный светится в темноте'),
+      S_('sEyes', 'Глазницы', cTiles('sEyes', A.S_EYES, clean)),
+      S_('sJaw', 'Зубы', cTiles('sJaw', A.S_JAW, clean)),
+      S_('sExtra', 'Ещё', cTiles('sExtra', A.S_EXTRA, clean)),
+      S_('head', 'Форма черепа', cTiles('head', A.HEADS, clean)),
+      S_('props', 'Пропорции', () => range('faceW', 'Череп') + range('eyeS', 'Глазницы') + range('eyeGap', 'Между глаз')),
+    ];
+  }
+  if (E.group === 'hair' && a.sex === 'skeleton') {
+    return [S_('noHair', 'Волосы', () => `<p class="av-say">Волосы давно выпали от переработок. Зато можно надеть шапку — во вкладке «Детали».</p>`)];
+  }
   if (E.group === 'face' && robot) {
     const clean = { hat: null, glasses: null, goggles: false, defenders: false, rTop: null };
     const tiles = (k, list) => () => row(k, list.map((x) => tile(k, x.id, x.name, { variant: clean })).join(''));
@@ -206,9 +239,9 @@ function sections() {
       S_('glasses', 'Очки', () => row('glasses', A.GLASSES.map((x) => tile('glasses', x.id, x.name, { variant: { goggles: false } })).join(''))),
       a.glasses && S_('glassesC', 'Цвет оправы', () => swatches('glassesC', A.FRAME_C, a.glassesC)),
       S_('more', 'Ещё', () => `<div class="av-chips">${chip('av-toggle', 'goggles', '', 'Очки на лбу', a.goggles)}${chip('av-toggle', 'defenders', '', 'Наушники', a.defenders)}${chip('av-toggle', 'mazut', '', 'Мазут', a.mazut, true)}</div>`),
-      !robot && S_('earrings', 'Серьги', () => chipSet('earrings', A.EARRINGS)),
-      !robot && S_('piercing', 'Пирсинг', () => chipSet('piercing', A.PIERCING)),
-      !robot && S_('marks', 'Приметы', () => `<div class="av-chips">${A.MARKS.map((m) => chip('av-mark', 'marks', m.id, m.name, a.marks.includes(m.id))).join('')}</div>`, 'можно несколько'),
+      !ch && S_('earrings', 'Серьги', () => chipSet('earrings', A.EARRINGS)),
+      !ch && S_('piercing', 'Пирсинг', () => chipSet('piercing', A.PIERCING)),
+      !ch && S_('marks', 'Приметы', () => `<div class="av-chips">${A.MARKS.map((m) => chip('av-mark', 'marks', m.id, m.name, a.marks.includes(m.id))).join('')}</div>`, 'можно несколько'),
     ].filter(Boolean);
   }
   return [S_('bg', 'Фон', () => grid(A.BG.map((b) => {
@@ -299,7 +332,7 @@ function set(patch) {
   if ('outfit' in patch && patch.outfit !== E.a.outfit) next.outfitC = null;
   // помаду выбирают только у женского персонажа — у мужского её не должно остаться скрытой
   if (patch.sex === 'm') next.lips = 0;
-  if (patch.sex === 'robot') E.chars = true;
+  if (A.isChar(patch.sex)) E.chars = true;
   E.a = norm(next);
   refresh(sectionOf(Object.keys(patch)[0]));
 }
@@ -329,13 +362,15 @@ async function save(ctx) {
   const parts = A.premiumParts(E.a);
   const locks = prem ? [] : A.lockedRewards(E.a, invited);
   if (parts.length && !prem) {
-    const robot = E.a.sex === 'robot', rest = [...parts.filter((p) => p !== 'робот'), ...locks.map((r) => r.name.toLowerCase())];
+    const ch = A.CHARS.find((c) => c.id === E.a.sex), rest = parts.filter((p) => !ch || p !== ch.part);
+    // вещи за приглашения — не Премиум: о них отдельной фразой
+    const lockTxt = locks.length ? ` Вещи за приглашения (${locks.map((r) => `${r.name.toLowerCase()} — ${rwName(r.n)}`).join(', ')}) пока тоже снимутся.` : '';
     const ok = await confirmDialog({
       title: 'Это Премиум',
-      text: robot
-        ? `Робот — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить, но сохранить пока нельзя: Премиум появится позже. Сохранить человека с той же одеждой?`
-        : `Премиум-детали (${[...parts, ...locks.map((r) => r.name.toLowerCase())].join(', ')}) можно примерить, но сохранить пока нельзя: Премиум появится позже. Снять их и сохранить остальное?`,
-      ok: robot ? 'Сохранить человека' : 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
+      text: ch
+        ? `${ch.name} — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить, но сохранить пока нельзя: Премиум появится позже.${lockTxt} Сохранить человека с той же одеждой?`
+        : `Премиум-детали (${parts.join(', ')}) можно примерить, но сохранить пока нельзя: Премиум появится позже.${lockTxt} Снять их и сохранить остальное?`,
+      ok: ch ? 'Сохранить человека' : 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
     });
     if (!ok) return;
   } else if (locks.length) {
@@ -373,7 +408,7 @@ export async function avatarClick(act, b, ctx) {
   else if (act === 'av-toggle' && ['goggles', 'defenders', 'mazut'].includes(k)) set({ [k]: !E.a[k] });
   else if (act === 'av-chars') {
     // свернуть список можно, только пока робот не выбран
-    if (E.a.sex !== 'robot') E.chars = !E.chars;
+    if (!A.isChar(E.a.sex)) E.chars = !E.chars;
     refresh('sex');
   } else if (act === 'av-mark') set({ marks: E.a.marks.includes(v) ? E.a.marks.filter((m) => m !== v) : [...E.a.marks, v] });
   else if (act === 'av-group' && GROUPS.some((g) => g[0] === b.dataset.g)) {

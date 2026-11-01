@@ -18,7 +18,7 @@ const { myDataHtml } = await import('../../js/colleagues.js');
 beforeEach(() => { mem.clear(); S.trips = []; S.routes = []; S.profile = { id: 'profile' }; });
 const DAY = 864e5;
 
-// Рисунки вещей делает тред «Конструктор аватаров»: пока их нет в списках — подкладываем на время теста
+// Рисунки вещей делает поток «Конструктор аватаров» (с 2.19.6 уже в списках); если вещи нет — подкладываем на время теста
 function withItems(fn) {
   const add = [[A.HATS, { id: 'ushanka', name: 'Ушанка', reward: true }], [A.HATS, { id: 'retro', name: 'Фуражка паровозника', reward: true }],
     [A.OUTFITS, { id: 'kitel', name: 'Китель паровозника', reward: true }]].filter(([list, x]) => !list.some((y) => y.id === x.id));
@@ -56,11 +56,12 @@ test('«Случайный» не надевает ни Премиум, ни в�
   }
 }));
 
-test('вещь ещё не нарисована — её нет в списке, надеть нельзя, превью не показываем', () => {
+test('шарф за 1-е приглашение заменяют (Никита, 01.11): в редакторе его нет, ступень «скоро»; без приглашений снимается', () => {
   const scarf = A.REWARDS.find((r) => r.k === 'scarf');
-  if (A.rewardReady(scarf)) return; // рисунки уже влиты
   assert.equal(A.rewardReady(scarf), false);
-  assert.equal(A.normalizeAvatar({ scarf: 'light' }, { invited: 100 }).scarf, undefined);
+  assert.equal(A.normalizeAvatar({ scarf: 'light' }).scarf, null);
+  assert.equal(A.normalizeAvatar({ scarf: 'light' }, { invited: 0 }).scarf, null);
+  for (const id of ['ushanka', 'kitel', 'retro']) assert.ok(A.rewardReady(A.REWARDS.find((r) => r.id === id)), `${id} нарисована (2.19.6)`);
 });
 
 test('счёт засчитанных в телефоне: только целое число, только растёт; дни ступеней «Наставника»', async () => {
