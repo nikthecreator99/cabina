@@ -1036,6 +1036,7 @@ body.av-editing #app { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2
 :root[data-theme="light"] .av-chip.prem { color: #9a6a0e; }
 .av-chip.prem[aria-pressed="true"], :root[data-theme="light"] .av-chip.prem[aria-pressed="true"] { background: linear-gradient(135deg, #f6d27a, #d29a2c); border-color: #d29a2c; color: #2a1a00; }
 .av-chars { margin-top: 12px; }
+.av-say { margin: 10px 2px 0; font-size: 14.5px; font-style: italic; color: var(--text-2); line-height: 1.4; }
 .av-range-row { display: flex; align-items: center; gap: 12px; min-height: 44px; }
 .av-range-row label { flex: 0 0 86px; font-size: 14px; font-weight: 600; color: var(--text-2); }
 .av-range-row output { flex: 0 0 84px; text-align: right; font-weight: 700; font-size: 14px; white-space: nowrap; }

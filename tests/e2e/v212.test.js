@@ -273,3 +273,36 @@ test('робот (2.13): «Премиум» → робот, свои настр�
   assert.deepEqual(errors, []);
   await context.close();
 });
+
+test('конь и скелет (2.20): у каждого своя фраза и настройки, без Премиума сохраняется человек', async () => {
+  const { context, page, errors } = await openApp(env);
+  await openEditor(page);
+  await page.locator('[data-act=av-chars]').click();
+  await page.locator('[data-k=sex][data-v=horse]').click();
+  assert.match(await page.locator('.av-say').innerText(), /Пашем как лошади/);
+  assert.match(await page.locator('#av-panel').innerText(), /Масть[\s\S]*Выражение[\s\S]*Отметина на лбу[\s\S]*Уши/i);
+  await page.locator('[data-k=coat][data-v="3"]').click();
+  await page.locator('[data-k=hExpr][data-v=tired]').click();
+  assert.equal(await page.locator('[data-k=hExpr][data-v=tired]').getAttribute('aria-pressed'), 'true');
+  await page.locator('[data-act=av-group][data-g=hair]').click();
+  assert.match(await page.locator('[data-act=av-group][data-g=hair]').innerText(), /Грива/);
+  await page.locator('[data-k=mane][data-v=long]').click();
+  await page.locator('[data-act=av-group][data-g=face]').click();
+  await page.locator('[data-k=sex][data-v=skeleton]').click();
+  assert.match(await page.locator('.av-say').innerText(), /Помираю на работе, а ночью хочу спать/);
+  assert.match(await page.locator('#av-panel').innerText(), /Цвет кости[\s\S]*Глазницы[\s\S]*Зубы/i);
+  await page.locator('[data-k=sJaw][data-v=yawn]').click();
+  await page.locator('[data-act=av-group][data-g=hair]').click();
+  assert.match(await page.locator('#av-panel').innerText(), /Волосы давно выпали/);
+  await page.locator('[data-act=av-group][data-g=acc]').click();
+  assert.equal(await page.locator('[data-k=hat][data-v=ushanka]').count(), 0, 'вещи за приглашения пока не показываются');
+  await page.locator('[data-act=av-rand]').click();
+  assert.match(await page.locator('.av-try').innerText(), /скелет/);
+  await page.locator('[data-act=av-save]').click();
+  assert.match(await dialog(page).innerText(), /Скелет — премиум-персонаж[\s\S]*Сохранить человека/);
+  await dialog(page).locator('[data-act=yes]').click();
+  await toastHas(page, /Персонаж сохранён/);
+  assert.ok(['m', 'f'].includes((await saved(page)).avatar.sex));
+  assert.deepEqual(errors, []);
+  await context.close();
+});

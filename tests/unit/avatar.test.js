@@ -135,3 +135,38 @@ test('робот (2.13): каждая деталь рисуется, с одеж
   }
   assert.equal(A.hairsOf('robot').length, 0);
 });
+
+test('конь и скелет (2.20): каждая деталь рисуется, с одеждой и уборами; без Премиума — человек', () => {
+  for (const sex of ['horse', 'skeleton']) {
+    for (const [k, list] of [['head', A.HEADS], ['outfit', A.OUTFITS], ['build', A.BUILDS], ['hat', A.HATS], ['glasses', A.GLASSES], ['scarf', A.SCARVES]]) {
+      for (const x of list) ok(A.avatarSvg({ sex, [k]: x.id }));
+    }
+    for (const crop of ['full', 'wide', 'face', 'top', 'bust']) ok(A.avatarSvg({ sex, goggles: true, defenders: true, mazut: true, scarf: 'light' }, { crop, bg: false }));
+    assert.deepEqual(A.premiumParts(A.normalizeAvatar({ sex }, { premium: true })), [A.CHARS.find((c) => c.id === sex).part]);
+    const h = A.normalizeAvatar({ sex, hair: 'bob', outfit: 'jacket' });
+    assert.deepEqual([h.sex, h.outfit], ['f', 'jacket']);
+    const rnd = A.rng(11);
+    for (let i = 0; i < 30; i++) { const a = A.randomAvatar(rnd, { sex }); assert.equal(a.sex, sex); ok(A.avatarSvg(a)); }
+  }
+  for (const [k, list] of [['mane', A.H_MANES], ['blaze', A.H_BLAZE], ['hExpr', A.H_EXPR], ['hEars', A.H_EARS]]) for (const x of list) ok(A.avatarSvg({ sex: 'horse', [k]: x.id, hat: 'cap' }));
+  A.HORSE_C.forEach((_, coat) => ok(A.avatarSvg({ sex: 'horse', coat })));
+  for (const [k, list] of [['sEyes', A.S_EYES], ['sJaw', A.S_JAW], ['sExtra', A.S_EXTRA]]) for (const x of list) ok(A.avatarSvg({ sex: 'skeleton', [k]: x.id }));
+  A.BONE_C.forEach((_, bone) => ok(A.avatarSvg({ sex: 'skeleton', bone })));
+  const bad = A.normalizeAvatar({ sex: 'horse', coat: 99, mane: '<b>', hEars: 1, bone: -3, sJaw: {} }, { premium: true });
+  assert.deepEqual([bad.coat, bad.mane, bad.hEars, bad.bone, bad.sJaw], [0, 'short', 'up', 0, 'grin']);
+  // у каждого премиум-персонажа своя фраза
+  for (const c of A.CHARS) assert.ok(c.say && c.part && c.premium);
+});
+
+test('вещи за приглашения: рисуются у всех, «Случайный» их не берёт, без открытия не сохраняются', () => {
+  for (const sex of ['m', 'f', 'robot', 'horse', 'skeleton']) {
+    ok(A.avatarSvg({ sex, scarf: 'light', outfit: 'kitel', hat: 'retro' }));
+    A.USHANKA_C.forEach((_, hatC) => ok(A.avatarSvg({ sex, hat: 'ushanka', hatC })));
+  }
+  const s = A.normalizeAvatar({ scarf: 'light', outfit: 'kitel', hat: 'ushanka' });
+  assert.deepEqual([s.scarf, s.outfit, s.hat], [null, 'vestO', null]);
+  assert.equal(A.normalizeAvatar({ hat: 'retro' }).hat, null);
+  assert.equal(A.normalizeAvatar({ scarf: 'light' }, { premium: true }).scarf, 'light');
+  const rnd = A.rng(3);
+  for (let i = 0; i < 200; i++) { const a = A.randomAvatar(rnd); assert.ok(a.outfit !== 'kitel' && a.hat !== 'ushanka' && a.hat !== 'retro' && !a.scarf); }
+});

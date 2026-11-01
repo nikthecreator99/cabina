@@ -931,6 +931,10 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     if (isPremiumHat(o.hat)) o.hat = null;
     if (isPremiumBg(o.bg)) o.bg = 'mist';
     o.mazut = false;
+    // вещи за приглашения — пока приглашений нет, их нельзя сохранить (откроются вместе с приглашениями)
+    if (OUTFITS.some((x) => x.reward && x.id === o.outfit)) { o.outfit = 'vestO'; o.outfitC = null; }
+    if (HATS.some((x) => x.reward && x.id === o.hat)) o.hat = null;
+    o.scarf = null;
   }
   return o;
 }
@@ -1014,16 +1018,18 @@ export const bgSvg = (id) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0
 // Робот остаётся роботом (его примеряют), остальные детали — без Премиума.
 export function randomAvatar(rnd = Math.random, keep = {}) {
   const any = (arr) => arr[Math.floor(rnd() * arr.length)], ch = (p) => rnd() < p;
-  if (keep.sex === 'robot') {
-    const h = randomAvatar(rnd, { sex: 'm' });
+  if (isChar(keep.sex)) {
+    const h = randomAvatar(rnd, { sex: 'm' }), n = (arr) => Math.floor(rnd() * arr.length);
     return normalizeAvatar({
-      ...h, sex: 'robot', hair: keep.hair ?? h.hair, metal: Math.floor(rnd() * METAL_C.length), glow: Math.floor(rnd() * GLOW_C.length),
-      rEyes: any(R_EYES).id, rMouth: any(R_MOUTHS).id, rTop: any(R_TOPS).id,
+      ...h, sex: keep.sex, hair: keep.hair ?? h.hair, beard: null, mous: null, marks: [], earrings: null, piercing: null,
+      metal: n(METAL_C), glow: n(GLOW_C), rEyes: any(R_EYES).id, rMouth: any(R_MOUTHS).id, rTop: any(R_TOPS).id,
+      coat: n(HORSE_C), mane: any(H_MANES).id, maneC: n(HAIR_C), blaze: any(H_BLAZE).id, hExpr: any(H_EXPR).id, hEars: any(H_EARS).id,
+      bone: n(BONE_C), sEyes: any(S_EYES).id, sJaw: any(S_JAW).id, sExtra: ch(.3) ? any(S_EXTRA.slice(1)).id : null,
     }, { premium: true });
   }
   const sex = keep.sex === 'm' || keep.sex === 'f' ? keep.sex : ch(.5) ? 'm' : 'f';
-  const o = any(OUTFITS);
-  const hat = ch(.22) ? any(HATS.filter((h) => h.id && !h.premium)).id : null;
+  const o = any(OUTFITS.filter((x) => !x.reward));
+  const hat = ch(.22) ? any(HATS.filter((h) => h.id && !h.premium && !h.reward)).id : null;
   return normalizeAvatar({
     sex, age: 18 + Math.floor(rnd() * 38), skin: Math.floor(rnd() * SKIN.length), head: any(HEADS).id,
     faceW: .88 + rnd() * .24, build: any(BUILDS).id, ears: any(EARS).id,
