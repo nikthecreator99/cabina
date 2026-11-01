@@ -58,11 +58,11 @@ test('«Случайный» не надевает ни Премиум, ни в�
   }
 }));
 
-test('фон и кожанка: без приглашений снимаются, с ними остаются; шарф больше не награда — без Премиума снимается всегда', () => {
+test('фон и кожанка: без приглашений снимаются, с ними остаются; шарфа больше нет', () => {
   let o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather', scarf: 'light' });
-  assert.equal(o.bg, 'mist'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, null);
+  assert.equal(o.bg, 'mist'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, undefined, 'шарфа больше нет');
   o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather', scarf: 'light' }, { invited: 1 });
-  assert.equal(o.bg, 'beam'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, null);
+  assert.equal(o.bg, 'beam'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, undefined);
   o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather' }, { invited: 3 });
   assert.equal(o.bg, 'beam'); assert.equal(o.outfit, 'leather');
   const rnd = A.rng(7);

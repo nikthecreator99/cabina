@@ -120,14 +120,14 @@ function range(k, label) {
 // Что сейчас только примеряется: премиум-детали и неоткрытые вещи за приглашения
 function tryParts() {
   if (E.prem) return [];
-  return [...A.premiumParts(E.a), ...A.lockedRewards(E.a, invitedCount()).map((r) => `${r.name} (${rwName(r.n)})`)];
+  return [...A.premiumParts(E.a), ...A.lockedRewards(E.a, invitedCount()).map((r) => `${r.name} (за ${r.n})`)];
 }
 function stageHtml() {
   const parts = tryParts();
   return `<div class="av-big">${A.avatarSvg(E.a, { size: 216 })}</div>
     <button class="av-fab l" data-act="av-rand"><span>${I.dice}</span>Случайный</button>
     <button class="av-fab r" data-act="av-undo"${E.hist.length ? '' : ' disabled'}><span>${I.undo}</span>Назад</button>
-    ${parts.length ? `<div class="av-try">${small(I.lock, 14)} Примерка: ${esc(parts.join(', '))}</div>` : ''}`;
+    ${parts.length ? `<div class="av-try" title="${esc(parts.join(', '))}">${small(I.lock, 14)} Примерка: ${parts.length === 1 ? esc(parts[0]) : `${parts.length} ${plural(parts.length, 'вещь', 'вещи', 'вещей')}`}</div>` : ''}`;
 }
 // у робота вместо волос — макушка (антенны, мигалка), у коня — грива
 const groupName = (k, t) => (k !== 'hair' ? t : E.a.sex === 'robot' ? 'Макушка' : E.a.sex === 'horse' ? 'Грива' : t);
@@ -142,7 +142,7 @@ function sections() {
   const who = () => {
     const open = E.chars || !!ch;
     return `<div class="av-chips">${chip('av-set', 'sex', 'm', 'Мужчина', a.sex === 'm')}${chip('av-set', 'sex', 'f', 'Женщина', f)}<button class="av-chip prem" data-act="av-chars" aria-pressed="${open}" aria-expanded="${open}">Премиум</button></div>` +
-      (open ? `<div class="av-chars">${row('chars', A.CHARS.map((c) => tile('sex', c.id, c.name, { variant: { hat: null, glasses: null, goggles: false, defenders: false, scarf: null }, prem: c.premium })).join(''))}${ch ? `<p class="av-say">«${esc(ch.say)}»</p>` : ''}</div>` : '');
+      (open ? `<div class="av-chars">${row('chars', A.CHARS.map((c) => tile('sex', c.id, c.name, { variant: { hat: null, glasses: null, goggles: false, defenders: false }, prem: c.premium })).join(''))}${ch ? `<p class="av-say">«${esc(ch.say)}»</p>` : ''}</div>` : '');
   };
   const cTiles = (k, list, variant, crop = 'face') => () => row(k, list.map((x) => tile(k, x.id, x.name, { variant, crop })).join(''));
   if (E.group === 'face' && a.sex === 'horse') {

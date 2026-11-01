@@ -121,30 +121,37 @@ test('засчитанные приглашения: число запомина
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.invited?.n === 1);
   assert.deepEqual((await profileOf(page)).invited, { n: 1, days: ['2026-10-20'] });
   await tab(page, 'profile');
-  assert.match(await text(page, '#inv-entry'), /Засчитано: 1 · до «Бригада» — ещё 4 приглашения/);
+  assert.match(await text(page, '#inv-entry'), /Засчитано: 1 · до «Сменщик» — ещё 2 приглашения/);
   await page.locator('#inv-entry').click();
   await page.waitForSelector('#inv-tiers');
   assert.match(await text(page, '#inv-sum'), /Засчитано[\s\S]*1[\s\S]*Ещё не засчитаны[\s\S]*1/);
   assert.match(await page.locator('.inv-tier[data-n="1"]').getAttribute('class'), /got/);
   assert.match(await text(page, '.inv-tier[data-n="1"]'), /Открыто/);
+  assert.match(await text(page, '.inv-tier[data-n="1"]'), /Напарник[\s\S]*Фон «Прожектор»/);
+  assert.match(await text(page, '.inv-tier[data-n="3"]'), /Сменщик · 3 приглашения[\s\S]*Кожанка машиниста[\s\S]*ещё 2 приглашения/);
   assert.match(await text(page, '.inv-tier[data-n="5"]'), /ещё 4 приглашения/);
   // награда «Наставник», бронза
   await page.locator('[data-act=back]').click();
   await page.locator('#pr-awards .aw-strip').click();
   await page.waitForSelector('.aw-grid');
   assert.doesNotMatch(await page.locator('.aw[data-id=mentor]').getAttribute('class'), /locked/);
-  // вещь за 5 приглашений (рисунок подкладываем на время проверки): бейдж «За 5», сохранить — нельзя, примерить — можно
-  await page.evaluate(async () => { const A = await import('./js/avatar.js'); if (!A.HATS.some((h) => h.id === 'ushanka')) A.HATS.push({ id: 'ushanka', name: 'Ушанка', reward: true }); });
+  // фон за 1 — уже открыт (без значка), кожанка за 3 — значок «За 3»; ушанка за 5 — сохранить нельзя, примерить можно
   await page.locator('[data-act=back]').click();
   await page.locator('[data-act=av-open]').first().click();
   await page.waitForSelector('.screen[data-page=avatar]');
+  await page.locator('[data-act=av-group][data-g=bg]').click();
+  await page.locator('.av-tile[data-k=bg][data-v=beam]').waitFor();
+  assert.doesNotMatch(await page.locator('.av-tile[data-k=bg][data-v=beam]').innerText(), /За \d/);
+  await page.locator('[data-act=av-group][data-g=wear]').click();
+  await page.locator('.av-tile[data-k=outfit][data-v=leather]').waitFor();
+  assert.match(await page.locator('.av-tile[data-k=outfit][data-v=leather]').innerText(), /За 3[\s\S]*Кожанка/);
   await page.locator('[data-act=av-group][data-g=acc]').click();
   const t = page.locator('.av-tile[data-k=hat][data-v=ushanka]');
   await t.waitFor();
   assert.match(await t.innerText(), /За 5[\s\S]*Ушанка/);
   assert.match(await t.getAttribute('aria-label'), /за 5 приглашений/);
   await t.click();
-  await page.locator('.av-try', { hasText: 'Ушанка (за 5 приглашений)' }).waitFor();
+  await page.locator('.av-try', { hasText: 'Ушанка (за 5)' }).waitFor();
   await page.locator('[data-act=av-save]').click();
   const d = top(page);
   assert.match(await d.innerText(), /Пока только примерка[\s\S]*Ушанка — за 5 приглашений[\s\S]*Сейчас засчитано: 1/);
@@ -158,7 +165,6 @@ test('засчитано 5 — ушанку можно сохранить без
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, { ...NEW, invites: { open: [], joined: 5, counted: 5 } });
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.invited?.n === 5);
-  await page.evaluate(async () => { const A = await import('./js/avatar.js'); if (!A.HATS.some((h) => h.id === 'ushanka')) A.HATS.push({ id: 'ushanka', name: 'Ушанка', reward: true }); });
   await tab(page, 'profile');
   await page.locator('[data-act=av-open]').first().click();
   await page.locator('[data-act=av-group][data-g=acc]').click();
