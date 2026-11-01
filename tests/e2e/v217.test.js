@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
-import { ME, ANNA, ready, openTeam } from './mock-colleagues.js';
+import { ME, ANNA, ready, openTeam, CUR } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -29,7 +29,7 @@ async function drag(page, { x = 195, y0 = 200, y1 = 420, dx = 0, steps = 12, rel
   return null;
 }
 const statusReads = (srv) => srv.log.filter((r) => r.path === '/rest/v1/statuses').length;
-const two = { consents: [{ document: 'privacy-2', withdrawn_at: null }], links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }] };
+const two = { consents: [{ document: CUR, withdrawn_at: null }], links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }] };
 
 test('свайп вниз у коллег — свежий статус коллеги без перезапуска; короткий свайп и свайп вбок не обновляют', async () => {
   const { context, page, errors } = await openApp(env);

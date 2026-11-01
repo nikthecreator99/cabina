@@ -1287,3 +1287,38 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 .faq-none, .faq-foot { text-align: center; padding: 4px 8px; }
 .spot-flash { animation: spotFlash 2.2s ease; }
 @keyframes spotFlash { 0%, 65% { box-shadow: inset 0 0 0 2px var(--accent); background-color: color-mix(in srgb, var(--accent) 10%, transparent); } 100% { box-shadow: inset 0 0 0 2px transparent; } }
+
+/* 2.20: «Пригласить коллег», «Предложить идею», плашка «кто из коллег в пути» */
+.inv-n { font-size: 28px; font-weight: 800; color: var(--ok); }
+.inv-tiers { padding: 4px 0; }
+.inv-tier { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.inv-tier:last-child { border-bottom: 0; }
+.inv-tier .grow { flex: 1; min-width: 0; }
+.inv-tier .t1 { font-weight: 700; font-size: 15px; }
+.inv-tier .t2 { font-size: 13px; color: var(--text-2); }
+.inv-pic, .inv-gift { width: 56px; height: 56px; flex: none; border-radius: 14px; background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.inv-gift { display: grid; place-items: center; color: var(--warn); }
+.inv-tier:not(.got) .inv-pic { opacity: .75; }
+.inv-state { flex: none; font-size: 12.5px; font-weight: 700; color: var(--text-2); text-align: right; max-width: 34%; }
+.inv-tier.got .inv-state { color: var(--ok); }
+.inv-state svg { vertical-align: -3px; }
+.inv-open .btn { width: auto; flex: none; }
+.av-rw { background: linear-gradient(135deg, #9fe3b4, #3fa26a); color: #08240f; }
+.idea-form { margin-bottom: 12px; }
+.idea-text { display: block; width: 100%; box-sizing: border-box; min-height: 120px; resize: vertical; font-family: inherit; font-size: 16px; line-height: 1.4; }
+.idea-count { text-align: right; margin-top: 4px; padding-right: 4px; }
+.idea { display: flex; align-items: flex-start; gap: 8px; padding: 12px 10px 12px 14px; border-bottom: 1px solid var(--line); }
+.idea:last-child { border-bottom: 0; }
+.idea .grow { flex: 1; min-width: 0; }
+.idea-body { font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.idea-meta { margin-top: 4px; }
+.idea-meta svg { vertical-align: -2px; margin-right: 3px; }
+.idea.st-accepted .idea-meta { color: var(--ok); font-weight: 700; }
+.idea-del { width: 40px; height: 40px; flex: none; color: var(--text-2); }
+.idea-ans { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.idea-ans .btn { width: auto; }
+.signup-nag { flex-wrap: wrap; background: color-mix(in srgb, var(--ok) 9%, var(--card-solid)); border-color: color-mix(in srgb, var(--ok) 32%, transparent); }
+.signup-nag .grow { flex: 1 1 200px; }
+.signup-nag .nag-btns { width: 100%; flex-wrap: wrap; }
+.signup-nag .nag-btns .btn { flex: 1 1 120px; }
+.signup-nag .nag-off { width: 100%; min-height: 36px; justify-content: center; font-size: 13px; font-weight: 600; color: var(--text-2); background: none; border: 0; }

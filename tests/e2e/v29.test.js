@@ -6,6 +6,7 @@ import { readFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startEnv, openApp, seed, NOW, waitNoLayers } from './helpers.js';
+import { CONSENT_VERSION } from '../../js/legal.js';
 
 const VERSION = (await readFile(new URL('../../js/app.js', import.meta.url), 'utf8')).match(/VERSION = '([\d.]+)'/)[1];
 
@@ -43,7 +44,7 @@ async function mockServer(context, { role = 'user', offline = false } = {}) {
     const send = (status, b) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: b === undefined ? '' : JSON.stringify(b) });
     const bearer = h.authorization === `Bearer ${ACCESS}`;
     if (path === '/auth/v1/signup') {
-      if (body?.data?.consent !== 'privacy-2') return send(500, { code: 'P0001', message: 'cabina: consent required' });
+      if (body?.data?.consent !== CONSENT_VERSION) return send(500, { code: 'P0001', message: 'cabina: consent required' });
       if (body.data.invite !== 'GOODCODE01') return send(500, { code: 'P0001', message: 'cabina: invite required' });
       if (String(body.password).length < 10) return send(422, { code: 422, error_code: 'weak_password', msg: 'Password should be at least 10 characters.' });
       return send(200, { id: 'u1', email: body.email });
@@ -64,7 +65,7 @@ async function mockServer(context, { role = 'user', offline = false } = {}) {
     if (path === '/rest/v1/profiles?select=role' && bearer) return send(200, [{ role }]);
     if (path === '/rest/v1/rpc/touch' && bearer) return send(204);
     // «Коллеги» (2.15–2.16): у этого человека их нет
-    if (/^\/rest\/v1\/(consents|links|cards|statuses|status_places|access)\?select=/.test(path) && bearer) return send(200, path.startsWith('/rest/v1/consents') ? [{ document: 'privacy-2', withdrawn_at: null }] : []);
+    if (/^\/rest\/v1\/(consents|links|cards|statuses|status_places|access)\?select=/.test(path) && bearer) return send(200, path.startsWith('/rest/v1/consents') ? [{ document: CONSENT_VERSION, withdrawn_at: null }] : []);
     if (path === '/rest/v1/rpc/export_my_data' && bearer) return send(200, { email: 'ivan@example.com', email_confirmed: true, created_on: '2026-10-19', last_seen: '2026-10-20', platform: 'web', app_version: '2.9.0', consents: [{ document: 'privacy-1', given_at: '2026-10-19T10:00:00+00:00' }] });
     if (path === '/rest/v1/rpc/delete_my_account' && bearer) return send(204);
     if (path === '/rest/v1/rpc/admin_stats' && bearer) {
@@ -109,7 +110,7 @@ test('без аккаунта приложение ничего не отпра�
   await doc.getByRole('button', { name: 'Понятно' }).click();
   await waitNoLayers(page);
   await page.locator('[data-act=acc-consent-doc]').first().click();
-  assert.match(await sheet(page).innerText(), /Редакция privacy-2[\s\S]*адрес электронной почты/);
+  assert.match(await sheet(page).innerText(), new RegExp(`Редакция ${CONSENT_VERSION}[\\s\\S]*адрес электронной почты`));
   await sheet(page).getByRole('button', { name: 'Понятно' }).click();
   await waitNoLayers(page);
   // политика доступна и из Настроек; текст о хранении данных честный
@@ -175,7 +176,7 @@ test('регистрация: проверки формы, согласие, п�
   assert.equal(sent.length, 2);
   const last = sent.at(-1);
   assert.deepEqual(Object.keys(last.body).sort(), ['data', 'email', 'password']);
-  assert.deepEqual(last.body.data, { consent: 'privacy-2', invite: 'GOODCODE01', platform: 'web', version: VERSION });
+  assert.deepEqual(last.body.data, { consent: CONSENT_VERSION, invite: 'GOODCODE01', platform: 'web', version: VERSION });
   assert.equal(last.apikey, (await page.evaluate(async () => (await import('./js/auth.js')).ANON_KEY)));
   assert.equal(last.auth, null);
   const everything = JSON.stringify(log);
@@ -305,7 +306,7 @@ test('администратор видит статистику (только �
   await waitNoLayers(page);
   // удаление: сначала вопрос, «Отмена» ничего не делает
   await page.locator('[data-act=acc-delete]').click();
-  assert.match(await sheet(page).innerText(), /Удалить аккаунт\?[\s\S]*отзыв согласия[\s\S]*Записи в этом телефоне не пострадают/);
+  assert.match(await sheet(page).innerText(), /Удалить аккаунт\?[\s\S]*ваши приглашения и идеи[\s\S]*отзыв согласия[\s\S]*Записи в этом телефоне и полученные награды не пострадают/);
   await sheet(page).getByRole('button', { name: 'Отмена' }).click();
   await waitNoLayers(page);
   assert.equal(log.filter((r) => r.path === '/rest/v1/rpc/delete_my_account').length, 0);

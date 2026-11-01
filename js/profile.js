@@ -10,7 +10,7 @@ import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
 import { careerOf, careerSub, tenure, tenureText, todayKey } from './career.js';
 import { normPhone } from './phones.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
-import { premiumOk, hasAvatar } from './avatar-edit.js';
+import { hasAvatar, avatarRights } from './avatar-edit.js';
 import { awardsStripHtml } from './awards.js';
 
 const CLASSES = ['3', '2', '1'];
@@ -30,7 +30,7 @@ export function privacyOf(p = S.profile) {
 }
 
 export function avatarHtml(p = S.profile, size = 96) {
-  if (hasAvatar(p)) return avatarSvg(normalizeAvatar(p.avatar, { premium: premiumOk() }), { size, cls: 'ava-svg' });
+  if (hasAvatar(p)) return avatarSvg(normalizeAvatar(p.avatar, avatarRights()), { size, cls: 'ava-svg' });
   return safePhoto(p.photo) ? `<img src="${esc(p.photo)}" alt="" width="${size}" height="${size}">`
     : initials(p.name) ? `<span class="ava-txt">${esc(initials(p.name))}</span>` : I.user;
 }

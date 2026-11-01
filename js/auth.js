@@ -1,6 +1,7 @@
 // Связь с сервером аккаунтов CABINA (Supabase на сервере в России, api.cabina-app.ru).
 // На сервер уходят только почта, пароль (сервер хранит лишь его хеш), согласие, код приглашения,
 // тип устройства и версия приложения, а если человек сам включил «Коллеги» — ещё карточка и статус (colleagues.js).
+// С 2.20 — по действию человека: его приглашения (invites.js) и идеи (ideas.js).
 // Поездки, заработок, отвлечения, документы и телефон — никогда.
 // Вход хранится в localStorage, а не в базе приложения: так он не попадает в резервную копию.
 import { CONSENT_VERSION } from './legal.js';
@@ -83,6 +84,7 @@ export function errorText(res) {
   if (code === 'weak_password' || /Password should/i.test(msg)) return `Пароль слишком простой: нужно не меньше ${PASS_MIN} символов.`;
   if (code === 'user_already_exists' || code === 'email_exists' || /already registered/i.test(msg)) return 'Эта почта уже зарегистрирована. Войдите или восстановите пароль.';
   if (code === 'invalid_credentials' || /Invalid login credentials/i.test(msg)) return 'Неверная почта или пароль.';
+  if (/cabina: email not confirmed/.test(msg)) return 'Сначала подтвердите почту: введите код из письма от CABINA.';
   if (code === 'email_not_confirmed' || /Email not confirmed/i.test(msg)) return 'Почта ещё не подтверждена. Введите код из письма от CABINA.';
   if (code === 'email_address_invalid' || /invalid.*email|email.*invalid/i.test(msg)) return 'Проверьте адрес почты.';
   if (res.status === 429 || /rate.?limit/i.test(code + msg)) return 'Слишком много попыток. Подождите несколько минут и попробуйте снова.';
@@ -124,6 +126,27 @@ export const restGet = (path) => withToken(`/rest/v1/${path}`, { method: 'GET' }
 // ---------------------------------------------------------------- действия
 
 export const normInvite = (s) => String(s || '').toUpperCase().replace(/[\s-]/g, '');
+export const inviteOk = (code) => /^[0-9A-Z]{6,32}$/.test(code);
+
+// Ссылка-приглашение (2.20): адрес сайта + «#invite=КОД». Всё после «#» браузер на сервер сайта не отправляет.
+// Код из ссылки запоминаем в этом телефоне до регистрации (не дольше 14 дней — столько живёт приглашение).
+const INVITE_KEY = 'cabina-invite';
+export function inviteFromHash(hash) {
+  const m = /^#?invite=([0-9A-Za-z-]{6,40})$/.exec(String(hash || ''));
+  const code = m ? normInvite(m[1]) : '';
+  return inviteOk(code) ? code : null;
+}
+export const inviteUrl = (code, loc = globalThis.location) => `${loc.origin}${loc.pathname}#invite=${code}`;
+export function rememberInvite(code) { try { if (inviteOk(code)) localStorage.setItem(INVITE_KEY, JSON.stringify({ code, at: Date.now() })); } catch {} }
+export function savedInvite(now = Date.now()) {
+  try {
+    const x = JSON.parse(localStorage.getItem(INVITE_KEY) || 'null');
+    if (x && inviteOk(x.code) && now - x.at < 14 * 864e5) return x.code;
+    localStorage.removeItem(INVITE_KEY);
+  } catch {}
+  return '';
+}
+export function forgetInvite() { try { localStorage.removeItem(INVITE_KEY); } catch {} }
 export const emailOk = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '')) && String(s).length <= 254;
 
 export async function signUp({ email, password, invite, version }) {

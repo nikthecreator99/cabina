@@ -5,6 +5,7 @@ import { I, esc, small, toast, confirmDialog, plural } from './ui.js';
 import { S, saveProfile } from './store.js';
 import * as A from './avatar.js';
 import { session, myRole } from './auth.js';
+import { countOf } from './awards.js';
 
 // ---- Премиум. Код открытый, поэтому это удобство для разработчика, а не защита: платного здесь ничего нет.
 const PREM_KEY = 'cabina-premium-dev';
@@ -29,6 +30,13 @@ export async function refreshPremium() {
   } catch {}
 }
 
+// ---- Вещи за приглашения (2.20): сколько приглашённых засчитано — число из «Пригласить коллег», в телефоне и только растёт
+export const invitedCount = () => countOf('invited').n;
+// Что можно сохранить и показать коллегам: Премиум (пока — только администратор) и открытые вещи за приглашения
+export const avatarRights = () => ({ premium: premiumOk(), invited: invitedCount() });
+const rewardLocked = (r) => !!r && !E.prem && !(invitedCount() >= r.n);
+const rwName = (n) => `за ${n} ${plural(n, 'приглашение', 'приглашения', 'приглашений')}`;
+
 const E = { a: null, base: '', hist: [], group: 'face', drag: false, prem: false, chars: false };
 const NUM = new Set(['skin', 'eyeC', 'hairC', 'beardC', 'outfitC', 'hatC', 'glassesC', 'lips', 'metal', 'glow']);
 const GROUPS = [['face', 'Лицо', I.face], ['hair', 'Волосы', I.hair], ['wear', 'Одежда', I.shirt], ['acc', 'Детали', I.glasses], ['bg', 'Фон', I.image]];
@@ -39,7 +47,7 @@ export const hasAvatar = (p = S.profile) => !!p.avatar && typeof p.avatar === 'o
 function start() {
   E.prem = premiumOk();
   // первый раз — спокойный персонаж по умолчанию, дальше человек меняет сам или жмёт «Случайный»
-  E.a = A.normalizeAvatar(hasAvatar() ? S.profile.avatar : {}, { premium: E.prem });
+  E.a = A.normalizeAvatar(hasAvatar() ? S.profile.avatar : {}, { premium: E.prem, invited: invitedCount() });
   E.base = JSON.stringify(E.a);
   E.hist = []; E.group = 'face'; E.drag = false; E.chars = false;
 }
@@ -73,10 +81,13 @@ function pic(a, crop) {
   return `<img src="${src}" alt="" width="76" height="76" decoding="async">`;
 }
 const prBadge = '<span class="av-pr">Премиум</span>';
+// Вещь за приглашения: пока не открыта — «За N» (примерить можно), открыта — без значка
+const rwBadge = (k, v) => { const r = A.rewardOf(k, v); return rewardLocked(r) ? `<span class="av-pr av-rw">За ${r.n}</span>` : ''; };
+const rwLabel = (k, v) => { const r = A.rewardOf(k, v); return rewardLocked(r) ? `, ${rwName(r.n)}` : ''; };
 function tile(k, v, name, { crop = 'face', variant = {}, prem = false } = {}) {
   const on = E.a[k] === v;
   const img = v == null ? `<span class="av-none">${NONE}</span>` : pic(norm({ ...E.a, ...variant, [k]: v }), crop);
-  return `<button class="av-tile${on ? ' on' : ''}" data-act="av-set" data-k="${k}" data-v="${esc(v ?? '')}" aria-pressed="${on}" aria-label="${esc(name)}${prem ? ', Премиум' : ''}">${img}${prem ? prBadge : ''}<span class="n">${esc(name)}</span></button>`;
+  return `<button class="av-tile${on ? ' on' : ''}" data-act="av-set" data-k="${k}" data-v="${esc(v ?? '')}" aria-pressed="${on}" aria-label="${esc(name)}${prem ? ', Премиум' : ''}${rwLabel(k, v)}">${img}${prem ? prBadge : rwBadge(k, v)}<span class="n">${esc(name)}</span></button>`;
 }
 const row = (id, tiles) => `<div class="av-row" data-row="${id}">${tiles}</div>`;
 const grid = (tiles, cls = '') => `<div class="av-grid ${cls}">${tiles}</div>`;
@@ -106,12 +117,17 @@ function range(k, label) {
     <output id="av-o-${k}" for="av-r-${k}">${RANGE_TXT[k](E.a[k])}</output></div>`;
 }
 
+// Что сейчас только примеряется: премиум-детали и неоткрытые вещи за приглашения
+function tryParts() {
+  if (E.prem) return [];
+  return [...A.premiumParts(E.a), ...A.lockedRewards(E.a, invitedCount()).map((r) => `${r.name} (${rwName(r.n)})`)];
+}
 function stageHtml() {
-  const parts = A.premiumParts(E.a);
+  const parts = tryParts();
   return `<div class="av-big">${A.avatarSvg(E.a, { size: 216 })}</div>
     <button class="av-fab l" data-act="av-rand"><span>${I.dice}</span>Случайный</button>
     <button class="av-fab r" data-act="av-undo"${E.hist.length ? '' : ' disabled'}><span>${I.undo}</span>Назад</button>
-    ${parts.length && !E.prem ? `<div class="av-try">${small(I.lock, 14)} Примерка: ${esc(parts.join(', '))}</div>` : ''}`;
+    ${parts.length ? `<div class="av-try">${small(I.lock, 14)} Примерка: ${esc(parts.join(', '))}</div>` : ''}`;
 }
 // у робота вместо волос — макушка (антенны, мигалка)
 const groupName = (k, t) => (k === 'hair' && E.a.sex === 'robot' ? 'Макушка' : t);
@@ -197,7 +213,7 @@ function sections() {
   }
   return [S_('bg', 'Фон', () => grid(A.BG.map((b) => {
     const on = a.bg === b.id;
-    return `<button class="av-tile${on ? ' on' : ''}" data-act="av-set" data-k="bg" data-v="${b.id}" aria-pressed="${on}" aria-label="${esc(b.name)}${b.premium ? ', Премиум' : ''}">${A.bgSvg(b.id)}${b.premium ? prBadge : ''}<span class="n">${esc(b.name)}</span></button>`;
+    return `<button class="av-tile${on ? ' on' : ''}" data-act="av-set" data-k="bg" data-v="${b.id}" aria-pressed="${on}" aria-label="${esc(b.name)}${b.premium ? ', Премиум' : ''}${rwLabel('bg', b.id)}">${A.bgSvg(b.id)}${b.premium ? prBadge : rwBadge('bg', b.id)}<span class="n">${esc(b.name)}</span></button>`;
   }).join(''), 'bg3'))];
 }
 const panelHtml = () => sections().map((x) => x.html()).join('');
@@ -309,19 +325,29 @@ export function avatarChange(e) {
 
 async function save(ctx) {
   const prem = premiumOk();
+  const invited = invitedCount();
   const parts = A.premiumParts(E.a);
+  const locks = prem ? [] : A.lockedRewards(E.a, invited);
   if (parts.length && !prem) {
-    const robot = E.a.sex === 'robot', rest = parts.filter((p) => p !== 'робот');
+    const robot = E.a.sex === 'robot', rest = [...parts.filter((p) => p !== 'робот'), ...locks.map((r) => r.name.toLowerCase())];
     const ok = await confirmDialog({
       title: 'Это Премиум',
       text: robot
         ? `Робот — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить, но сохранить пока нельзя: Премиум появится позже. Сохранить человека с той же одеждой?`
-        : `Премиум-детали (${parts.join(', ')}) можно примерить, но сохранить пока нельзя: Премиум появится позже. Снять их и сохранить остальное?`,
+        : `Премиум-детали (${[...parts, ...locks.map((r) => r.name.toLowerCase())].join(', ')}) можно примерить, но сохранить пока нельзя: Премиум появится позже. Снять их и сохранить остальное?`,
       ok: robot ? 'Сохранить человека' : 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
     });
     if (!ok) return;
+  } else if (locks.length) {
+    // вещь за приглашения ещё не открыта: сколько нужно и сколько уже есть
+    const ok = await confirmDialog({
+      title: 'Пока только примерка',
+      text: `${locks.map((r) => `${r.name} — ${rwName(r.n)}`).join(', ')}. Сейчас засчитано: ${invited}. Пригласить коллег — Профиль → «Пригласить коллег». Снять и сохранить остальное?`,
+      ok: 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
+    });
+    if (!ok) return;
   }
-  const avatar = A.normalizeAvatar(E.a, { premium: prem });
+  const avatar = A.normalizeAvatar(E.a, { premium: prem, invited });
   const photo = !!S.profile.photo;
   E.a = null;
   ctx.back();

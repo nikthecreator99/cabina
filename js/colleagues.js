@@ -14,7 +14,7 @@ import { CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, consentHtml, policyHtml, pu
 import { statusFacts, privacyOf, normDepot } from './profile.js';
 import { routeEnds } from './rest.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
-import { premiumOk, hasAvatar } from './avatar-edit.js';
+import { hasAvatar, avatarRights } from './avatar-edit.js';
 
 export const ROLE_NAMES = { assistant: 'Помощник машиниста', driver: 'Машинист', other: 'Другая должность' };
 const KINDS = ['soon', 'trip', 'rest', 'wait', 'dayoff', 'between', 'abs'];
@@ -73,7 +73,7 @@ export function payloadStatus(p) {
 }
 
 // Карточка: имя и должность всегда, депо и персонаж — только если включены в «Приватности». Телефона здесь нет.
-export function cardPayload(p = S.profile, { findable = false, premium = false } = {}) {
+export function cardPayload(p = S.profile, { findable = false, premium = false, invited = 0 } = {}) {
   const pv = privacyOf(p);
   const name = cleanText(p.name);
   if (!name) return null;
@@ -81,7 +81,7 @@ export function cardPayload(p = S.profile, { findable = false, premium = false }
     p_name: name,
     p_role: own(ROLE_NAMES, p.role) ? p.role : null,
     p_depot: pv.depot ? cleanText(normDepot(p.depot)) || null : null,
-    p_avatar: pv.avatar && hasAvatar(p) ? normalizeAvatar(p.avatar, { premium }) : null,
+    p_avatar: pv.avatar && hasAvatar(p) ? normalizeAvatar(p.avatar, { premium, invited }) : null,
     p_searchable: findable,
   };
 }
@@ -354,7 +354,7 @@ async function sync() {
     const pv = privacyOf();
     // «Меня можно найти» выключили на другом устройстве или вышли из «Коллег» — выключаем и здесь
     if (pv.find && !snap.consent.publish) { await saveProfile({ privacy: { ...pv, find: false } }); return; }
-    const want = cardPayload(S.profile, { findable: pv.find, premium: premiumOk() })
+    const want = cardPayload(S.profile, { findable: pv.find, ...avatarRights() })
       // имя стёрли, а из поиска убрать нужно: сервер без имени карточку не сохранит
       || (snap.card?.searchable ? { p_name: snap.card.name, p_role: snap.card.role || null, p_depot: null, p_avatar: null, p_searchable: false } : null);
     // новую карточку создаём только по действию человека («Меня можно найти», предложить, принять), здесь — лишь обновляем
@@ -424,8 +424,9 @@ const snapOrSay = async () => {
   return snap;
 };
 
-// Новая редакция согласия (в ней появились «Коллеги») — для тех, кто зарегистрировался раньше
-async function ensureConsent() {
+// Новая редакция согласия — для тех, кто зарегистрировался раньше (privacy-2: «Коллеги», privacy-3: приглашения и идеи).
+// Нужна и для приглашений и идей (invites.js, ideas.js)
+export async function ensureConsent() {
   const snap = await snapOrSay();
   if (!snap) return false;
   if (snap.consent.main) return true;
@@ -444,7 +445,7 @@ async function ensureConsent() {
 // Без имени коллеги не поймут, кто это: сервер карточку без имени не принимает
 async function ensureCard() {
   const pv = privacyOf();
-  const want = cardPayload(S.profile, { findable: pv.find && !!C.snap?.consent.publish, premium: premiumOk() });
+  const want = cardPayload(S.profile, { findable: pv.find && !!C.snap?.consent.publish, ...avatarRights() });
   if (!want) {
     toast('Сначала укажите имя в профиле — по нему вас узнают коллеги', { error: true, ms: 5000 });
     hooks.go('profile-edit');
@@ -573,7 +574,8 @@ function teamListHtml(snap) {
 }
 
 // Строка «Коллеги» на экране «Профиль»: открывает экран со списком. Без аккаунта её нет.
-export function colleaguesHtml() {
+// extra — ещё строки в той же группе («Пригласить коллег» из invites.js, через app.js — без круговых импортов)
+export function colleaguesHtml(extra = '') {
   if (!legalReady() || !mine()) return '';
   ensureFresh();
   const snap = C.snap;
@@ -590,7 +592,7 @@ export function colleaguesHtml() {
   return `<div class="group" id="col-entry-sec"><div class="group-title">Коллеги</div>
     <button class="col-search" data-act="go" data-page="colleagues" id="col-find" aria-label="Найти коллегу">${small(I.search, 20)}<span>Найти</span></button>
     <div class="panel"><button class="row" data-act="go" data-page="team" id="col-entry"><span class="ico" style="--c:var(--ok)">${I.users}</span>
-      <div class="grow"><div class="t1">Мои коллеги</div><div class="t2">${esc(sub)}</div></div>${badge}${small(I.right, 18)}</button></div></div>`;
+      <div class="grow"><div class="t1">Мои коллеги</div><div class="t2">${esc(sub)}</div></div>${badge}${small(I.right, 18)}</button>${extra}</div></div>`;
 }
 
 export function teamReset() { C.teamQ = ''; }
@@ -608,7 +610,7 @@ export function renderTeam() {
   if (!snap) return `${head}<div class="col-sec" id="col-sec">${loadingHtml()}</div>`;
   if (!snap.consent.main) {
     return `${head}<div class="col-sec" id="col-sec">
-      <div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились «Коллеги»: поиск коллег и статус для них. Чтобы пользоваться ими, прочитайте и примите согласие.</div></div>
+      <div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились личные приглашения и «Идеи». Чтобы пользоваться «Коллегами», прочитайте и примите согласие.</div></div>
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
   const q = C.teamQ;
@@ -718,7 +720,21 @@ export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
     dateText(d.created_on) && fact('Аккаунт создан', dateText(d.created_on)),
     dateText(d.last_seen) && fact('Последний заход', dateText(d.last_seen), 'только дата, без времени'),
     (where || ver) && fact('Устройство', [where, ver && `CABINA ${ver}`].filter(Boolean).join(' · ')),
+    Number.isInteger(d.active_days) && d.active_days > 0 && fact('Заходили в CABINA', `${d.active_days} ${plural(d.active_days, 'день', 'дня', 'дней')}`, 'только число, без дат — для подсчёта приглашений'),
+    d.invited_by != null && fact('Как пришли', d.invited_by === 'admin' ? 'По приглашению разработчика' : 'По приглашению коллеги', 'кто именно — видно только в файле, номером аккаунта'),
   ].filter(Boolean).join('');
+  // приглашения и идеи (2.20): числа и свои тексты
+  const inv = d.invites && typeof d.invites === 'object' ? d.invites : {};
+  const invOpen = arr(inv.open).filter((x) => x && typeof x === 'object').length;
+  const n0 = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
+  const invRows = [
+    [invOpen, 'Неиспользованные приглашения', 'сам код на сервере не хранится; стираются через 14 дней'],
+    [n0(inv.joined), 'Зарегистрировались по вашим приглашениям', 'без почты и имён'],
+    [n0(inv.counted), 'Из них засчитано', 'подтвердили почту и заходили в CABINA в 3 разных дня'],
+  ].filter(([n]) => n > 0).map(([n, label, note]) => `<div class="row"><div class="grow"><div class="t1">${label}</div><div class="t2">${note}</div></div><b class="num">${n}</b></div>`).join('');
+  const IDEA_ST = { new: 'на рассмотрении', accepted: 'принята', declined: 'не подошла' };
+  const ideas = arr(d.ideas).filter((x) => x && typeof x === 'object' && typeof x.body === 'string').map((x) => `<div class="row"><div class="grow"><div class="t1 my-val">${esc(cleanText(x.body, 500))}</div>
+      <div class="t2">${esc([momentText(x.created_at, off), own(IDEA_ST, x.state) ? IDEA_ST[x.state] : ''].filter(Boolean).join(' · '))}</div></div></div>`).join('');
   const consents = arr(d.consents).filter((c) => c && typeof c === 'object').map((c) => consentRow(c, off)).join('');
 
   const card = d.colleagues_card && typeof d.colleagues_card === 'object' ? cardFields(d.colleagues_card) : null;
@@ -755,6 +771,8 @@ export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
     <div class="group-title">Аккаунт</div><div class="panel">${account}</div>
     ${consents ? `<div class="group-title">Согласия</div><div class="panel">${consents}</div>` : ''}
     <div class="group-title">Коллеги</div><div class="panel">${col}</div>
+    ${invRows ? `<div class="group-title">Приглашения</div><div class="panel">${invRows}</div>` : ''}
+    ${ideas ? `<div class="group-title">Ваши идеи</div><div class="panel">${ideas}</div>` : ''}
     <div class="notice ok">${I.shield}<div><b>Не на сервере:</b> поездки, заработок, отвлечения, документы, заметки и телефонная книжка — они только в вашем телефоне.</div></div>
     <div class="hint">Ещё 30 дней сервер хранит журнал входов (IP-адрес, браузер, время) — для защиты от взлома. Его можно запросить на ${esc(OPERATOR.email)}.</div>`;
 }
@@ -849,7 +867,7 @@ async function setFind(on) {
     if (!mine()) return;
     const snap = C.snap || await loadColleagues({ force: true });
     if (!snap?.card?.searchable) { toast('Вас больше нет в поиске'); return; }
-    const want = cardPayload(S.profile, { findable: false, premium: premiumOk() }) || { p_name: snap.card.name, p_role: snap.card.role || null, p_depot: null, p_avatar: null, p_searchable: false };
+    const want = cardPayload(S.profile, { findable: false, ...avatarRights() }) || { p_name: snap.card.name, p_role: snap.card.role || null, p_depot: null, p_avatar: null, p_searchable: false };
     const r = await rpc('save_card', want);
     if (r?.ok) { snap.card = { ...snap.card, searchable: false }; snap.consent.publish = false; const last = readSync(C.sub); last.card = mark(want); writeSync(last); toast('Вас больше нет в поиске'); }
     else toast('Нет связи: уберём вас из поиска, как только появится интернет', { error: true, ms: 5000 });
@@ -864,7 +882,7 @@ async function setFind(on) {
     return;
   }
   if (!(await ensureConsent())) return;
-  const want = cardPayload(S.profile, { findable: true, premium: premiumOk() });
+  const want = cardPayload(S.profile, { findable: true, ...avatarRights() });
   const shown = ['имя', want.p_role ? 'должность' : '', want.p_depot ? 'депо' : '', want.p_avatar ? 'персонаж' : ''].filter(Boolean);
   const ok = await askConsent({ title: 'Меня можно найти', ok: 'Включить',
     html: `<div class="notice ok">${I.users}<div>Пользователи CABINA смогут найти вас по имени и увидят: <b>${shown.join(', ')}</b>. Статус, список коллег, почту и телефон в поиске не видно.</div></div>${publishConsentHtml(session()?.email || '')}`,

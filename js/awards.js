@@ -69,6 +69,15 @@ const ART = {
     <rect x="17" y="27" width="11" height="13" rx="1.5" fill="#d9e2ec"/><circle cx="22.5" cy="31.5" r="2.6" fill="#6f7b88"/><path d="M18.5 39.5c.6-3 2.2-4.4 4-4.4s3.4 1.4 4 4.4z" fill="#6f7b88"/>
     <path d="M31 29h15M31 33h12M31 37h9" stroke="#9aa3ad" stroke-width="1.8" stroke-linecap="round"/></g>
     <circle cx="45" cy="45" r="7.5" fill="#2e9e55" stroke="#fff" stroke-width="2"/><path d="M41.5 45.2l2.4 2.4 4.6-4.8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+  // два человека, старший в фуражке, рука на плече — «Наставник» (засчитанные приглашения)
+  mentor: `<circle cx="25" cy="24" r="6.5" fill="#fff"/><path d="M17.5 21.5h15l-1.5-4.5h-12z" fill="#1f3a5f"/><rect x="17" y="21" width="16" height="2.4" rx="1" fill="#14273f"/>
+    <path d="M13 50c0-10 5-17 12-17s12 7 12 17z" fill="#fff"/><circle cx="41" cy="30" r="5.2" fill="#fff" opacity=".92"/><path d="M32 50c0-8 4-13 9-13s9 5 9 13z" fill="#fff" opacity=".92"/>
+    <path d="M33 40c2-1.5 4-2 6-1.6" stroke="#2b4a6f" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M46 14l1.4 2.8 3.1.5-2.2 2.2.5 3.1-2.8-1.5-2.8 1.5.5-3.1-2.2-2.2 3.1-.5z" fill="#ffd166"/>`,
+  // лампочка — «Идейный» (принятые идеи)
+  bulb: `<path d="M32 12c-8.3 0-14 6.2-14 13.6 0 5.2 2.8 8.6 5.4 11.2 1.6 1.6 2.6 3.4 2.6 5.6V44h12v-1.6c0-2.2 1-4 2.6-5.6 2.6-2.6 5.4-6 5.4-11.2C46 18.2 40.3 12 32 12z" fill="#fff3c4"/>
+    <path d="M27.5 33c1.8-3 3-5 4.5-9 1.5 4 2.7 6 4.5 9" stroke="#e0a400" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <rect x="26" y="44.5" width="12" height="3.2" rx="1.2" fill="#c9ccd1"/><rect x="27" y="48.5" width="10" height="3.2" rx="1.2" fill="#c9ccd1"/><path d="M29.5 53h5" stroke="#9aa3ad" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M14 18l-4-3M50 18l4-3M12 30H7M52 30h5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>`,
   tea: `<path d="M27 15c-2-3 2-4 0-7M33 15c-2-3 2-4 0-7" stroke="#fff" fill="none" stroke-width="1.6" opacity=".8" stroke-linecap="round"/><path d="M37 11l-4 15" stroke="#eee" stroke-width="1.6"/>
     <path d="M23 18h18l-2 23H25z" fill="#fff" opacity=".9"/><path d="M24.5 23h15l-1.6 17h-11.8z" fill="#c8641e"/>
     <path d="M42 31c7 0 7 11 0 11" fill="none" stroke="#c9ccd1" stroke-width="3"/><path d="M22 29h20l-2 17H24z" fill="#c9ccd1" stroke="#6f7b88" stroke-width="1.5"/>
@@ -100,6 +109,9 @@ export const AWARDS = [
   { id: 'holiday', g: 'holidays', art: 'party', color: 'repeat', name: 'Праздник в кабине', how: 'Работа в официальный праздничный день. Даётся за каждый такой день.', fun: 'Пока все отдыхали, вы работали.', key: 'holiday', repeat: true, goals: [1] },
   // 2.19.4, просьба Никиты: за аккаунт CABINA. flag — «да или нет», без счёта и полоски прогресса
   { id: 'account', g: 'special', art: 'pass', color: 'special', name: 'Свой человек', how: 'Создать аккаунт CABINA. Сейчас — по приглашению.', fun: 'Пропуск выдан — добро пожаловать в команду!', key: 'account', flag: true, goals: [1] },
+  // 2.20: числа с сервера (засчитанные приглашения, принятые идеи) хранятся в телефоне и только растут — полученное не отбираем
+  { id: 'mentor', g: 'special', art: 'mentor', name: 'Наставник', how: 'Коллеги, пришедшие по вашему личному приглашению: подтвердили почту и заходили в CABINA в 3 разных дня', fun: 'Вы привели коллег — теперь вы наставник.', key: 'invited', goals: [1, 5, 10], unit: (n) => plural(n, 'коллега', 'коллеги', 'коллег') },
+  { id: 'idea', g: 'special', art: 'bulb', name: 'Идейный', how: 'Ваши идеи, которые приняли в CABINA («Ещё» → «Предложить идею»)', fun: 'Ваша идея сделала CABINA лучше.', key: 'ideas', goals: [1, 3, 10], unit: (n) => plural(n, 'идея', 'идеи', 'идей') },
 ];
 export const MEDALS_TOTAL = AWARDS.reduce((s, a) => s + a.goals.length, 0);
 
@@ -131,7 +143,7 @@ export function computeAwards(trips = S.trips) {
     .sort((a, b) => a.st.end - b.st.end);
   const routes = new Map(S.routes.map((r) => [r.id, r]));
   const cfg = myPay();
-  const c = { account: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
+  const c = { account: 0, invited: 0, ideas: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
   const aw = Object.fromEntries(AWARDS.map((a) => [a.id, { tier: 0, n: 0, days: [], last: null }]));
   const locos = new Set(); const years = new Set(); const hdays = new Set();
   const months = {}; const monthTrips = {}; const byRoute = new Map();
@@ -193,6 +205,14 @@ export function computeAwards(trips = S.trips) {
   // Из резервной копии — непроверенное, поэтому только строка-дата.
   const acc = S.profile?.accountAward;
   if (typeof acc === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(acc)) { c.account = 1; Object.assign(aw.account, { tier: 1, days: [acc] }); }
+  // «Наставник» и «Идейный»: числа, запомненные в телефоне (countOf), и день каждой ступени
+  for (const [id, key] of [['mentor', 'invited'], ['idea', 'ideas']]) {
+    const x = countOf(key);
+    const a = AWARDS.find((y) => y.id === id);
+    c[key] = x.n;
+    const tier = a.goals.filter((g) => x.n >= g).length;
+    Object.assign(aw[id], { tier, days: a.goals.slice(0, tier).map((g, i) => x.days[i] || x.days[x.days.length - 1] || null) });
+  }
   // рекорд «самая быстрая»: по маршруту, где хотя бы 3 поездки, — та, что короче всех относительно обычной (медианы)
   for (const { list, sorted } of byRoute.values()) {
     if (list.length < FAST_MIN_TRIPS) continue;
@@ -211,6 +231,26 @@ const medalsOf = (aw) => AWARDS.reduce((s, a) => s + aw[a.id].tier, 0);
 export async function grantAccountAward(day) {
   if (S.profile?.accountAward || !/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return false;
   await saveProfile({ accountAward: day });
+  return true;
+}
+
+// Числа с сервера, запомненные в телефоне: invited — засчитанные приглашения, ideas — принятые идеи.
+// Из резервной копии — непроверенное: только целое число и даты. days[i] — день, когда достигнута i-я ступень.
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+export function countOf(key, p = S.profile) {
+  const x = p?.[key];
+  const n = x && Number.isInteger(x.n) && x.n >= 0 && x.n <= 100000 ? x.n : 0;
+  const days = Array.isArray(x?.days) ? x.days.filter((d) => typeof d === 'string' && DAY_RE.test(d)).slice(0, 3) : [];
+  return { n, days };
+}
+// Запомнить новое число, если оно больше прежнего (меньше — не уменьшаем: коллега удалил аккаунт, идею стёрли — награда остаётся)
+export async function noteCount(key, n, day) {
+  if (!['invited', 'ideas'].includes(key) || !Number.isInteger(n) || n < 0 || n > 100000 || !DAY_RE.test(day || '')) return false;
+  const cur = countOf(key);
+  if (n <= cur.n) return false;
+  const a = AWARDS.find((x) => x.key === key);
+  const days = a.goals.map((g, i) => cur.days[i] || (n >= g ? day : null)).filter(Boolean);
+  await saveProfile({ [key]: { n, days } });
   return true;
 }
 
@@ -280,8 +320,9 @@ export function awardsStripHtml() {
 
 // ---- экран «Награды» ----
 const monthName = (mk) => `${MONTHS[Number(mk.slice(5, 7)) - 1].toLowerCase()} ${mk.slice(0, 4)}`;
-const dayText = (key) => `${dayMonth(parseLocal(`${key}T00:00`))} ${key.slice(0, 4)}`;
-const shortDay = (key) => `${key.slice(8, 10)}.${key.slice(5, 7)}.${key.slice(0, 4)}`;
+// день неизвестен (число пришло из старой копии без дат) — без даты
+const dayText = (key) => (key ? `${dayMonth(parseLocal(`${key}T00:00`))} ${key.slice(0, 4)}` : '');
+const shortDay = (key) => (key ? `${key.slice(8, 10)}.${key.slice(5, 7)}.${key.slice(0, 4)}` : '✓');
 function recordsHtml(rec) {
   const rows = [];
   if (rec.longest) rows.push(['Самая долгая поездка', fmtDur(rec.longest.min), [routeOf(rec.longest.t), dayMonth(statsOf(rec.longest.t).start)].filter(Boolean).join(' · ')]);

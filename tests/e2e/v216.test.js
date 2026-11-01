@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, waitNoLayers, seed } from './helpers.js';
-import { ME, ANNA, OLEG, ready, openPrivacy, chooseAccess, openTeam } from './mock-colleagues.js';
+import { ME, ANNA, OLEG, ready, openPrivacy, chooseAccess, openTeam, CUR } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -17,7 +17,7 @@ const realErrors = (errors) => errors.filter((e) => !/Failed to load resource/.t
 const until = async (fn, what) => { for (let i = 0; i < 100; i++) { if (fn()) return; await new Promise((r) => setTimeout(r, 50)); } assert.fail(`не дождались: ${what}`); };
 const privacy = (page) => page.evaluate(async () => (await import('./js/store.js')).S.profile.privacy || {});
 const two = {
-  consents: [{ document: 'privacy-2', withdrawn_at: null }],
+  consents: [{ document: CUR, withdrawn_at: null }],
   links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }, { from_id: OLEG, to_id: ME, state: 'accepted' }],
 };
 const meCard = (db) => { db.cards[ME] = { user_id: ME, name: 'Иван Тестовый', role: 'assistant', depot: null, avatar: null, searchable: false }; };
@@ -152,7 +152,7 @@ test('«Мои данные на сервере»: кому что видно �
   // поверх подменного сервера: ответ выгрузки (последний добавленный обработчик главнее)
   await context.route('https://api.cabina-app.ru/rest/v1/rpc/export_my_data', (route) => route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' },
     body: JSON.stringify({ email: 'ivan@example.com', email_confirmed: true, created_on: '2026-10-19', last_seen: '2026-10-20', platform: 'web', app_version: '2.16.0',
-      consents: [{ document: 'privacy-2', given_at: '2026-10-19T10:00:00+00:00', withdrawn_at: null }],
+      consents: [{ document: CUR, given_at: '2026-10-19T10:00:00+00:00', withdrawn_at: null }],
       colleagues_card: { name: 'Иван Тестовый', role: 'assistant', depot: null, avatar: null, searchable: false },
       colleagues_status: null,
       colleagues: [{ with: ANNA, state: 'accepted', offered_by_me: true }, { with: OLEG, state: 'accepted', offered_by_me: false }],
@@ -179,7 +179,7 @@ test('сервер ещё без шага 3 (миграция 0003): «Колл�
   await context.route('https://api.cabina-app.ru/rest/v1/status_places**', missing);
   await context.route('https://api.cabina-app.ru/rest/v1/access**', missing);
   await context.route('https://api.cabina-app.ru/rest/v1/rpc/export_my_data', json(200, { email: 'ivan@example.com', email_confirmed: true, created_on: '2026-10-19', last_seen: '2026-10-20', platform: 'web', app_version: '2.15.0',
-    consents: [{ document: 'privacy-2', given_at: '2026-10-19T10:00:00+00:00', withdrawn_at: null }],
+    consents: [{ document: CUR, given_at: '2026-10-19T10:00:00+00:00', withdrawn_at: null }],
     colleagues_card: { name: 'Иван Тестовый', role: 'assistant', depot: null, avatar: null, searchable: false },
     colleagues_status: { kind: 'rest', place: 'Ольховка', dest: null, part: null, note: null, until_at: '2026-10-20T11:00:00+00:00', after_kind: 'wait', updated_at: '2026-10-20T08:50:00+00:00', expires_at: '2026-10-22T08:50:00+00:00' },
     colleagues: [{ with: ANNA, state: 'accepted', offered_by_me: true }] }));

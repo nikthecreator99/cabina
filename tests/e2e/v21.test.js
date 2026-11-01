@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
-import { ready, openPrivacy } from './mock-colleagues.js';
+import { ready, openPrivacy, CUR } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -131,7 +131,7 @@ test('профиль: статус по порядку — в пути, на о�
 test('приватность: по умолчанию всё скрыто, переключатели сохраняются', async () => {
   // с 2.16 «Приватность» — в Настройках аккаунта (нужен вход); сервер подменён
   const { context, page, errors } = await openApp(env);
-  await ready(context, page, { consents: [{ document: 'privacy-2', withdrawn_at: null }] });
+  await ready(context, page, { consents: [{ document: CUR, withdrawn_at: null }] });
   await openPrivacy(page);
   const sw = page.locator('#pv-card [data-act=pr-priv]');
   assert.deepEqual(await sw.evaluateAll((a) => a.map((b) => b.getAttribute('aria-checked'))), ['false', 'false', 'false'], 'меня можно найти, депо, персонаж');

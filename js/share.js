@@ -212,7 +212,7 @@ async function qrMatrix(text) {
   }
   return null;
 }
-export async function qrSvg(text) {
+export async function qrSvg(text, label = 'QR-код с поездками') {
   const m = await qrMatrix(text);
   if (!m) return '';
   const Q = 4; const size = m.n + Q * 2;
@@ -225,7 +225,7 @@ export async function qrSvg(text) {
       c += w;
     }
   }
-  return `<svg class="qr" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" role="img" aria-label="QR-код с поездками"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+  return `<svg class="qr" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" role="img" aria-label="${esc(label)}"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
 }
 
 // ---- чтение QR с картинки или камеры (библиотека jsQR, всё в телефоне) ----

@@ -150,6 +150,24 @@ export const R_TOPS = [
 ];
 // Премиум-детали: примерить можно, сохранить пока нельзя
 export const PREMIUM = { hat: ['peaked'], bg: ['ocean', 'depot'], mazut: true, chars: ['robot'] };
+// Вещи за приглашения (2.20, решение Никиты: 1 — «Напарник», 5 — «Бригада», 10 — «Машинист-инструктор»).
+// Открываются, когда засчитано n приглашённых коллег; примерить можно всегда, сохранить — когда открыто, без Премиума.
+// k — поле персонажа, id — вещь (у неё в списке флаг reward: true), off — что надеть вместо неоткрытой.
+// Пока вещи нет в своём списке (рисунок не влит), строка ни на что не влияет: надеть её нельзя.
+export const REWARDS = [
+  { k: 'scarf', id: 'light', n: 1, name: 'Шарф «Светофор»', off: null },
+  { k: 'hat', id: 'ushanka', n: 5, name: 'Ушанка', off: null },
+  { k: 'outfit', id: 'kitel', n: 10, name: 'Китель паровозника', off: 'vestO' },
+  { k: 'hat', id: 'retro', n: 10, name: 'Фуражка паровозника', off: null },
+];
+export const REWARD_TIERS = [{ n: 1, title: 'Напарник' }, { n: 5, title: 'Бригада' }, { n: 10, title: 'Машинист-инструктор' }];
+const LISTS = { hat: () => HATS, outfit: () => OUTFITS, bg: () => BG };
+// Вещь нарисована и есть в своём списке
+export const rewardReady = (r) => !!LISTS[r.k] && LISTS[r.k]().some((x) => x.id === r.id);
+export const rewardOf = (k, id) => REWARDS.find((r) => r.k === k && r.id === id) || null;
+// Какие вещи за приглашения надеты, но ещё не открыты (invited — сколько приглашённых засчитано)
+export const lockedRewards = (a, invited = 0) => { const n = Number.isInteger(invited) ? invited : 0; return REWARDS.filter((r) => a[r.k] === r.id && n < r.n); };
+const free = (x) => !x.premium && !x.reward;
 
 // ── Геометрия ────────────────────────────────────────────────────
 function smooth(p, closed = true) {
@@ -711,7 +729,8 @@ export const isPremiumHat = (id) => PREMIUM.hat.includes(id);
 export const isPremiumBg = (id) => PREMIUM.bg.includes(id);
 
 // Только известные значения; всё неизвестное — по умолчанию. premium: false — премиум-детали снимаются.
-export function normalizeAvatar(src, { premium = false } = {}) {
+// invited — сколько приглашённых засчитано: неоткрытые вещи за приглашения (REWARDS) снимаются.
+export function normalizeAvatar(src, { premium = false, invited = 0 } = {}) {
   const a = src && typeof src === 'object' && !Array.isArray(src) ? src : {};
   const sex = a.sex === 'f' || a.sex === 'robot' ? a.sex : 'm';
   const r = (k, def) => num(a[k], RANGES[k][0], RANGES[k][1], def);
@@ -740,6 +759,7 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     if (isPremiumHat(o.hat)) o.hat = null;
     if (isPremiumBg(o.bg)) o.bg = 'mist';
     o.mazut = false;
+    for (const r of lockedRewards(o, invited)) o[r.k] = r.off;
   }
   return o;
 }
@@ -812,8 +832,8 @@ export function randomAvatar(rnd = Math.random, keep = {}) {
     }, { premium: true });
   }
   const sex = keep.sex === 'm' || keep.sex === 'f' ? keep.sex : ch(.5) ? 'm' : 'f';
-  const o = any(OUTFITS);
-  const hat = ch(.22) ? any(HATS.filter((h) => h.id && !h.premium)).id : null;
+  const o = any(OUTFITS.filter(free));
+  const hat = ch(.22) ? any(HATS.filter((h) => h.id && free(h))).id : null;
   return normalizeAvatar({
     sex, age: 18 + Math.floor(rnd() * 38), skin: Math.floor(rnd() * SKIN.length), head: any(HEADS).id,
     faceW: .88 + rnd() * .24, build: any(BUILDS).id, ears: any(EARS).id,
@@ -827,7 +847,7 @@ export function randomAvatar(rnd = Math.random, keep = {}) {
     hat, hatC: Math.floor(rnd() * hatColors(hat).length),
     glasses: ch(.3) ? any(GLASSES.slice(1)).id : null, glassesC: Math.floor(rnd() * FRAME_C.length),
     goggles: ch(.1), defenders: ch(.08), earrings: ch(sex === 'f' ? .5 : .1) ? any(EARRINGS.slice(1)).id : null,
-    piercing: ch(.1) ? any(PIERCING.slice(1)).id : null, bg: any(BG.filter((b) => !b.premium)).id,
+    piercing: ch(.1) ? any(PIERCING.slice(1)).id : null, bg: any(BG.filter(free)).id,
   });
 }
 // Повторяемая последовательность случайных чисел (для тестов)

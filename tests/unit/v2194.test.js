@@ -6,14 +6,14 @@ import { computeAwards, grantAccountAward, awardArt, AWARDS, AWARD_GROUPS, MEDAL
 
 beforeEach(() => { S.trips = []; S.routes = []; S.profile = { id: 'profile' }; });
 
-test('«Свой человек»: особая награда в группе «Особые», одна ступень, всего наград — 33', () => {
+test('«Свой человек»: особая награда в группе «Особые», одна ступень; всего наград — 39 (с 2.20: «Наставник» и «Идейный»)', () => {
   const a = AWARDS.find((x) => x.id === 'account');
   assert.ok(a);
   assert.equal(a.name, 'Свой человек');
   assert.deepEqual(a.goals, [1]);
   assert.equal(a.repeat, undefined, 'не повторяется — без «×N»');
   assert.ok(AWARD_GROUPS.some(([g, t]) => g === a.g && t === 'Особые'));
-  assert.equal(MEDALS_TOTAL, 33);
+  assert.equal(MEDALS_TOTAL, 39);
   assert.match(awardArt('account', 64, 1), /<svg/);
 });
 

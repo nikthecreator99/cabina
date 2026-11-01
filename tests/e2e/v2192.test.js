@@ -8,7 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startEnv, openApp, seed, text, closeTop, waitNoLayers } from './helpers.js';
-import { ME, ANNA, OLEG, ready, openTeam } from './mock-colleagues.js';
+import { ME, ANNA, OLEG, ready, openTeam, CUR } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -28,7 +28,7 @@ const TRIPS = [
 test('профиль: ✎ у имени вместо большой кнопки, рекордов нет (они в наградах), «Найти коллегу» над «Мои коллеги»; 320 px, обе темы', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, {
-    consents: [{ document: 'privacy-2', withdrawn_at: null }],
+    consents: [{ document: CUR, withdrawn_at: null }],
     links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }],
   });
   await seed(page, { routes: ROUTES, trips: TRIPS });
@@ -79,7 +79,7 @@ test('профиль: ✎ у имени вместо большой кнопки
 test('«Мои коллеги»: поиск в самом верху даже при одном коллеге, под ним предложения и коллеги; кнопки «Найти» нет, пока есть коллеги', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, {
-    consents: [{ document: 'privacy-2', withdrawn_at: null }],
+    consents: [{ document: CUR, withdrawn_at: null }],
     links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }, { from_id: OLEG, to_id: ME, state: 'pending' }],
     statuses: { [ANNA]: { kind: 'trip', place: 'Сосновка', dest: 'Ольховка', part: 'morning', updated_at: '2026-10-20T06:10:00Z' } },
   });

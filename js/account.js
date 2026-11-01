@@ -6,12 +6,13 @@
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
 import { legalReady, consentHtml, policyHtml, APP_URL } from './legal.js';
 import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
-  emailOk, normInvite, PASS_MIN, linkErrorText } from './auth.js';
+  emailOk, normInvite, PASS_MIN, linkErrorText, savedInvite, forgetInvite } from './auth.js';
 import { notePremium } from './avatar-edit.js';
+import { openAdminIdeas } from './ideas.js';
 
 // mode: menu | signup | login | reset | sent | reset-sent | newpass. Пароль в состоянии не храним.
 // sent — ввести код из письма, чтобы подтвердить почту; reset-sent — код из письма и новый пароль.
-const A = { mode: 'menu', email: '', invite: '', role: null, busy: false, note: '' };
+const A = { mode: 'menu', email: '', invite: '', role: null, busy: false, note: '', keep: false };
 let VERSION = '';
 export const setAccountVersion = (v) => { VERSION = v; };
 
@@ -33,8 +34,12 @@ function pending() {
   return null;
 }
 
+// Открыли ссылку-приглашение (2.20): сразу форма «Создать аккаунт» с кодом из ссылки
+export function startSignup(code) { A.mode = 'signup'; A.invite = code; A.note = ''; A.keep = true; }
+
 export function accountEnter() {
-  if (A.mode !== 'newpass') {
+  if (A.keep) A.keep = false;
+  else if (A.mode !== 'newpass') {
     const p = !session() && pending();
     if (p) { A.mode = p.mode; A.email = p.email; } else { A.mode = 'menu'; A.note = ''; }
   }
@@ -82,7 +87,8 @@ function signedInHtml(s, colHtml) {
       </div></div>
     ${A.role === 'admin' ? `<div class="group"><div class="group-title">Администратор</div>
       <div class="panel"><button class="row" data-act="acc-stats"><span class="ico" style="--c:var(--warn)">${I.chart}</span><div class="grow"><div class="t1">Статистика</div><div class="t2">Сколько аккаунтов и заходов — только числа</div></div>${small(I.right, 18)}</button>
-        <button class="row" data-act="acc-invite-new"><span class="ico" style="--c:var(--ok)">${I.plus}</span><div class="grow"><div class="t1">Создать приглашение</div><div class="t2">Код для одного человека, действует 14 дней</div></div>${small(I.right, 18)}</button></div></div>` : ''}
+        <button class="row" data-act="acc-invite-new"><span class="ico" style="--c:var(--ok)">${I.plus}</span><div class="grow"><div class="t1">Создать приглашение</div><div class="t2">Код для одного человека, действует 14 дней</div></div>${small(I.right, 18)}</button>
+        <button class="row" data-act="acc-ideas"><span class="ico" style="--c:var(--warn)">${I.idea}</span><div class="grow"><div class="t1">Идеи пользователей</div><div class="t2">Принять или «не подошла» — без имени автора</div></div>${small(I.right, 18)}</button></div></div>` : ''}
     <div class="acc-btns">
       <button class="btn btn-plain" data-act="acc-logout">Выйти из аккаунта</button>
       <button class="btn btn-danger" data-act="acc-delete">${small(I.trash, 18)} Удалить аккаунт</button>
@@ -95,7 +101,7 @@ function formHtml() {
     case 'signup': return `<form class="panel pay-panel" id="acc-form" novalidate>
         ${field('acc-email', 'Почта', emailInput(), 'На неё придёт письмо для подтверждения. Лучше российская почта (Яндекс, Mail.ru).')}
         ${field('acc-pass', 'Придумайте пароль', passInput('new-password'), `Не меньше ${PASS_MIN} символов. Не берите пароль от почты или Госуслуг.`)}
-        ${field('acc-invite', 'Код приглашения', `<input class="input" id="acc-invite" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32" placeholder="Например, 7F3A9C21B4" value="${esc(A.invite)}">`, 'Сейчас идёт закрытое испытание: аккаунт создаётся только по приглашению.')}
+        ${field('acc-invite', 'Код приглашения', `<input class="input" id="acc-invite" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32" placeholder="Например, 7F3A9C21B4" value="${esc(A.invite || savedInvite())}">`, 'Сейчас идёт закрытое испытание: аккаунт создаётся только по приглашению. Код — в приглашении от коллеги.')}
         ${consentBox('acc-consent', 'Мне исполнилось 18 лет. Даю согласие на обработку моих персональных данных.', 'acc-consent-doc', I.shield, 'Прочитать согласие')}
         ${consentBox('acc-policy-ok', 'Я ознакомлен(а) с политикой обработки персональных данных CABINA.', 'acc-policy', I.book, 'Прочитать политику')}
       </form>${errBox}${submitBtn('Создать аккаунт')}${modeBtn('login', 'У меня уже есть аккаунт')}`;
@@ -122,7 +128,7 @@ function formHtml() {
       <div class="acc-docs"><button class="link-btn" data-act="acc-resend">Отправить код ещё раз</button>${modeBtn('login', 'Ко входу')}</div>`;
     default: return `${localNote}
       <div class="panel"><div class="row"><span class="ico" style="--c:var(--night)">${I.info}</span><div class="grow"><div class="t1">Зачем аккаунт</div>
-        <div class="t2">Сейчас идёт закрытое испытание. С аккаунтом можно найти коллег и по вашему выбору показывать им свой статус.</div></div></div></div>
+        <div class="t2">С аккаунтом видно, кто из коллег в пути или на отдыхе (если они сами вам показывают), можно пригласить коллег и предложить идею. Сейчас идёт закрытое испытание — по приглашению.</div></div></div></div>
       <div class="acc-btns"><button class="btn btn-primary" data-act="acc-mode" data-mode="signup">Создать аккаунт</button>
         <button class="btn btn-ghost" data-act="acc-mode" data-mode="login">Войти</button></div>
       ${docsBtns}`;
@@ -163,6 +169,7 @@ function showStats(d) {
   openLayer(sheet({ title: 'Статистика', tall: true, body: `
     <div class="profile-tiles">${tile(d.total, plural(n(d.total), 'аккаунт', 'аккаунта', 'аккаунтов'))}${tile(d.confirmed, 'подтвердили почту')}${tile(d.active_1, 'заходили сегодня')}</div>
     <div class="profile-tiles">${tile(d.active_7, 'за 7 дней')}${tile(d.active_30, 'за 30 дней')}</div>
+    ${d.invited != null || d.ideas_new != null ? `<div class="profile-tiles">${tile(d.invited, 'пришли по приглашениям коллег')}${tile(d.ideas_new, 'новых идей')}</div>` : ''}
     ${list(d.platforms) ? `<div class="group-title">Устройства</div><div class="panel">${list(d.platforms)}</div>` : ''}
     ${list(d.versions) ? `<div class="group-title">Версии приложения</div><div class="panel">${list(d.versions)}</div>` : ''}
     ${days ? `<div class="group-title">По дням</div><div class="panel">${days}</div>` : ''}
@@ -244,6 +251,7 @@ export async function accountClick(act, b, ctx) {
       if (r.ok) showStats(r.data || {}); else toast(r.error, { error: true, ms: 5000 });
       break;
     }
+    case 'acc-ideas': await openAdminIdeas(); break;
     case 'acc-invite-new': {
       if (inviting) break;
       inviting = true;
@@ -265,7 +273,7 @@ export async function accountClick(act, b, ctx) {
     case 'acc-delete': {
       const ok = await confirmDialog({
         title: 'Удалить аккаунт?',
-        text: 'С сервера сразу удалится всё, что он о вас знает: почта, согласие, даты входа, а также карточка, статус и список коллег. Из резервных копий сервера — не позднее чем через 14 дней. Это и есть отзыв согласия. Записи в этом телефоне не пострадают.',
+        text: 'С сервера сразу удалится всё, что он о вас знает: почта, согласие, даты входа, ваши приглашения и идеи, а также карточка, статус и список коллег. Из резервных копий сервера — не позднее чем через 14 дней. Это и есть отзыв согласия. Записи в этом телефоне и полученные награды не пострадают.',
         ok: 'Удалить аккаунт',
       });
       if (!ok) break;
@@ -322,7 +330,7 @@ export async function accountSubmit(e, ctx) {
     return true;
   }
   const signedIn = (text) => { A.mode = 'menu'; A.note = ''; setPending(false); toast(text); ctx.rerender(); window.scrollTo(0, 0); return accountEnter(); };
-  if (A.mode === 'signup') { A.invite = ''; A.mode = r.signedIn ? 'menu' : 'sent'; }
+  if (A.mode === 'signup') { A.invite = ''; forgetInvite(); A.mode = r.signedIn ? 'menu' : 'sent'; }
   else if (A.mode === 'login') await signedIn('Вы вошли в аккаунт');
   else if (A.mode === 'reset') A.mode = 'reset-sent';
   else if (A.mode === 'sent') await signedIn('Почта подтверждена. Вы вошли в аккаунт');

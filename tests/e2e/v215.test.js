@@ -3,8 +3,8 @@
 // С 2.16 переключатели — на экране «Приватность» (Настройки → «Настройки аккаунта»), см. также v216.test.js.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, seed, waitNoLayers } from './helpers.js';
-import { ME, ANNA, OLEG, mockServer, setProfile, ready, openPrivacy, openTeam, chooseAccess } from './mock-colleagues.js';
+import { startEnv, openApp, seed, waitNoLayers, text } from './helpers.js';
+import { ME, ANNA, OLEG, mockServer, setProfile, ready, openPrivacy, openTeam, chooseAccess, CUR } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -26,14 +26,14 @@ test('коллеги: новая редакция согласия, поиск, 
   await sec.getByText('Новая редакция согласия').waitFor();
   assert.equal(srv.calls('give_consent').length, 0, 'без человека согласие не даётся');
   await page.locator('[data-act=col-consent]').click();
-  assert.match(await sheet(page).innerText(), /Редакция privacy-2[\s\S]*Коллеги/);
+  assert.match(await sheet(page).innerText(), new RegExp(`Редакция ${CUR}[\\s\\S]*Коллеги`));
   await sheet(page).locator('[data-act=col-agree-ok]').click();
   await sheet(page).getByText('Отметьте галочку').waitFor();
   assert.equal(srv.calls('give_consent').length, 0, 'галочка не отмечена — ничего не ушло');
   await sheet(page).locator('#col-agree').check();
   await sheet(page).locator('[data-act=col-agree-ok]').click();
   await toastHas(page, /Согласие принято/);
-  assert.deepEqual(srv.calls('give_consent')[0].body, { p_document: 'privacy-2' });
+  assert.deepEqual(srv.calls('give_consent')[0].body, { p_document: CUR });
   await page.locator('.col-search').waitFor();
   assert.match(await sec.innerText(), /Пока никого/);
   assert.equal(await sec.locator('.switch').count(), 0, 'переключателей у коллег нет — они в «Приватности»');
@@ -81,7 +81,7 @@ test('коллеги: новая редакция согласия, поиск, 
 test('коллеги: статус видит только коллега, без точного времени; выключил — стёрся; удалить из коллег', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, {
-    consents: [{ document: 'privacy-2', withdrawn_at: null }],
+    consents: [{ document: CUR, withdrawn_at: null }],
     links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }],
     statuses: { [ANNA]: { kind: 'trip', place: 'Сосновка', dest: 'Ольховка', part: 'morning', until_at: null, after_kind: null, updated_at: '2026-10-20T06:10:00Z' } },
   }, (db) => { db.cards[ME] = { user_id: ME, name: 'Иван Тестовый', role: 'assistant', depot: null, avatar: null, searchable: false }; });
@@ -140,7 +140,7 @@ test('коллеги: статус видит только коллега, бе�
 test('коллеги: предложение мне — принять или отклонить; чужое имя — только текст', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, {
-    consents: [{ document: 'privacy-2', withdrawn_at: null }],
+    consents: [{ document: CUR, withdrawn_at: null }],
     links: [{ from_id: OLEG, to_id: ME, state: 'pending' }, { from_id: ANNA, to_id: ME, state: 'pending' }],
   }, (db) => { db.cards[ANNA].name = '<img src=x onerror="window.__xss=1">Анна'; });
   await tab(page, 'profile');
@@ -171,7 +171,7 @@ test('коллеги: предложение мне — принять или о
 
 test('«Меня можно найти»: отдельное согласие на распространение, выключил — отозвано; «Выйти из „Коллег“»', async () => {
   const { context, page, errors } = await openApp(env);
-  const srv = await ready(context, page, { consents: [{ document: 'privacy-2', withdrawn_at: null }] });
+  const srv = await ready(context, page, { consents: [{ document: CUR, withdrawn_at: null }] });
   await openPrivacy(page);
   await page.locator('#pv-card [data-k=find]').click();
   const s = sheet(page);
@@ -216,7 +216,8 @@ test('без аккаунта раздела нет и на сервер нич�
   await tab(page, 'profile');
   await page.waitForTimeout(300);
   assert.equal(await page.locator('#col-entry').count(), 0, 'без аккаунта строки «Мои коллеги» нет');
-  assert.equal(await page.locator('.screen [data-page=account]').count(), 0, 'строки аккаунта в профиле больше нет');
+  assert.equal(await page.locator('.screen [data-page=account]:not(#col-teaser)').count(), 0, 'строки аккаунта в профиле больше нет');
+  assert.match(await text(page, '#col-teaser'), /Кто из коллег в пути\?/, 'вместо «Коллег» без аккаунта — одна строка-приглашение (2.20)');
   await page.locator('[data-page=profile-edit]').click();
   assert.equal(await page.locator('#pr-privacy').count(), 0, 'приватность — не в профиле, а в настройках аккаунта');
   await page.locator('[data-act=back]').click();
@@ -234,7 +235,7 @@ test('без аккаунта раздела нет и на сервер нич�
 test('выход из аккаунта стирает статус с сервера; должность «Другая»', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, {
-    consents: [{ document: 'privacy-2', withdrawn_at: null }],
+    consents: [{ document: CUR, withdrawn_at: null }],
     links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }],
   });
   await tab(page, 'profile');
@@ -261,7 +262,7 @@ test('выход из аккаунта стирает статус с серве
 test('экраны «Коллег» помещаются на 320 px в тёмной и светлой теме', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, {
-    consents: [{ document: 'privacy-2', withdrawn_at: null }],
+    consents: [{ document: CUR, withdrawn_at: null }],
     links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }, { from_id: OLEG, to_id: ME, state: 'pending' }],
     statuses: { [ANNA]: { kind: 'trip', place: 'Очень длинное название станции', dest: 'Ещё более длинное название станции', part: 'evening', updated_at: '2026-10-20T06:10:00Z' } },
   }, (db) => { db.cards[ANNA].name = 'Анна-Мария Константинопольская-Тестовая'; });

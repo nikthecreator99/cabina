@@ -2,6 +2,8 @@
 // (кому из коллег что видно: access; станции статуса — отдельно, status_places). Коллеги в нём свои статусы мне показывают.
 // Все люди, станции и ключи — выдуманные.
 import { NOW, seed } from './helpers.js';
+import { CONSENT_VERSION as CUR } from '../../js/legal.js';
+export { CUR };
 
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const EXP = Math.floor(Date.parse(NOW) / 1000) + 30 * 86400;
@@ -15,11 +17,15 @@ export async function mockServer(context, init = {}) {
   const db = {
     consents: [{ document: 'privacy-1', withdrawn_at: null }],
     cards: { [ANNA]: { user_id: ANNA, name: 'Анна Тестовая', role: 'other', depot: 'Сосновка', avatar: null, searchable: true }, [OLEG]: { user_id: OLEG, name: 'Олег Пробный', role: 'driver', depot: null, avatar: null, searchable: true } },
-    links: [], statuses: {}, access: [], ...init,
+    links: [], statuses: {}, access: [],
+    // 2.20: приглашения (как в миграции 0005: в ответе — только числа и срок, без кодов) и идеи
+    role: 'user', invites: { open: [], joined: 0, counted: 0 }, ideas: [], ideasToday: 0, ...init,
   };
+  let seq = 0;
+  const uuid = () => `aaaaaaaa-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
   const log = [];
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'apikey, authorization, content-type', 'access-control-allow-methods': 'GET, POST, PUT, OPTIONS' };
-  const main = () => db.consents.some((c) => c.document === 'privacy-2' && !c.withdrawn_at);
+  const main = () => db.consents.some((c) => c.document === CUR && !c.withdrawn_at);
   const mine = (l) => l.state !== 'declined' && (l.from_id === ME || l.to_id === ME);
   const other = (l) => (l.from_id === ME ? l.to_id : l.from_id);
   await context.route('https://api.cabina-app.ru/**', async (route) => {
@@ -36,7 +42,8 @@ export async function mockServer(context, init = {}) {
     const fail = (m) => send(400, { code: 'P0001', message: `cabina: ${m}` });
     const rpc = path.replace('/rest/v1/rpc/', '');
     switch (path) {
-      case '/rest/v1/profiles': return send(200, [{ role: 'user' }]);
+      case '/rest/v1/profiles': return send(200, [{ role: db.role }]);
+      case '/rest/v1/ideas': return send(200, [...db.ideas].reverse().map(({ id, body: b, state, created_at, answered_at }) => ({ id, body: b, state, created_at, answered_at })));
       case '/rest/v1/consents': return send(200, db.consents);
       case '/rest/v1/links': return send(200, db.links.filter(mine).map(({ from_id, to_id, state }) => ({ from_id, to_id, state })));
       case '/rest/v1/cards': {
@@ -55,6 +62,16 @@ export async function mockServer(context, init = {}) {
       default: break;
     }
     if (rpc === 'touch') return send(204);
+    if (rpc === 'my_invites') return send(200, { ...db.invites, open: db.invites.open.map(({ id, created_at, expires_at }) => ({ id, created_at, expires_at })), limit: 10, need_days: 3 });
+    if (rpc === 'drop_invite') { db.invites.open = db.invites.open.filter((x) => x.id !== body.p_id); return send(204); }
+    if (rpc === 'delete_idea') { db.ideas = db.ideas.filter((x) => x.id !== body.p_id); return send(204); }
+    if (rpc === 'admin_ideas') return db.role === 'admin' ? send(200, db.ideas.map(({ id, body: b, state, created_at, answered_at }) => ({ id, body: b, state, created_at, answered_at }))) : send(403, { code: '42501', message: 'cabina: forbidden' });
+    if (rpc === 'admin_answer_idea') {
+      if (db.role !== 'admin') return send(403, { code: '42501', message: 'cabina: forbidden' });
+      const d = db.ideas.find((x) => x.id === body.p_id);
+      if (d) Object.assign(d, { state: body.p_accept ? 'accepted' : 'declined', answered_at: NOW });
+      return send(204);
+    }
     if (rpc === 'clear_status') { delete db.statuses[ME]; return send(204); }
     if (rpc === 'drop_colleague') { db.links = db.links.filter((l) => !(mine(l) && other(l) === body.p_other)); db.access = db.access.filter((a) => a.viewer_id !== body.p_other); return send(204); }
     if (rpc === 'set_access') {
@@ -72,11 +89,25 @@ export async function mockServer(context, init = {}) {
     if (rpc === 'leave_colleagues') { db.links = db.links.filter((l) => !mine(l)); db.access = db.access.filter((a) => a.user_id !== ME); delete db.cards[ME]; delete db.statuses[ME]; db.consents.forEach((c) => { if (c.document === 'publish-2') c.withdrawn_at = NOW; }); return send(204); }
     if (rpc === 'give_consent') {
       if (body.p_document === 'publish-2' && !main()) return fail('consent required');
-      if (!['privacy-2', 'publish-2'].includes(body.p_document)) return fail('consent required');
+      if (![CUR, 'publish-2'].includes(body.p_document)) return fail('consent required');
       db.consents.push({ document: body.p_document, withdrawn_at: null });
       return send(204);
     }
     if (!main()) return fail('consent required');
+    if (rpc === 'create_invite') {
+      if (db.invites.open.length >= 10) return fail('limit');
+      const code = `${'7F3A9C21B'}${seq % 10}`;
+      const inv = { id: uuid(), code, created_at: NOW, expires_at: new Date(Date.parse(NOW) + 14 * 864e5).toISOString() };
+      db.invites.open.push(inv);
+      return send(200, { id: inv.id, code, expires_at: inv.expires_at });
+    }
+    if (rpc === 'send_idea') {
+      const b = String(body.p_body || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+      if (b.length < 3) return fail('empty');
+      if (++db.ideasToday > 5) return fail('limit');
+      db.ideas.push({ id: uuid(), body: b, state: 'new', created_at: NOW, answered_at: null });
+      return send(200, db.ideas.at(-1).id);
+    }
     if (rpc === 'save_card') {
       if (body.p_searchable && !db.consents.some((c) => c.document === 'publish-2' && !c.withdrawn_at)) return fail('publish consent required');
       if (!body.p_searchable) db.consents.forEach((c) => { if (c.document === 'publish-2') c.withdrawn_at = NOW; });

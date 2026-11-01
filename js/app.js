@@ -17,15 +17,15 @@ import { lockOn, lockScreen, initLock, openLockSettings } from './lock.js';
 import { initMoney, applyMoney, toggleMoney, eyeBtn, flipOn, setFlip } from './money.js';
 import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange } from './work.js';
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
-import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, refreshPremium, hasAvatar } from './avatar-edit.js';
+import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, refreshPremium, hasAvatar, avatarRights } from './avatar-edit.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
 import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
-import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml } from './account.js';
-import { consumeAuthRedirect, touch, session } from './auth.js';
+import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml, startSignup } from './account.js';
+import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite } from './auth.js';
 import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
@@ -33,8 +33,10 @@ import { legalReady, policyHtml, APP_URL } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 import { renderHelp, helpListHtml } from './help.js';
+import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
+import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.19.5';
+export const VERSION = '2.20.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -273,7 +275,7 @@ function renderHome() {
     ${departBanner(lt && !pend ? lt : null, now)}
     ${rest ? `<button class="rest-banner" data-act="trip" data-id="${esc(rest.trip.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() : ''}
-    ${backupNag(now)}
+    ${backupNag(now) || (isCurrent && !OLD_SITE ? signupNagHtml() : '')}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.train}</div><b>В ${MONTHS_PREP[V.m - 1]} поездок нет</b><p>Нажмите «Добавить поездку» — время, ночные и праздничные часы посчитаются автоматически.</p></div>`}
@@ -365,7 +367,8 @@ function renderExtra() {
           <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>
       </div>
       <div class="panel"><button class="row" data-act="go" data-page="help" id="extra-help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
-        <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button></div>`;
+        <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button>
+        ${legalReady() ? ideasRowHtml('extra-ideas') : ''}</div>`;
   }
   return html;
 }
@@ -415,7 +418,7 @@ function openStorageInfo() {
     title: 'Где хранятся данные',
     body: `<div class="panel" id="storage-info">
         ${row(I.phone, 'var(--ok)', 'В этом телефоне', 'Поездки, заработок, отвлечения, профиль, заметки и документы. По сети не передаются.')}
-        ${legalReady() ? row(I.user, 'var(--night)', 'На сервере в России — только с аккаунтом', 'Почта и даты входа. Если вы включили «Коллеги» — имя, коллеги и текущий статус.') : ''}
+        ${legalReady() ? row(I.user, 'var(--night)', 'На сервере в России — только с аккаунтом', 'Почта, даты входа и число дней в CABINA. Ваши приглашения и идеи — если отправляли. Если вы включили «Коллеги» — имя, коллеги и текущий статус.') : ''}
         ${storageInfo ? row(I.shield, storageInfo.persisted ? 'var(--ok)' : 'var(--warn)', `Занято ${fmtSize(storageInfo.usage)}`, storageInfo.persisted ? 'Защищено от автоочистки браузера' : 'Если в телефоне мало места, браузер может очистить данные — сохраняйте копию') : ''}
         ${row(I.alert, 'var(--warn)', 'Без копии записи не вернуть', 'Если удалить приложение, очистить данные браузера или потерять телефон.')}
         ${row(I.download, 'var(--accent)', 'Резервная копия', 'Файл .json со всеми записями. Сохраните его в «Файлы», облако или отправьте себе — с ним данные можно вернуть на новый телефон. Чужим не пересылайте.')}
@@ -484,6 +487,7 @@ function renderSettings() {
     <div class="group"><div class="group-title">О приложении</div>
       <div class="panel">
         <button class="row" data-act="go" data-page="help" id="settings-help"><span class="ico" style="--c:var(--accent)">${I.help}</span><div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы и ответы</div></div>${small(I.right, 18)}</button>
+        ${legalReady() ? ideasRowHtml('settings-ideas') : ''}
         <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
         <div class="row"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Подсказки</div><div class="t2">Короткие объяснения при первом открытии</div></div>
           <button class="switch" role="switch" id="tours-sw" aria-checked="${!toursOff()}" aria-label="Показывать подсказки" data-act="tours-toggle"></button></div>
@@ -495,7 +499,7 @@ function renderSettings() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()) };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
@@ -508,10 +512,11 @@ function renderTabbar() {
   if (!tab) return;
   const old = tab.querySelector('svg');
   if (tabFace.icon == null) tabFace.icon = old?.outerHTML || '';
-  const key = hasAvatar() ? JSON.stringify([S.profile.avatar, premiumOk()]) : '';
+  const rights = avatarRights();
+  const key = hasAvatar() ? JSON.stringify([S.profile.avatar, rights]) : '';
   if (key === tabFace.key) return;
   tabFace.key = key;
-  const html = key ? avatarSvg(normalizeAvatar(S.profile.avatar, { premium: premiumOk() }), { size: 26, crop: 'face', bg: false, cls: 'tab-face' }) : tabFace.icon;
+  const html = key ? avatarSvg(normalizeAvatar(S.profile.avatar, rights), { size: 26, crop: 'face', bg: false, cls: 'tab-face' }) : tabFace.icon;
   if (old) old.outerHTML = html; else tab.insertAdjacentHTML('afterbegin', html);
 }
 // still — перерисовка того же экрана (сохранение, обновление раз в минуту): без анимации появления,
@@ -524,7 +529,7 @@ function render({ still = false } = {}) {
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
-  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml())}</div>`;
+  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(inviteRowHtml()) || signupTeaserHtml())}</div>`;
   renderTabbar();
   scheduleTours();
   checkAccountAward();
@@ -568,6 +573,8 @@ function go(name) {
   if (name === 'colleagues') setTimeout(() => app.querySelector('#col-name:placeholder-shown')?.focus(), 50);
   if (name === 'team') teamReset();
   if (name === 'help') { V.helpQ = ''; V.helpOpen = new Set(); }
+  if (name === 'invites') loadInvites({ force: true });
+  if (name === 'ideas') loadIdeas({ force: true });
   V.pages.push(name);
   render();
   window.scrollTo(0, 0);
@@ -622,6 +629,8 @@ function scheduleTours() {
 export { scheduleTours };
 // Изменения данных: поле поиска не перерисовываем, чтобы не сбивать набор текста
 onChange(() => rerender());
+initInvites({ rerender });
+initIdeas({ rerender });
 initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.length) || ['team', 'colleagues', 'privacy', 'account'].includes(page()) });
 
 function openTariffsPage() { go('work'); V.pages.push('tariffs'); render(); }
@@ -696,6 +705,9 @@ app.addEventListener('click', async (e) => {
   if (await careerClick(act, b, ctx)) return;
   if (await medClick(act, b, ctx)) return;
   if (await accountClick(act, b, ctx)) return;
+  if (await invitesClick(act, b)) return;
+  if (await ideasClick(act, b)) return;
+  if (nagClick(act, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   switch (act) {
     case 'go': go(b.dataset.page); if (b.dataset.focus) showSpot(b.dataset.focus); break;
@@ -809,6 +821,7 @@ app.addEventListener('input', (e) => {
   if (avatarInput(e.target)) return;
   if (colleaguesInput(e.target)) return;
   if (fixInput(e.target)) return;
+  if (ideasInput(e.target)) return;
   if (e.target.id === 'help-q') {
     V.helpQ = e.target.value;
     app.querySelector('#help-list').innerHTML = helpListHtml(V.helpQ, V.helpOpen, helpCtx());
@@ -911,6 +924,20 @@ function openPullStyles() {
   });
 }
 
+// Открыли ссылку-приглашение: код убираем из адреса, запоминаем до регистрации и открываем «Создать аккаунт»
+function checkInviteHash() {
+  const code = inviteFromHash(location.hash);
+  if (!code) return false;
+  history.replaceState(history.state, '', location.pathname + location.search);
+  if (!legalReady()) return true;
+  if (session()) { toast('Вы уже вошли в аккаунт — приглашение нужно только для нового аккаунта', { ms: 5000 }); return true; }
+  rememberInvite(code);
+  startSignup(code);
+  V.tab = 'profile'; V.pages = [];
+  go('account');
+  return true;
+}
+
 // ---------------------------------------------------------------- старт
 async function start() {
   goToday();
@@ -930,13 +957,17 @@ async function start() {
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
   // ссылка с поездками от напарника (данные после «#» — сервер их не видел)
   checkShareHash();
-  window.addEventListener('hashchange', () => checkShareHash());
+  // ссылка-приглашение от коллеги: форма «Создать аккаунт» с кодом (код тоже после «#», сервер сайта его не видит)
+  checkInviteHash();
+  window.addEventListener('hashchange', () => { checkShareHash(); checkInviteHash(); });
   // аккаунт: отметка «заходил сегодня» для статистики (раз в день; без аккаунта ничего не отправляется)
   touch(VERSION).catch(() => {});
   // премиум-персонаж: права с сервера (своя отметка у каждого адреса сайта); изменились — перерисовать персонажа
   if (session()) { const was = premiumOk(); refreshPremium().then(() => { if (premiumOk() !== was && !layerCount()) rerender(); }); }
   // коллеги: свежий список и статус для них (только с аккаунтом и только то, что человек включил)
   colleaguesWake();
+  // приглашения: сколько засчитано — для вещей персонажа и награды «Наставник» (только с аккаунтом)
+  if (session()) loadInvites();
   // обновление календаря отдельно от приложения
   fetch('data/calendar.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { mergeCalendarData(j); rerender(); } }).catch(() => {});
   // обновлять «сейчас» (поездка «в пути», статус отдыха) раз в минуту

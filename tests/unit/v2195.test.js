@@ -70,7 +70,9 @@ test('поиск: без учёта регистра и «ё», все слов�
   assert.ok(ids(trips).length > 3);
   assert.deepEqual([...trips.matchAll(/data-id="([\w-]+)" open/g)].map((m) => m[1]), ['trip-share']);
   // три и меньше — открыты все
-  assert.equal([...helpListHtml('отдых', new Set(), ALL).matchAll(/ open data-auto/g)].length, ids(helpListHtml('отдых', new Set(), ALL)).length);
+  const few = helpListHtml('копия', new Set(), ALL);
+  assert.ok(ids(few).length <= 3);
+  assert.equal([...few.matchAll(/ open data-auto/g)].length, ids(few).length);
   assert.match(helpListHtml('абракадабра', new Set(), ALL), /Ничего не нашлось/);
 });
 
