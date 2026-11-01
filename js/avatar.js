@@ -19,7 +19,8 @@ export const EYE_C = ['#5b3820', '#2b1d16', '#8a6a2b', '#4d8a48', '#3e78c2', '#7
 export const CLOTH_C = ['#f4f4f1', '#262a33', '#8b929e', '#d23b3b', '#2f6bd6', '#2f8f5b', '#e9a23b', '#6c4bb8', '#1f3a5f', '#7a4b2e'];
 export const HAT_C = ['#2f6bd6', '#d23b3b', '#262a33', '#f4f4f1', '#e9a23b', '#2f8f5b', '#ff7417'];
 export const HELMET_C = ['#f4f4f1', '#ff7417', '#f0d21c', '#d23b3b', '#2f6bd6', '#2f8f5b'];
-export const hatColors = (hat) => (hat === 'helmet' ? HELMET_C : HAT_C);
+export const USHANKA_C = ['#6b4f3a', '#3a302c', '#8f8f92', '#cdb894'];
+export const hatColors = (hat) => (hat === 'helmet' ? HELMET_C : hat === 'ushanka' ? USHANKA_C : hat === 'retro' ? [] : HAT_C);
 export const FRAME_C = ['#1f2229', '#8a5a33', '#c9a25b', '#c03a3a', '#3a6bd0', '#a7adb7'];
 export const LIP_C = [null, '#c9706e', '#c8243a', '#8c2a52', '#e8766a'];
 
@@ -115,11 +116,15 @@ export const OUTFITS = [
   { id: 'shirt', name: 'Рубашка', color: true, def: 0 },
   { id: 'jacket', name: 'Пиджак', color: true, def: 1 },
   { id: 'sweater', name: 'Свитер', color: true, def: 9 },
+  { id: 'kitel', name: 'Китель паровозника', reward: true },
 ];
 export const HATS = [
   { id: null, name: 'Нет' }, { id: 'cap', name: 'Кепка' }, { id: 'beanie', name: 'Шапка' }, { id: 'helmet', name: 'Каска' },
   { id: 'peaked', name: 'Фуражка', premium: true },
+  { id: 'ushanka', name: 'Ушанка', reward: true }, { id: 'retro', name: 'Фуражка паровозника', reward: true },
 ];
+// Шарф (награда за приглашение)
+export const SCARVES = [{ id: null, name: 'Нет' }, { id: 'light', name: 'Шарф «Светофор»', reward: true }];
 export const GLASSES = [
   { id: null, name: 'Нет' }, { id: 'round', name: 'Круглые' }, { id: 'square', name: 'Прямые' }, { id: 'wide', name: 'Широкие' },
   { id: 'aviator', name: 'Капли' }, { id: 'cat', name: 'Кошачьи' }, { id: 'sun', name: 'Тёмные' },
@@ -133,7 +138,26 @@ export const BG = [
   { id: 'sunset', name: 'Закат', scene: true }, { id: 'ocean', name: 'Океан', scene: true, premium: true }, { id: 'depot', name: 'Депо', scene: true, premium: true },
 ];
 // Премиум-персонажи: пока только робот (свой, не похожий на известных роботов из мультфильмов)
-export const CHARS = [{ id: 'robot', name: 'Робот', premium: true }];
+export const CHARS = [
+  { id: 'robot', name: 'Робот', premium: true, part: 'робот', say: 'Ночь, переработка, без обеда — я же робот' },
+  { id: 'horse', name: 'Конь «Тяга»', premium: true, part: 'конь', say: 'Пашем как лошади' },
+  { id: 'skeleton', name: 'Скелет', premium: true, part: 'скелет', say: 'Помираю на работе, а ночью хочу спать' },
+];
+export const isChar = (sex) => CHARS.some((c) => c.id === sex);
+// Конь «Тяга»: свой, не похожий на известных мультяшных коней
+export const HORSE_C = ['#8a4b2a', '#2e2624', '#c46a2c', '#a9adb3', '#efe9df', '#d9b36c'];
+export const H_MANES = [
+  { id: 'short', name: 'Короткая' }, { id: 'long', name: 'Длинная' }, { id: 'fringe', name: 'Чёлка' },
+  { id: 'mohawk', name: 'Ирокез' }, { id: 'braid', name: 'Косичка' },
+];
+export const H_BLAZE = [{ id: null, name: 'Нет' }, { id: 'star', name: 'Звёздочка' }, { id: 'stripe', name: 'Проточина' }];
+export const H_EXPR = [{ id: 'happy', name: 'Довольный' }, { id: 'tired', name: 'После ночи' }, { id: 'stubborn', name: 'Упрямый' }, { id: 'wow', name: 'Удивлённый' }];
+export const H_EARS = [{ id: 'up', name: 'Торчком' }, { id: 'back', name: 'Прижаты' }, { id: 'one', name: 'Одно вниз' }];
+// Скелет: добрый и смешной, не страшный
+export const BONE_C = ['#efe9da', '#fbfaf6', '#d9cdb2', '#bfc3c9', '#c8f2c0', '#e8c46a'];
+export const S_EYES = [{ id: 'tired', name: 'Уставшие' }, { id: 'round', name: 'Круглые' }, { id: 'sleepy', name: 'Спит' }, { id: 'odd', name: 'Разные' }];
+export const S_JAW = [{ id: 'grin', name: 'Улыбка' }, { id: 'yawn', name: 'Зевает' }, { id: 'gap', name: 'Без зуба' }, { id: 'tight', name: 'Сжал зубы' }];
+export const S_EXTRA = [{ id: null, name: 'Нет' }, { id: 'crack', name: 'Трещина' }, { id: 'plaster', name: 'Пластырь' }];
 export const METAL_C = ['#c3c9d2', '#8e98a5', '#5b6470', '#e9ebee', '#d6b264', '#c47a4e', '#f0c23c', '#3f7fd0', '#d64a3a', '#3a9a6a', '#2b2f36'];
 export const GLOW_C = ['#5ff2ff', '#7dff8a', '#ffe45c', '#ff6a5c', '#ffa24a', '#ffffff', '#c48bff', '#5c8dff'];
 export const R_EYES = [
@@ -149,7 +173,7 @@ export const R_TOPS = [
   { id: 'dish', name: 'Локатор' }, { id: 'bolt', name: 'Болт' }, { id: 'fin', name: 'Гребень' },
 ];
 // Премиум-детали: примерить можно, сохранить пока нельзя
-export const PREMIUM = { hat: ['peaked'], bg: ['ocean', 'depot'], mazut: true, chars: ['robot'] };
+export const PREMIUM = { hat: ['peaked'], bg: ['ocean', 'depot'], mazut: true, chars: ['robot', 'horse', 'skeleton'] };
 
 // ── Геометрия ────────────────────────────────────────────────────
 function smooth(p, closed = true) {
@@ -230,7 +254,7 @@ const LINES = {
   middle: [[.84, -.4], [.5, -.52], [.15, -.64], [0, -.72], [-.15, -.64], [-.5, -.52], [-.84, -.4]],
   recede: [[.6, -.8], [.34, -.66], [0, -.6], [-.34, -.66], [-.6, -.8]],
 };
-function findHair(a) { return a.sex === 'robot' ? HAIR_M[0] : [...HAIR_M, ...HAIR_F].find(h => h.id === a.hair) || HAIR_M[2]; }
+function findHair(a) { return isChar(a.sex) ? HAIR_M[0] : [...HAIR_M, ...HAIR_F].find(h => h.id === a.hair) || HAIR_M[2]; }
 
 function hairParts(a, g, hc, u, clip) {
   const S = findHair(a), out = { back: '', mid: '', front: '' };
@@ -353,6 +377,17 @@ function clothes(a, u) {
     s += `<clipPath id="${u}wy"><path d="${torso(sw, nw, 'crew', 1)}"/></clipPath><g clip-path="url(#${u}wy)"><path d="M0,150 H200 V166 Q100,160 0,166Z" fill="#e9702a"/><rect y="182" width="200" height="8" fill="#c9d0d8"/><rect y="183" width="200" height="2" fill="#f4f7fa"/></g>`;
     s += `<path d="M${100 - nw - 3},142 Q100,146 ${100 + nw + 3},142 L${100 + nw + 4},153 Q100,160 ${100 - nw - 4},153Z" fill="${dk(c, .15)}"/><path d="M100,153 V206" stroke="#c9d0d8" stroke-width="1.6"/>`;
     return { back, s: s + seams(dk(c, .4)) };
+  }
+  if (o.id === 'kitel') {
+    // китель паровозника: двубортный, латунные пуговицы, без эмблем и надписей
+    const k = '#1f2c4d', gold = '#d2a94e';
+    s += cel(u + 'sh', torso(sw, nw, 'crew', 2), '#f4f4f1', '#d6d8de');
+    s += `<path d="M98.6,154 L97,168 L100,172 L103,168 L101.4,154Z" fill="#20232b"/>`;
+    s += cel(u + 'cl', torso(sw, nw, 'v', 26), k, '#152038');
+    s += `<path d="M${A - 2},150 L${A - 9},158 L95,177 L100,${150 + 26} M${B + 2},150 L${B + 9},158 L105,177 L100,${150 + 26}" fill="${lt(k, .1)}" stroke="${gold}" stroke-width="1" stroke-linejoin="round"/>`;
+    for (const y of [184, 195]) for (const x of [-9, 9]) s += `<circle cx="${100 + x}" cy="${y}" r="2.3" fill="${gold}"/><circle cx="${100 + x - .6}" cy="${y - .6}" r=".8" fill="#fff3c8"/>`;
+    s += `<path d="M${L + 14},176 h14 v3 h-14Z" fill="${dk(k, .25)}"/>`;
+    return { back, s: s + seams(dk(k, .4)) };
   }
   // футболка, худи и поддёвка под жилетом
   s += cel(u + 'cl', torso(sw, nw, 'crew', o.id === 'hoodie' ? 6 : 7), c);
@@ -496,6 +531,8 @@ function hatGeom(a, g) {
 }
 function hat(a, g, u) {
   if (!a.hat) return '';
+  if (a.hat === 'ushanka') return ushanka(a, g, u);
+  if (a.hat === 'retro') return retroCap(a, g, u);
   const { bandY: b, w, top } = hatGeom(a, g), b0 = b, w0 = w, cx = g.cx, c = HAT_C[a.hatC] || HAT_C[0];
   const dome = (y0, tp, ww) => `M${f1(cx - ww)},${f1(y0)} C${f1(cx - ww)},${f1(tp - (y0 - tp) * .3)} ${f1(cx + ww)},${f1(tp - (y0 - tp) * .3)} ${f1(cx + ww)},${f1(y0)} Q${cx},${f1(y0 + 3)} ${f1(cx - ww)},${f1(y0)}Z`;
   if (a.hat === 'cap') {
@@ -525,6 +562,43 @@ function hat(a, g, u) {
     `<path d="M${f1(cx - w)},${f1(b - 8)} L${f1(cx + w)},${f1(b - 8)} L${f1(cx + w)},${f1(b + 1)} Q${cx},${f1(b - 1)} ${f1(cx - w)},${f1(b + 1)}Z" fill="#1a1f2b"/><path d="M${f1(cx - w)},${f1(b - 6)} H${f1(cx + w)}" stroke="#c9a25b" stroke-width="1.2"/>` +
     `<path d="M${f1(cx - w * .9)},${f1(b)} Q${cx},${f1(b + 15)} ${f1(cx + w * .9)},${f1(b)} Q${cx},${f1(b + 4)} ${f1(cx - w * .9)},${f1(b)}Z" fill="#0d0f14"/><path d="M${f1(cx - w * .6)},${f1(b + 4)} Q${cx},${f1(b + 8)} ${f1(cx + w * .6)},${f1(b + 4)}" stroke="#4a5060" stroke-width="1.2" fill="none"/>` +
     `<g transform="translate(${cx} ${f1(b - 17)})"><path d="M-3,0 C-8,-4 -14,-3 -17,-1 C-12,-1 -9,1 -3,2Z M3,0 C8,-4 14,-3 17,-1 C12,-1 9,1 3,2Z" fill="#e0bd6e"/><circle r="4.4" fill="none" stroke="#e0bd6e" stroke-width="1.8"/><circle r="1.3" fill="#e0bd6e"/></g>`;
+}
+// Шарф «Светофор»: вокруг шеи, под подбородком; хвост спереди слева
+function scarf(a, u) {
+  if (a.scarf !== 'light') return '';
+  const { nw } = buildOf(a), C = ['#d8433b', '#f2c230', '#3f9a5b'], l = 100 - nw - 13, r = 100 + nw + 13;
+  const ring = `M${l},139 Q100,152 ${r},139 Q${r + 4},147 ${r + 1},156 Q100,172 ${l - 1},156 Q${l - 4},147 ${l},139Z`;
+  const tail = `M${l + 5},156 L${l + 20},157 L${l + 19},199 L${l + 3},198Z`;
+  let st = ''; for (let i = 0, x = l - 6; x < r + 6; i++, x += 9) st += `<rect x="${x}" y="128" width="9" height="50" fill="${C[i % 3]}"/>`;
+  let tl = ''; for (let i = 0, y = 154; y < 202; i++, y += 9) tl += `<rect x="${l - 2}" y="${y}" width="28" height="9" fill="${C[i % 3]}"/>`;
+  let fr = ''; for (let x = l + 4; x < l + 20; x += 3) fr += `<path d="M${f1(x)},198.5 v4" stroke="${C[(Math.round(x) % 3)]}" stroke-width="1.6" stroke-linecap="round"/>`;
+  return `<clipPath id="${u}sf"><path d="${ring}"/></clipPath><path d="${ring}" fill="${C[0]}"/><g clip-path="url(#${u}sf)">${st}<path d="${ring}" fill="#000" opacity=".14" transform="translate(3 4)"/></g>` +
+    `<clipPath id="${u}st"><path d="${tail}"/></clipPath><g clip-path="url(#${u}st)">${tl}<path d="M${l + 16},150 V202" stroke="#000" stroke-width="5" opacity=".12"/></g>${fr}` +
+    `<ellipse cx="${l + 13}" cy="158" rx="9.5" ry="7.5" fill="${C[1]}"/><path d="M${l + 7},156 q6,5 12,0" stroke="#000" stroke-width="1.1" fill="none" opacity=".22"/>`;
+}
+function ushanka(a, g, u) {
+  const { bandY: b, w: w0, top } = hatGeom(a, g), w = w0 + 3, cx = g.cx, c = USHANKA_C[a.hatC] || USHANKA_C[0], fur = lt(c, .12), y1 = g.cy + 26;
+  const fluff = (x0, x1, y, d) => { let p = ''; for (let x = x0; x < x1; x += 5) p += ` Q${f1(x + 2.5)},${f1(y - d)} ${f1(Math.min(x + 5, x1))},${f1(y)}`; return p; };
+  let r = '';
+  for (const s of [-1, 1]) {
+    const x0 = cx + s * (w - 5), x1 = cx + s * (w + 8);
+    r += cel(u + 'uf' + s, `M${f1(x0)},${f1(b - 4)} L${f1(x1)},${f1(b - 2)} Q${f1(x1 + s * 2)},${f1(y1)} ${f1((x0 + x1) / 2)},${f1(y1 + 4)} Q${f1(x0 - s * 3)},${f1(y1)} ${f1(x0)},${f1(b - 4)}Z`, fur, dk(c, .25), s * -2, -2);
+    r += `<path d="M${f1((x0 + x1) / 2)},${f1(y1 + 3)} q${s * -1},7 ${s * 2},12" stroke="${dk(c, .4)}" stroke-width="1.4" fill="none"/>`;
+  }
+  r += cel(u + 'uc', `M${f1(cx - w)},${f1(b - 8)} C${f1(cx - w - 1)},${f1(top - 24)} ${f1(cx + w + 1)},${f1(top - 24)} ${f1(cx + w)},${f1(b - 8)}Z`, dk(c, .1), dk(c, .3));
+  r += `<path d="M${f1(cx - w * .55)},${f1(top - 6)} Q${cx},${f1(top - 11)} ${f1(cx + w * .55)},${f1(top - 6)}" stroke="${dk(c, .35)}" stroke-width="1.2" fill="none"/>`;
+  const flap = `M${f1(cx - w - 3)},${f1(b + 3)} L${f1(cx - w - 4)},${f1(b - 17)}${fluff(cx - w - 4, cx + w + 4, b - 17, 3.5)} L${f1(cx + w + 3)},${f1(b + 3)} Q${cx},${f1(b - 1)} ${f1(cx - w - 3)},${f1(b + 3)}Z`;
+  r += cel(u + 'ub', flap, fur, dk(c, .22), -2, -2);
+  for (let x = -w + 3; x < w; x += 6) r += `<path d="M${f1(cx + x)},${f1(b - 12)} l1.5,4 M${f1(cx + x + 3)},${f1(b - 6)} l-1.2,3" stroke="${dk(c, .25)}" stroke-width=".9" stroke-linecap="round"/>`;
+  return r + `<g transform="translate(${cx} ${f1(b - 7.5)}) scale(.68)"><path d="M-3,0 C-8,-4 -14,-3 -17,-1 C-12,-1 -9,1 -3,2Z M3,0 C8,-4 14,-3 17,-1 C12,-1 9,1 3,2Z" fill="#e0bd6e"/><circle r="4.4" fill="none" stroke="#e0bd6e" stroke-width="1.8"/><circle r="1.3" fill="#e0bd6e"/></g>`;
+}
+function retroCap(a, g, u) {
+  const { bandY: b, w } = hatGeom(a, g), cx = g.cx, k = '#1c2233';
+  const crown = `M${f1(cx - w - 1)},${f1(b - 7)} C${f1(cx - w - 9)},${f1(b - 30)} ${f1(cx + w + 9)},${f1(b - 34)} ${f1(cx + w + 1)},${f1(b - 7)}Z`;
+  return cel(u + 'rc', crown, '#2a3350', k, -3, -2) + `<path d="M${f1(cx - w * .7)},${f1(b - 24)} Q${cx},${f1(b - 30)} ${f1(cx + w * .7)},${f1(b - 25)}" stroke="#3a4566" stroke-width="2" fill="none"/>` +
+    `<path d="M${f1(cx - w)},${f1(b - 8)} H${f1(cx + w)} V${f1(b + 1)} Q${cx},${f1(b - 1)} ${f1(cx - w)},${f1(b + 1)}Z" fill="#14161c"/><path d="M${f1(cx - w)},${f1(b - 8)} H${f1(cx + w)}" stroke="#b8322c" stroke-width="1.6"/>` +
+    `<path d="M${f1(cx - w * .85)},${f1(b)} Q${cx},${f1(b + 11)} ${f1(cx + w * .85)},${f1(b)} Q${cx},${f1(b + 3)} ${f1(cx - w * .85)},${f1(b)}Z" fill="#0b0c10"/><path d="M${f1(cx - w * .5)},${f1(b + 3)} Q${cx},${f1(b + 6)} ${f1(cx + w * .5)},${f1(b + 3)}" stroke="#555b68" stroke-width="1.1" fill="none"/>` +
+    `<g transform="translate(${cx} ${f1(b - 16)}) scale(.7)"><path d="M-3,0 C-8,-4 -14,-3 -17,-1 C-12,-1 -9,1 -3,2Z M3,0 C8,-4 14,-3 17,-1 C12,-1 9,1 3,2Z" fill="#d2a94e"/><circle r="4.4" fill="none" stroke="#d2a94e" stroke-width="1.8"/><circle r="1.3" fill="#d2a94e"/></g>`;
 }
 function earPos(a, g) { const E = EARS.find(e => e.id === a.ears) || EARS[0], y = g.cy + 5; return { E, y, x: g.hw(y) - 1 + E.out }; }
 function ears(a, g, skin, u) {
@@ -576,7 +650,7 @@ function glasses(a, E, g) {
 }
 function goggles(a, g) {
   if (!a.goggles) return '';
-  const y = a.hat && a.hat !== 'peaked' ? hatGeom(a, g).bandY - 5 : g.cy - g.ry * .56, cx = g.cx, W = (a.hat ? hatGeom(a, g).w : g.hw(y) + 2) + 1;
+  const y = a.hat && a.hat !== 'peaked' && a.hat !== 'retro' ? hatGeom(a, g).bandY - 5 : g.cy - g.ry * .56, cx = g.cx, W = (a.hat ? hatGeom(a, g).w : g.hw(y) + 2) + 1;
   return `<path d="M${f1(cx - W)},${f1(y + 1)} Q${cx},${f1(y - 3)} ${f1(cx + W)},${f1(y + 1)}" stroke="#2c2f36" stroke-width="5" fill="none"/>` +
     [-1, 1].map(s => `<rect x="${f1(cx + s * 10.5 - 9)}" y="${f1(y - 6.5)}" width="18" height="13" rx="6" fill="#3a3f49"/><rect x="${f1(cx + s * 10.5 - 7)}" y="${f1(y - 4.5)}" width="14" height="9" rx="4.5" fill="#9fd2e6"/><path d="M${f1(cx + s * 10.5 - 4.5)},${f1(y - 2)} l4,-1.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>`).join('') +
     `<rect x="${cx - 2.5}" y="${f1(y - 2)}" width="5" height="4" rx="1" fill="#3a3f49"/>`;
@@ -584,7 +658,7 @@ function goggles(a, g) {
 function defenders(a, g) {
   if (!a.defenders) return '';
   const { y, x, E } = earPos(a, g), cx = g.cx, hg = a.hat ? hatGeom(a, g) : null;
-  const tp = hg ? hg.top - (a.hat === 'peaked' ? 30 : a.hat === 'beanie' ? 12 : 6) : g.top - Math.min(findHair(a).vol || 0, 14) - 8;
+  const tp = hg ? hg.top - (a.hat === 'peaked' || a.hat === 'retro' ? 30 : a.hat === 'beanie' || a.hat === 'ushanka' ? 12 : 6) : g.top - Math.min(findHair(a).vol || 0, 14) - 8;
   const X = x + E.w * .5, c = '#e8462e';
   return `<path d="M${f1(cx - X - 2)},${f1(y - 6)} C${f1(cx - X - 4)},${f1(tp - 4)} ${f1(cx + X + 4)},${f1(tp - 4)} ${f1(cx + X + 2)},${f1(y - 6)}" stroke="#2c2f36" stroke-width="5.5" fill="none" stroke-linecap="round"/>` +
     [-1, 1].map(s => `<rect x="${f1(cx + s * (X + 2) - 7.5)}" y="${f1(y - 12)}" width="15" height="24" rx="7" fill="${c}"/><rect x="${f1(cx + s * (X + 2) - 7.5 + (s < 0 ? 0 : 9))}" y="${f1(y - 12)}" width="6" height="24" rx="3" fill="${dk(c, .25)}"/><rect x="${f1(cx + s * (X + 2) - 4)}" y="${f1(y - 8)}" width="3" height="10" rx="1.5" fill="#fff" opacity=".45"/>`).join('');
@@ -700,20 +774,133 @@ function robotMouth(a, g) {
   }
 }
 
+// ── Конь «Тяга» (Премиум) ────────────────────────────────────────
+// Голова анфас: широкий лоб, узкие щёки, большая светлая морда. Поля для шапок те же, что у человека.
+function horseGeom(a) {
+  const k = a.faceW ?? 1, cx = 100, cy = 86;
+  const R = [[0, 40], [12, 41], [24, 48], [30, 62], [31.5, 78], [28, 94], [22, 106], [22.5, 118], [24, 130], [19, 140], [9, 144.5], [0, 145.5]].map(([x, y]) => [x * k, y]);
+  const pts = [...R.map(([x, y]) => [cx + x, y]), ...R.slice(1, -1).reverse().map(([x, y]) => [cx - x, y])];
+  const hw = y => { for (let i = 0; i < R.length - 1; i++) { const [x0, y0] = R[i], [x1, y1] = R[i + 1]; if (y >= y0 && y <= y1) return x0 + (x1 - x0) * (y - y0) / (y1 - y0 || 1); } return y < 40 ? R[0][0] : 0; };
+  return { cx, cy, rx: 31 * k, ry: 54, top: 40, chin: 145.5, hw, path: smooth(pts) };
+}
+function horseEars(a, g, coat, u) {
+  const { cx } = g; let r = '';
+  for (const s of [-1, 1]) {
+    const tip = a.hEars === 'back' ? [cx + s * 38, 40] : a.hEars === 'one' && s > 0 ? [cx + s * 42, 50] : [cx + s * 21, 20];
+    const b1 = [cx + s * 7, 47], b2 = [cx + s * 22, 53], m = [(b1[0] + tip[0]) / 2 - s * 4, (b1[1] + tip[1]) / 2 - 3], n = [(b2[0] + tip[0]) / 2 + s * 4, (b2[1] + tip[1]) / 2 + 2];
+    const d = `M${f1(b1[0])},${b1[1]} Q${f1(m[0])},${f1(m[1])} ${f1(tip[0])},${f1(tip[1])} Q${f1(n[0])},${f1(n[1])} ${f1(b2[0])},${b2[1]}Z`;
+    const ti = [b1[0] + (tip[0] - b1[0]) * .78 + s * 2, b1[1] + (tip[1] - b1[1]) * .78 + 2];
+    r += cel(u + 'he' + s, d, coat, dk(coat, .25), s * -2, -2) + `<path d="M${f1(b1[0] + s * 4)},${b1[1] + 2} Q${f1((b1[0] + ti[0]) / 2)},${f1((b1[1] + ti[1]) / 2)} ${f1(ti[0])},${f1(ti[1])} Q${f1((b2[0] + ti[0]) / 2)},${f1((b2[1] + ti[1]) / 2 + 2)} ${f1(b2[0] - s * 4)},${b2[1] + 1}Z" fill="${mix(coat, '#c98a8a', .45)}" opacity=".85"/>`;
+  }
+  return r;
+}
+function horseMane(a, g, front) {
+  const { cx } = g, c = HAIR_C[a.maneC] || HAIR_C[0], sh = dk(c, .25);
+  if (!front) {
+    if (a.mane === 'long') return `<path d="M${cx + 4},40 C${cx + 44},46 ${cx + 40},110 ${cx + 34},158 L${cx + 18},158 C${cx + 24},112 ${cx + 22},62 ${cx},50Z" fill="${sh}"/>`;
+    if (a.mane === 'mohawk') return `<path d="M${cx - 8},50 C${cx - 10},26 ${cx - 4},10 ${cx + 4},4 C${cx + 6},18 ${cx + 12},28 ${cx + 8},50Z" fill="${c}"/><path d="M${cx},46 C${cx - 2},28 ${cx + 1},16 ${cx + 4},8" stroke="${sh}" stroke-width="1.4" fill="none"/>`;
+    return '';
+  }
+  switch (a.mane) {
+    case 'long': return `<path d="M${cx - 4},40 C${cx - 18},44 ${cx - 24},58 ${cx - 21},72 C${cx - 14},63 ${cx - 5},56 ${cx + 9},52 C${cx + 13},47 ${cx + 9},40 ${cx - 4},40Z" fill="${c}"/><path d="M${cx + 2},44 C${cx - 10},50 ${cx - 16},58 ${cx - 18},66" stroke="${sh}" stroke-width="1.3" fill="none"/>`;
+    case 'fringe': { let d = `M${cx - 20},48 C${cx - 22},38 ${cx + 22},38 ${cx + 20},48`; for (const [x, y] of [[19, 67], [12, 61], [6, 69], [0, 62], [-6, 69], [-12, 61], [-19, 67]]) d += ` L${cx + x},${y}`; return `<path d="${d}Z" fill="${c}"/><path d="M${cx - 8},46 L${cx - 9},60 M${cx + 6},46 L${cx + 7},60" stroke="${sh}" stroke-width="1.2"/>`; }
+    case 'mohawk': return `<path d="M${cx - 7},44 Q${cx},38 ${cx + 7},44 L${cx + 4},54 Q${cx},57 ${cx - 4},54Z" fill="${c}"/>`;
+    case 'braid': { let r = `<path d="M${cx - 9},44 Q${cx},36 ${cx + 9},44 Q${cx},50 ${cx - 9},44Z" fill="${c}"/>`; for (let i = 0, y = 47; i < 5; i++, y += 5.5) r += `<ellipse cx="${cx + (i % 2 ? 1 : -1)}" cy="${y}" rx="3.6" ry="3.4" fill="${i % 2 ? c : sh}"/>`; return r + `<circle cx="${cx}" cy="76" r="2.2" fill="#d8433b"/>`; }
+    default: return `<path d="M${cx - 10},50 L${cx - 7},36 L${cx - 2},46 L${cx + 1},32 L${cx + 4},46 L${cx + 9},37 L${cx + 10},51 Q${cx},57 ${cx - 10},50Z" fill="${c}"/>`;
+  }
+}
+function horseFace(a, g, coat, u) {
+  const { cx } = g, k = a.faceW ?? 1, muz = mix(coat, '#f2d9cb', .42), ink = '#24181a';
+  let r = '';
+  if (a.coat === 3) r += `<clipPath id="${u}hd2"><path d="${g.path}"/></clipPath><g clip-path="url(#${u}hd2)" fill="${lt(coat, .45)}" opacity=".7">` + [[-20, 92, 4], [-13, 100, 3], [16, 90, 3.5], [22, 99, 2.6], [-8, 56, 3], [10, 58, 2.6]].map(([x, y, rr]) => `<circle cx="${cx + x}" cy="${y}" r="${rr}"/>`).join('') + '</g>';
+  if (a.blaze === 'star') r += `<path d="M${cx},53 L${cx + 4.5},60 L${cx},67 L${cx - 4.5},60Z" fill="#f7f3ea"/>`;
+  if (a.blaze === 'stripe') r += `<path d="M${cx - 4},52 Q${cx},50 ${cx + 4},52 L${cx + 3.5},104 Q${cx + 9},112 ${cx + 9},122 L${cx - 9},122 Q${cx - 9},112 ${cx - 3.5},104Z" fill="#f7f3ea"/>`;
+  r += `<clipPath id="${u}hm"><path d="${g.path}"/></clipPath><g clip-path="url(#${u}hm)"><ellipse cx="${cx}" cy="130" rx="${f1(26 * k)}" ry="19" fill="${muz}"/><ellipse cx="${f1(cx - 9 * k)}" cy="122" rx="${f1(9 * k)}" ry="4" fill="#fff" opacity=".18"/></g>`;
+  for (const s of [-1, 1]) r += `<ellipse cx="${f1(cx + s * 9 * k)}" cy="127" rx="3.2" ry="5" fill="${dk(muz, .55)}" transform="rotate(${s * 18} ${f1(cx + s * 9 * k)} 127)"/>`;
+  const my = 138, e = a.hExpr;
+  r += e === 'wow' ? `<ellipse cx="${cx}" cy="${my}" rx="3.6" ry="4.2" fill="${dk(muz, .6)}"/>`
+    : e === 'stubborn' ? `<path d="M${cx - 8},${my + 1} Q${cx},${my - 4} ${cx + 8},${my + 1}" stroke="${dk(muz, .6)}" stroke-width="2" fill="none" stroke-linecap="round"/>`
+      : e === 'tired' ? `<path d="M${cx - 8},${my} Q${cx},${my + 1.5} ${cx + 8},${my - 1}" stroke="${dk(muz, .6)}" stroke-width="2" fill="none" stroke-linecap="round"/>`
+        : `<path d="M${cx - 10},${my - 2} Q${cx},${my + 6} ${cx + 10},${my - 2}" stroke="${dk(muz, .6)}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+  // глаза
+  const ey = 74, ex = Math.min(19 * k * (a.eyeGap ?? 1), g.hw(ey) - 9), sc = a.eyeS ?? 1;
+  for (const s of [-1, 1]) {
+    const x = cx + s * ex, wr = 7.4 * sc * (e === 'wow' ? 1.12 : 1), hr = 8.4 * sc * (e === 'wow' ? 1.12 : 1), ir = e === 'wow' ? .6 : 1;
+    r += `<ellipse cx="${f1(x)}" cy="${ey}" rx="${f1(wr)}" ry="${f1(hr)}" fill="#fff"/><ellipse cx="${f1(x - s * 1.2)}" cy="${ey + 1}" rx="${f1(5.4 * sc * ir)}" ry="${f1(6.6 * sc * ir)}" fill="#3a2418"/><ellipse cx="${f1(x - s * 1.2)}" cy="${ey + 1.6}" rx="${f1(3 * sc * ir)}" ry="${f1(3.8 * sc * ir)}" fill="${ink}"/><circle cx="${f1(x - s * 1.2 - 1.8)}" cy="${f1(ey - 2)}" r="${f1(1.7 * sc)}" fill="#fff"/>`;
+    if (e === 'tired') r += `<path d="M${f1(x - wr - 1)},${ey} A${f1(wr + 1)},${f1(hr + 1)} 0 0 1 ${f1(x + wr + 1)},${ey}Z" fill="${coat}"/><path d="M${f1(x - wr)},${ey} H${f1(x + wr)}" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/><path d="M${f1(x - 5)},${f1(ey + hr + 2.5)} Q${f1(x)},${f1(ey + hr + 5)} ${f1(x + 5)},${f1(ey + hr + 2.5)}" stroke="${dk(coat, .35)}" stroke-width="1.3" fill="none"/>`;
+    else if (e === 'stubborn') r += `<path d="M${f1(x - s * (wr + 2))},${f1(ey - hr - 1)} L${f1(x + s * (wr + 2))},${f1(ey - hr * .2)} L${f1(x + s * (wr + 2))},${f1(ey - hr - 4)} Z" fill="${coat}"/><path d="M${f1(x - s * (wr + 2))},${f1(ey - hr - 1)} L${f1(x + s * (wr + 2))},${f1(ey - hr * .2)}" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
+    else if (e === 'wow') r += `<path d="M${f1(x - 6)},${f1(ey - hr - 5)} Q${f1(x)},${f1(ey - hr - 9)} ${f1(x + 6)},${f1(ey - hr - 5)}" stroke="${dk(coat, .45)}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
+    else r += `<path d="M${f1(x - wr)},${f1(ey - 2)} Q${f1(x)},${f1(ey - hr - 2.5)} ${f1(x + wr)},${f1(ey - 2)}" stroke="${ink}" stroke-width="1.7" fill="none"/><path d="M${f1(x + s * (wr - 1))},${f1(ey - 4)} l${s * 3},-2.5" stroke="${ink}" stroke-width="1.4" stroke-linecap="round"/>`;
+  }
+  return { r, E: { ey, ex, s: 1.05 } };
+}
+function horseNeck(a, g, coat) {
+  const { cx } = g;
+  return `<path d="M${cx - 19},108 C${cx - 22},128 ${cx - 25},146 ${cx - 27},162 L${cx + 27},162 C${cx + 25},146 ${cx + 22},128 ${cx + 19},108Z" fill="${dk(coat, .12)}"/><path d="M${cx - 19},130 Q${cx},138 ${cx + 19},130" stroke="${dk(coat, .28)}" stroke-width="2" fill="none" opacity=".5"/>`;
+}
+
+// ── Скелет (Премиум) ─────────────────────────────────────────────
+// Добрый и сонный: «помираю на работе, а ночью хочу спать». Не страшный: без крови и оскала.
+function skelNeck(a, g, bone) {
+  const { nw } = buildOf(a), y0 = g.cy + g.ry * .62; let r = '';
+  for (let y = y0; y < 160; y += 9) r += `<rect x="${f1(100 - nw + 2)}" y="${f1(y)}" width="${f1(2 * nw - 4)}" height="6.5" rx="3" fill="${dk(bone, .12)}"/><rect x="${f1(100 - 3)}" y="${f1(y - 2.5)}" width="6" height="3" fill="${dk(bone, .35)}"/>`;
+  return r;
+}
+function skelFace(a, g, bone, u) {
+  const { cx, cy, rx, ry } = g, hole = '#2b2230', s = a.eyeS ?? 1;
+  const ey = cy + 2, ex = Math.min(rx * .42 * (a.eyeGap ?? 1), g.hw(ey) - 12 * s);
+  let r = cel(u + 'hd', g.path, bone, dk(bone, .16), -5, -3);
+  // скулы и виски
+  r += `<clipPath id="${u}sk"><path d="${g.path}"/></clipPath><g clip-path="url(#${u}sk)"><path d="M${f1(cx - rx - 4)},${f1(cy + ry * .28)} Q${f1(cx - rx * .55)},${f1(cy + ry * .5)} ${f1(cx - rx * .3)},${f1(cy + ry * .34)} M${f1(cx + rx + 4)},${f1(cy + ry * .28)} Q${f1(cx + rx * .55)},${f1(cy + ry * .5)} ${f1(cx + rx * .3)},${f1(cy + ry * .34)}" stroke="${dk(bone, .25)}" stroke-width="1.6" fill="none"/>` +
+    `<path d="M${f1(cx - rx * .62)},${f1(cy - ry * .82)} Q${f1(cx - rx * .8)},${f1(cy - ry * .4)} ${f1(cx - rx * .72)},${f1(cy)}" stroke="${lt(bone, .6)}" stroke-width="4" fill="none" stroke-linecap="round" opacity=".55"/></g>`;
+  const glow = BONE_C[a.bone] === '#c8f2c0' ? '#7dff8a' : '#fff';
+  for (const sg of [-1, 1]) {
+    const x = cx + sg * ex, odd = a.sEyes === 'odd' && sg > 0 ? 1.25 : 1, w = 9.5 * s * odd, h = 10.5 * s * odd;
+    if (a.sEyes === 'sleepy') { r += `<path d="M${f1(x - w)},${f1(ey + 1)} Q${f1(x)},${f1(ey + 7)} ${f1(x + w)},${f1(ey + 1)}" stroke="${hole}" stroke-width="3" fill="none" stroke-linecap="round"/>`; continue; }
+    r += `<path d="M${f1(x - w)},${f1(ey)} C${f1(x - w)},${f1(ey - h * 1.3)} ${f1(x + w)},${f1(ey - h * 1.3)} ${f1(x + w)},${f1(ey)} C${f1(x + w)},${f1(ey + h)} ${f1(x - w)},${f1(ey + h)} ${f1(x - w)},${f1(ey)}Z" fill="${hole}"/>`;
+    const py = a.sEyes === 'tired' ? ey + h * .35 : ey;
+    r += `<circle cx="${f1(x)}" cy="${f1(py)}" r="${f1(2.3 * s * odd)}" fill="${glow}"/>`;
+    if (a.sEyes === 'tired') r += `<path d="M${f1(x - w - 1)},${f1(ey - 1)} C${f1(x - w)},${f1(ey - h * 1.4)} ${f1(x + w)},${f1(ey - h * 1.4)} ${f1(x + w + 1)},${f1(ey - 1)} Q${f1(x)},${f1(ey + 2)} ${f1(x - w - 1)},${f1(ey - 1)}Z" fill="${bone}"/><path d="M${f1(x - w)},${f1(ey - 1)} Q${f1(x)},${f1(ey + 2)} ${f1(x + w)},${f1(ey - 1)}" stroke="${hole}" stroke-width="1.6" fill="none"/>` +
+      `<path d="M${f1(x - w + 1)},${f1(ey + h + 3)} Q${f1(x)},${f1(ey + h + 7)} ${f1(x + w - 1)},${f1(ey + h + 3)}" stroke="#8b7aa8" stroke-width="2.2" fill="none" opacity=".75" stroke-linecap="round"/>`;
+  }
+  if (a.sEyes === 'sleepy') r += `<path d="M${f1(cx + rx + 2)},${f1(cy - ry * .5)} h7 l-7,7 h7 M${f1(cx + rx + 12)},${f1(cy - ry * .78)} h5 l-5,5 h5" stroke="${dk(bone, .5)}" stroke-width="1.8" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
+  // нос — перевёрнутое сердечко
+  const ny = cy + ry * .3;
+  r += `<path d="M${cx},${f1(ny - 5)} C${cx - 2},${f1(ny - 9)} ${cx - 7},${f1(ny - 4)} ${cx},${f1(ny + 3)} C${cx + 7},${f1(ny - 4)} ${cx + 2},${f1(ny - 9)} ${cx},${f1(ny - 5)}Z" fill="${hole}" transform="rotate(180 ${cx} ${f1(ny - 2)})"/>`;
+  // зубы
+  const my = cy + ry * .6, tw = 15 * (a.faceW ?? 1), n = 6, step = 2 * tw / n;
+  if (a.sJaw === 'yawn') {
+    r += `<ellipse cx="${cx}" cy="${f1(my + 3)}" rx="${f1(tw * .72)}" ry="11" fill="${hole}"/>`;
+    for (let i = 0; i < 4; i++) { const x = cx - tw * .6 + i * tw * .4; r += `<rect x="${f1(x)}" y="${f1(my - 8)}" width="${f1(tw * .36)}" height="5" rx="1.2" fill="${lt(bone, .3)}"/><rect x="${f1(x)}" y="${f1(my + 9)}" width="${f1(tw * .36)}" height="4.5" rx="1.2" fill="${lt(bone, .3)}"/>`; }
+  } else {
+    const curve = a.sJaw === 'tight' ? 0 : 3;
+    r += `<path d="M${f1(cx - tw - 1)},${f1(my - 5)} Q${cx},${f1(my - 5 + curve)} ${f1(cx + tw + 1)},${f1(my - 5)} L${f1(cx + tw + 1)},${f1(my + 5)} Q${cx},${f1(my + 5 + curve)} ${f1(cx - tw - 1)},${f1(my + 5)}Z" fill="${hole}"/>`;
+    for (let i = 0; i < n; i++) {
+      if (a.sJaw === 'gap' && i === 2) continue;
+      const x = cx - tw + i * step, yo = curve * (1 - Math.pow((x + step / 2 - cx) / tw, 2));
+      r += `<rect x="${f1(x + .6)}" y="${f1(my - 4.4 + yo)}" width="${f1(step - 1.2)}" height="${a.sJaw === 'tight' ? 8.8 : 4}" rx="1.2" fill="${lt(bone, .3)}"/>`;
+      if (a.sJaw !== 'tight') r += `<rect x="${f1(x + .6)}" y="${f1(my + .6 + yo)}" width="${f1(step - 1.2)}" height="3.8" rx="1.2" fill="${lt(bone, .3)}"/>`;
+    }
+  }
+  if (a.sExtra === 'crack') r += `<path d="M${f1(cx + rx * .35)},${f1(cy - ry * .95)} l-3,7 l4,4 l-4,8 l3,5" stroke="${dk(bone, .55)}" stroke-width="1.5" fill="none" stroke-linejoin="round"/>`;
+  if (a.sExtra === 'plaster') { const x = cx - rx * .35, y = cy - ry * .62; r += `<g transform="rotate(-25 ${f1(x)} ${f1(y)})"><rect x="${f1(x - 10)}" y="${f1(y - 3.5)}" width="20" height="7" rx="2" fill="#e9c39c"/><rect x="${f1(x - 3.5)}" y="${f1(y - 10)}" width="7" height="20" rx="2" fill="#e2b68b"/><circle cx="${f1(x - 1)}" cy="${f1(y - 1)}" r=".7" fill="#b98d64"/><circle cx="${f1(x + 1.5)}" cy="${f1(y + 1)}" r=".7" fill="#b98d64"/></g>`; }
+  return { r, E: { ey, ex, s } };
+}
+
 // ── Проверка и очистка параметров ────────────────────────────────
 const has = (list, v) => list.some((x) => x.id === v);
 const pick = (v, list, def) => (v != null && has(list, v) ? v : def);
 const idx = (v, arr, def) => (Number.isInteger(v) && v >= 0 && v < arr.length ? v : def);
 const num = (v, lo, hi, def) => (typeof v === 'number' && Number.isFinite(v) ? clamp(Math.round(v * 100) / 100, lo, hi) : def);
 export const RANGES = { age: [18, 55], faceW: [.88, 1.12], eyeS: [.85, 1.2], eyeGap: [.88, 1.12], noseS: [.8, 1.25] };
-export const hairsOf = (sex) => (sex === 'f' ? HAIR_F : sex === 'robot' ? [] : HAIR_M);
+export const hairsOf = (sex) => (sex === 'f' ? HAIR_F : isChar(sex) ? [] : HAIR_M);
 export const isPremiumHat = (id) => PREMIUM.hat.includes(id);
 export const isPremiumBg = (id) => PREMIUM.bg.includes(id);
 
 // Только известные значения; всё неизвестное — по умолчанию. premium: false — премиум-детали снимаются.
 export function normalizeAvatar(src, { premium = false } = {}) {
   const a = src && typeof src === 'object' && !Array.isArray(src) ? src : {};
-  const sex = a.sex === 'f' || a.sex === 'robot' ? a.sex : 'm';
+  const sex = a.sex === 'f' || isChar(a.sex) ? a.sex : 'm';
   const r = (k, def) => num(a[k], RANGES[k][0], RANGES[k][1], def);
   const o = {
     v: 1, sex, age: Math.round(r('age', 30)), skin: idx(a.skin, SKIN, 3),
@@ -722,7 +909,7 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     brows: pick(a.brows, BROWS, 'straight'), nose: pick(a.nose, NOSES, 'button'), noseS: r('noseS', 1),
     mouth: pick(a.mouth, MOUTHS, 'smile'), lips: idx(a.lips, LIP_C, 0),
     // у робота причёска человека сохраняется (не рисуется), чтобы вернуться к ней
-    hair: pick(a.hair, sex === 'robot' ? [...HAIR_M, ...HAIR_F] : hairsOf(sex), sex === 'f' ? 'long' : 'short'), hairC: idx(a.hairC, HAIR_C, 2),
+    hair: pick(a.hair, isChar(sex) ? [...HAIR_M, ...HAIR_F] : hairsOf(sex), sex === 'f' ? 'long' : 'short'), hairC: idx(a.hairC, HAIR_C, 2),
     mous: sex !== 'f' ? pick(a.mous, MOUS, null) : null, beard: sex !== 'f' ? pick(a.beard, BEARDS, null) : null,
     beardC: a.beardC == null ? null : idx(a.beardC, HAIR_C, null),
     marks: Array.isArray(a.marks) ? MARKS.filter((m) => a.marks.includes(m.id)).map((m) => m.id) : [],
@@ -734,9 +921,13 @@ export function normalizeAvatar(src, { premium = false } = {}) {
     mazut: a.mazut === true, bg: pick(a.bg, BG, 'mist'),
     metal: idx(a.metal, METAL_C, 0), glow: idx(a.glow, GLOW_C, 0), rEyes: pick(a.rEyes, R_EYES, 'lens'),
     rMouth: pick(a.rMouth, R_MOUTHS, 'smile'), rTop: a.rTop === null ? null : pick(a.rTop, R_TOPS, 'beacon'),
+    scarf: pick(a.scarf, SCARVES, null),
+    coat: idx(a.coat, HORSE_C, 0), mane: pick(a.mane, H_MANES, 'short'), maneC: idx(a.maneC, HAIR_C, 0), blaze: pick(a.blaze, H_BLAZE, null),
+    hExpr: pick(a.hExpr, H_EXPR, 'happy'), hEars: pick(a.hEars, H_EARS, 'up'),
+    bone: idx(a.bone, BONE_C, 0), sEyes: pick(a.sEyes, S_EYES, 'tired'), sJaw: pick(a.sJaw, S_JAW, 'grin'), sExtra: pick(a.sExtra, S_EXTRA, null),
   };
   if (!premium) {
-    if (o.sex === 'robot') { o.sex = has(HAIR_F, o.hair) ? 'f' : 'm'; if (o.sex === 'f') { o.mous = null; o.beard = null; } }
+    if (isChar(o.sex)) { o.sex = has(HAIR_F, o.hair) ? 'f' : 'm'; if (o.sex === 'f') { o.mous = null; o.beard = null; } }
     if (isPremiumHat(o.hat)) o.hat = null;
     if (isPremiumBg(o.bg)) o.bg = 'mist';
     o.mazut = false;
@@ -747,7 +938,8 @@ export function normalizeAvatar(src, { premium = false } = {}) {
 // Какие премиум-детали сейчас надеты (для плашки «Примерка» и окна при сохранении)
 export function premiumParts(a) {
   const r = [];
-  if (a.sex === 'robot') r.push('робот');
+  const ch = CHARS.find((c) => c.id === a.sex);
+  if (ch) r.push(ch.part);
   if (isPremiumHat(a.hat)) r.push('фуражка');
   if (a.mazut) r.push('мазут');
   if (isPremiumBg(a.bg)) r.push(`фон «${BG.find((b) => b.id === a.bg).name}»`);
@@ -774,10 +966,28 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
   const neckSvg = `<clipPath id="${u}nk"><path d="${neck}"/></clipPath><path d="${neck}" fill="${dk(skin, .1)}"/><g clip-path="url(#${u}nk)"><path d="${g.path}" fill="${dk(skin, .3)}" transform="translate(0 6)"/></g>`;
   const head = cel(u + 'hd', g.path, skin, dk(skin, .14), -5, -3) +
     `<ellipse cx="${f1(g.cx - g.rx * .5)}" cy="${f1(g.cy - g.ry * .52)}" rx="${f1(g.rx * .28)}" ry="${f1(g.ry * .14)}" fill="${lt(skin, .4)}" opacity=".45" transform="rotate(-20 ${f1(g.cx - g.rx * .5)} ${f1(g.cy - g.ry * .52)})"/>`;
+  const sc = scarf(a, u);
+  if (a.sex === 'horse') {
+    const hg2 = horseGeom(a), coat = HORSE_C[a.coat], F2 = horseFace(a, hg2, coat, u);
+    const hb = [
+      bg ? background(a.bg, u) : '', horseMane(a, hg2, false), cl.back, horseNeck(a, hg2, coat), cl.s, sc,
+      a.hat ? '' : horseEars(a, hg2, coat, u), cel(u + 'hd', hg2.path, coat, dk(coat, .2), -5, -3), F2.r, horseMane(a, hg2, true), mazut(a, hg2),
+      glasses(a, F2.E, hg2), hat(a, hg2, u), a.hat ? horseEars(a, hg2, coat, u) : '', goggles(a, hg2), defenders(a, hg2),
+    ].join('');
+    return wrap(hb, size, crop, cls);
+  }
+  if (a.sex === 'skeleton') {
+    const bone = BONE_C[a.bone], S2 = skelFace(a, g, bone, u);
+    const sb = [
+      bg ? background(a.bg, u) : '', cl.back, skelNeck(a, g, bone), cl.s, sc, S2.r, mazut(a, g),
+      glasses(a, S2.E, g), hat(a, g, u), goggles(a, g), defenders(a, g),
+    ].join('');
+    return wrap(sb, size, crop, cls);
+  }
   if (a.sex === 'robot') {
     const m = METAL_C[a.metal], R = robotEyes(a, g, u);
     const rb = [
-      bg ? background(a.bg, u) : '', robotTop(a, g, m, u), cl.back, robotNeck(a, g, m), cl.s,
+      bg ? background(a.bg, u) : '', robotTop(a, g, m, u), cl.back, robotNeck(a, g, m), cl.s, sc,
       robotEars(a, g, m, u), robotHead(a, g, m, u), R.r, robotMouth(a, g), mazut(a, g),
       glasses(a, R, g), hat(a, g, u), goggles(a, g), defenders(a, g),
     ].join('');
@@ -785,7 +995,7 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
   }
   const body = [
     bg ? background(a.bg, u) : '', hairClip,
-    H.back, cl.back, neckSvg, cl.s, H.braids || '',
+    H.back, cl.back, neckSvg, cl.s, sc, H.braids || '',
     ears(a, g, skin, u), head,
     marks(a, g, skin, E), wrinkles(a, g, skin, E),
     E.r, Br.r, nose(a, g, skin, u), F.beard, mouth(a, g, skin, u), F.mous,
