@@ -162,11 +162,15 @@ test('вещи за приглашения: рисуются у всех, «Сл
   for (const sex of ['m', 'f', 'robot', 'horse', 'skeleton']) {
     ok(A.avatarSvg({ sex, scarf: 'light', outfit: 'kitel', hat: 'retro' }));
     A.USHANKA_C.forEach((_, hatC) => ok(A.avatarSvg({ sex, hat: 'ushanka', hatC })));
+    ok(A.avatarSvg({ sex, outfit: 'leather', bg: 'beam' }));
   }
+  ok(A.bgSvg('beam'));
+  assert.deepEqual([A.normalizeAvatar({ outfit: 'leather' }).outfit, A.normalizeAvatar({ bg: 'beam' }).bg], ['vestO', 'mist']);
+  assert.equal(A.normalizeAvatar({ bg: 'beam' }, { premium: true }).bg, 'beam');
   const s = A.normalizeAvatar({ scarf: 'light', outfit: 'kitel', hat: 'ushanka' });
   assert.deepEqual([s.scarf, s.outfit, s.hat], [null, 'vestO', null]);
   assert.equal(A.normalizeAvatar({ hat: 'retro' }).hat, null);
   assert.equal(A.normalizeAvatar({ scarf: 'light' }, { premium: true }).scarf, 'light');
   const rnd = A.rng(3);
-  for (let i = 0; i < 200; i++) { const a = A.randomAvatar(rnd); assert.ok(a.outfit !== 'kitel' && a.hat !== 'ushanka' && a.hat !== 'retro' && !a.scarf); }
+  for (let i = 0; i < 200; i++) { const a = A.randomAvatar(rnd); assert.ok(a.outfit !== 'kitel' && a.outfit !== 'leather' && a.bg !== 'beam' && a.hat !== 'ushanka' && a.hat !== 'retro' && !a.scarf); }
 });

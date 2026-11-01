@@ -230,7 +230,7 @@ function sections() {
       !ch && S_('marks', 'Приметы', () => `<div class="av-chips">${A.MARKS.map((m) => chip('av-mark', 'marks', m.id, m.name, a.marks.includes(m.id))).join('')}</div>`, 'можно несколько'),
     ].filter(Boolean);
   }
-  return [S_('bg', 'Фон', () => grid(A.BG.map((b) => {
+  return [S_('bg', 'Фон', () => grid(A.BG.filter(shown).map((b) => {
     const on = a.bg === b.id;
     return `<button class="av-tile${on ? ' on' : ''}" data-act="av-set" data-k="bg" data-v="${b.id}" aria-pressed="${on}" aria-label="${esc(b.name)}${b.premium ? ', Премиум' : ''}">${A.bgSvg(b.id)}${b.premium ? prBadge : ''}<span class="n">${esc(b.name)}</span></button>`;
   }).join(''), 'bg3'))];
