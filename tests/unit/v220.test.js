@@ -211,3 +211,15 @@ test('«Что сервер знает о вас»: приглашения (то
   assert.match(text, /Напоминание &lt;script&gt;alert\(1\)&lt;\/script&gt; 1 ноября 2026, 08:00 · принята/);
   assert.match(myDataHtml({ invited_by: 'admin' }).replace(/<[^>]+>/g, ' '), /По приглашению разработчика/);
 });
+
+test('согласие и политика называют второе хранилище зашифрованных копий и говорят, что ключа у него нет', async () => {
+  const { OFFSITE, HOSTING } = await import('../../js/legal.js');
+  const plain = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&laquo;|&raquo;/g, '"');
+  for (const html of [consentHtml(), policyHtml()]) {
+    const t = plain(html);
+    assert.ok(t.includes(HOSTING.replace(/[«»]/g, '')) || t.includes(HOSTING), 'основной хостинг назван');
+    assert.ok(t.includes(OFFSITE), 'второе хранилище названо');
+    assert.match(t, /ключа шифрования у (этого провайдера|хранилища) нет/);
+    assert.match(t, /14 дней/);
+  }
+});
