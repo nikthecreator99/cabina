@@ -1,0 +1,140 @@
+# CABINA: сервер аккаунтов и сайт (Селектел, с 03.11.2026). Лежит на сервере в /opt/cabina.
+#
+# Только то, что нужно приложению: база (PostgreSQL от Supabase), вход (GoTrue), запросы к таблицам (PostgREST)
+# и Caddy (HTTPS, сайт, CORS). Studio, хранилище файлов, realtime, функции, аналитика и пулер не ставим:
+# меньше программ — меньше дыр.
+#
+# Наружу открыт только Caddy (80 и 443). У базы, входа и PostgREST портов наружу нет совсем: Docker открывает
+# порты в обход ufw, поэтому их просто не публикуем. Секреты — только в /opt/cabina/.env (chmod 600, в git не попадает).
+# Журналы контейнеров — не больше 2 файлов по 5 МБ на каждый, потом стираются сами.
+
+x-logs: &logs
+  logging:
+    driver: local
+    options:
+      max-size: "5m"
+      max-file: "2"
+
+services:
+  db:
+    container_name: supabase-db        # это имя ждут скрипты резервных копий
+    image: supabase/postgres:17.6.1.136
+    restart: unless-stopped
+    <<: *logs
+    volumes:
+      - ./db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+      - ./db/data:/var/lib/postgresql/data
+      - db-config:/etc/postgresql-custom
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: 3600
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "log_min_messages=fatal"]
+
+  auth:
+    container_name: supabase-auth
+    image: supabase/gotrue:v2.197.0
+    restart: unless-stopped
+    <<: *logs
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: https://api.cabina-app.ru
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: https://cabina-app.ru/
+      GOTRUE_URI_ALLOW_LIST: ""
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_ISSUER: https://api.cabina-app.ru/auth/v1
+      # только почта и пароль: без телефона, без анонимных, без Google/Apple/Telegram (149-ФЗ, ст. 8 ч. 10)
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"      # почту подтверждают кодом из письма
+      GOTRUE_PASSWORD_MIN_LENGTH: 10
+      GOTRUE_MAILER_OTP_EXP: 3600             # код из письма действует 1 час (так написано в письме)
+      GOTRUE_MAILER_OTP_LENGTH: 6
+      GOTRUE_LOG_LEVEL: warn                  # без журнала каждого запроса (там были бы IP и почта)
+      # почта для кодов: адрес и пароль — в .env (скрипт set-mail.sh); пока пусто — письма не уходят
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-465}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_USER:-}
+      GOTRUE_SMTP_SENDER_NAME: CABINA
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      # письма с кодом (server/mail): GoTrue берёт их у Caddy по внутренней сети, наружу этот адрес не виден
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://caddy:8088/confirm.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://caddy:8088/recovery.html
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "Код подтверждения почты CABINA"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "Код для нового пароля CABINA"
+
+  rest:
+    container_name: supabase-rest
+    image: postgrest/postgrest:v14.18
+    restart: unless-stopped
+    <<: *logs
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: 3600
+      PGRST_OPENAPI_MODE: disabled            # не показываем наружу список таблиц и функций
+      PGRST_LOG_LEVEL: error
+
+  caddy:
+    container_name: cabina-caddy
+    image: caddy:2.10.2
+    restart: unless-stopped
+    <<: *logs
+    depends_on:
+      - auth
+      - rest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./www:/srv/www:ro
+      - ./mail:/srv/mail:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db-config:
+  caddy-data:
+  caddy-config:
