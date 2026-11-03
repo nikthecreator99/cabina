@@ -8,10 +8,10 @@ export const CONSENT_VERSION = 'privacy-3';
 // Отдельное согласие на распространение (152-ФЗ, ст. 10.1): быть в поиске «Коллег» = имя видно всем пользователям CABINA.
 // Совпадает с private.config publish_version на сервере.
 export const PUBLISH_VERSION = 'publish-2';
-export const POLICY_DATE = '1 ноября 2026 г.';
+export const POLICY_DATE = '3 ноября 2026 г.';
 export const APP_URL = 'https://cabina-app.ru/';
 export const OPERATOR = { name: 'Григорьев Никита Сергеевич', inn: '291802561037', email: 'privacy@cabina-app.ru' };
-export const HOSTING = 'ООО «Бегет»';
+export const HOSTING = 'АО «Селектел»';
 // Вторая копия: зашифрованные резервные копии хранятся ещё и в облачном хранилище другого провайдера в России
 // (ключа шифрования у него нет). Название проверить по договору-оферте провайдера перед выпуском.
 export const OFFSITE = 'ООО «Яндекс.Облако»';

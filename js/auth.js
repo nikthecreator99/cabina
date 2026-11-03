@@ -9,7 +9,7 @@ import { CONSENT_VERSION } from './legal.js';
 export const API = 'https://api.cabina-app.ru';
 // Публичный ключ приложения (роль anon). Его видят все: доступ к данным ограничивают правила базы (RLS).
 // Ключ service_role в приложение не кладём никогда.
-export const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyOTcyODAwLCJleHAiOjE5NTA3MzkyMDB9.tjeCWTSIQwYdbEaSryQosWO3bi__VN9rvaVzqj4EK-c';
+export const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkzNzE5NzkzLCJleHAiOjIxMDkwNzk3OTN9.NDITlginJlyY3ZOSevkEfUwTiJH6dgjJi9sFqdSCp3M';
 export const PLATFORM = 'web';
 export const PASS_MIN = 10;
 const KEY = 'cabina-account';

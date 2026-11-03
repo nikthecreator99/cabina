@@ -12,7 +12,7 @@ set -eu
 
 REPO=${CABINA_REPO:-https://github.com/nikthecreator99/cabina.git}
 SRC=${CABINA_SRC:-/srv/cabina-site/src}                           # рабочая копия пользователя cabina-site
-WWW=${CABINA_WWW:-/opt/beget/supabase/volumes/proxy/caddy/www}    # внутри Caddy это /etc/caddy/www
+WWW=${CABINA_WWW:-/opt/cabina/www}                                # внутри Caddy это /srv/www (server/stack)
 RUN=${CABINA_RUN-runuser -u cabina-site -- env HOME=/srv/cabina-site}
 FILES="index.html manifest.webmanifest sw.js css js fonts icons data"
 
