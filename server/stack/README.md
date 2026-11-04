@@ -46,7 +46,11 @@ realtime, функции, аналитика и пулер Supabase не ста�
    CABINA_WWW=/opt/cabina/www /usr/local/bin/cabina-site
    ```
 7. Caddy: `docker compose up -d caddy` — когда записи A указывают сюда, сам получит сертификаты.
-8. Почта для кодов: `sh repo/server/stack/set-mail.sh`, затем `docker compose up -d auth`.
+8. Почта для кодов — почтовый сервис Селектела (панель → «Продукты» → «Почтовый сервис», ресурс `cabina`, домен cabina-app.ru;
+   в DNS — TXT владения, SPF `v=spf1 include:spf.mail.selcloud.ru include:_spf.beget.com ~all`, DKIM `selcloud._domainkey`,
+   DMARC `v=DMARC1; p=quarantine;`). Селектел закрывает исходящие 25/465/587, поэтому порт 1126 (STARTTLS, сертификат проверяется).
+   `sh repo/server/stack/set-mail.sh` (логин — число «Login», пароль — «Pass (API-key)»), затем `docker compose up -d auth`.
+   Отправитель — `noreply@cabina-app.ru` (`SMTP_FROM`). Ограничение сервиса — 20 писем за 5 минут.
 9. Очистка журналов входа раз в сутки:
    `echo '15 0 * * * root docker exec supabase-db psql -U postgres -d postgres -qc "select private.cleanup_logs()"' > /etc/cron.d/cabina-cleanup`
 10. Резервные копии — `server/backup/` (ночная копия на сервере и вторая в Яндекс Облаке), см. `server/README.md`.

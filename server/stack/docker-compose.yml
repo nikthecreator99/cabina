@@ -79,12 +79,14 @@ services:
       GOTRUE_MAILER_OTP_EXP: 3600             # код из письма действует 1 час (так написано в письме)
       GOTRUE_MAILER_OTP_LENGTH: 6
       GOTRUE_LOG_LEVEL: warn                  # без журнала каждого запроса (там были бы IP и почта)
-      # почта для кодов: адрес и пароль — в .env (скрипт set-mail.sh); пока пусто — письма не уходят
+      # почта для кодов: почтовый сервис Селектела (smtp.mail.selcloud.ru:1126, STARTTLS; с 04.11.2026).
+      # Селектел закрывает исходящие 25/465/587, поэтому порт 1126. Логин и пароль — в .env (скрипт set-mail.sh);
+      # пока пусто — письма не уходят. Отправитель — SMTP_FROM (по умолчанию noreply@cabina-app.ru).
       GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
-      GOTRUE_SMTP_PORT: ${SMTP_PORT:-465}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-1126}
       GOTRUE_SMTP_USER: ${SMTP_USER:-}
       GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
-      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_USER:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_FROM:-noreply@cabina-app.ru}
       GOTRUE_SMTP_SENDER_NAME: CABINA
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify

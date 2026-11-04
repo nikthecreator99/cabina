@@ -30,7 +30,7 @@ JWT_SECRET=$JWT_SECRET
 ANON_KEY=$ANON_KEY
 # почта для кодов — задаётся скриптом set-mail.sh
 SMTP_HOST=
-SMTP_PORT=465
+SMTP_PORT=1126
 SMTP_USER=
 SMTP_PASS=
 EOF
