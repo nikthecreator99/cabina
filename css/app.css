@@ -1357,15 +1357,20 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 
 /* 2.21: вид отдыха внизу формы поездки; пока не выбран (поездку закрывают сразу) — кнопки медленно пульсируют */
 .rest-field .req { color: var(--accent); font-weight: 700; }
-#tf-rest.rest-pulse { animation: rest-pulse 2.2s ease-in-out infinite; }
+/* две отдельные кнопки (не слитный переключатель): у каждой своя рамка, светятся по отдельности */
+#tf-rest { gap: 10px; padding: 0; background: none; border: 0; border-radius: 0; }
+#tf-rest button { min-height: 54px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); }
+#tf-rest button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+#tf-rest.rest-pulse button { animation: rest-pulse 2.2s ease-in-out infinite; }
 @keyframes rest-pulse {
   0%, 100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+  50% { box-shadow: 0 0 0 2px var(--accent), 0 0 14px 1px color-mix(in srgb, var(--accent) 45%, transparent); }
 }
-.rest-field.need #tf-rest { box-shadow: 0 0 0 2px var(--accent); animation: rest-shake .45s ease-in-out 1, rest-pulse 2.2s ease-in-out .45s infinite; }
+.rest-field.need #tf-rest { animation: rest-shake .45s ease-in-out 1; }
+.rest-field.need #tf-rest button { border-color: var(--accent); }
 .rest-field.need #tf-rest-why { color: var(--accent); font-weight: 700; }
 @keyframes rest-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
-@media (prefers-reduced-motion: reduce) { #tf-rest.rest-pulse, .rest-field.need #tf-rest { animation: none; box-shadow: 0 0 0 2px var(--accent); } }
+@media (prefers-reduced-motion: reduce) { #tf-rest.rest-pulse button { animation: none; border-color: var(--accent); } .rest-field.need #tf-rest { animation: none; } }
 
 /* 2.21: выходной в профиле — кнопка, нажатием меняется окончание */
 button.pr-status { font: inherit; color: inherit; cursor: pointer; }
