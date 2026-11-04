@@ -8,7 +8,6 @@ globalThis.localStorage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), se
 
 const { S, EXTRA_KEYS, extraOrder } = await import('../../js/store.js');
 const A = await import('../../js/avatar.js');
-const { restRequired, REST_REQUIRED_MIN } = await import('../../js/rest.js');
 const { dayOffEditError, DAYOFF_MAX_MIN } = await import('../../js/forms.js');
 
 const MIN = 60000;
@@ -37,17 +36,6 @@ test('скелет: у глаз «Уставшие» больше нет под�
   const svg = A.avatarSvg({ sex: 'skeleton', sEyes: 'tired' }, { size: 120 });
   assert.doesNotMatch(svg, /#8b7aa8/);
   assert.match(svg, /<svg/);
-});
-
-test('вид отдыха обязателен: только кто делится статусом и не позже 2 ч после окончания', () => {
-  const end = Date.UTC(2026, 9, 20, 10, 0);
-  assert.equal(REST_REQUIRED_MIN, 120);
-  assert.equal(restRequired(end, end + 5 * MIN, true), true);
-  assert.equal(restRequired(end, end + 120 * MIN, true), true);
-  assert.equal(restRequired(end, end + 121 * MIN, true), false, 'вносит позже — не обязателен');
-  assert.equal(restRequired(end, end - 30 * MIN, true), true, 'окончание ещё впереди');
-  assert.equal(restRequired(end, end + 5 * MIN, false), false, 'не делится статусом — не обязателен');
-  assert.equal(restRequired(NaN, end, true), false);
 });
 
 test('«Ещё»: порядок — сохранённый, новые пункты в конце, чужое отбрасывается', () => {

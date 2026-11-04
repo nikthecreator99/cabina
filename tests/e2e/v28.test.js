@@ -39,11 +39,16 @@ test('новая поездка: отдых не выбран и недосту�
   await f.locator('#tf-et').fill('');
   assert.equal(await f.locator('[data-rest][aria-pressed=true]').count(), 0);
   await f.locator('#tf-et').fill('11:00');
+  // 2.21: без выбора не сохраняется (вид отдыха обязателен всегда), кнопки пульсируют
+  await save.click();
+  await page.waitForTimeout(300);
+  assert.equal(await store(page, async () => (await import('./js/store.js')).S.trips.length), 0, 'без выбора отдыха не сохранилась');
+  assert.match(await f.locator('#tf-rest').getAttribute('class'), /rest-pulse/);
+  await f.locator('[data-rest=home]').click();
   await save.click();
   await waitNoLayers(page);
   const t = await store(page, async () => (await import('./js/store.js')).S.trips[0]);
-  assert.equal(t.restType, null, 'без выбора отдых не записывается');
-  assert.equal(await page.locator('.rest-banner').count(), 0);
+  assert.equal(t.restType, 'home');
   assert.deepEqual(errors, []);
   await context.close();
 });

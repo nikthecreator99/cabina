@@ -173,11 +173,41 @@ test('администратор видит идеи без автора и от
   const list = json('select public.admin_ideas()', admin);
   const it = list.find((x) => x.id === id);
   assert.equal(it.body, 'Покажите ночные часы на главной');
-  assert.deepEqual(Object.keys(it).sort(), ['answered_at', 'body', 'created_at', 'id', 'state'], 'без почты и id автора');
+  assert.deepEqual(Object.keys(it).sort(), ['answered_at', 'body', 'created_at', 'email', 'id', 'state'], 'без id автора');
+  assert.equal(it.email, null, 'без отметки «можно ответить» — без почты');
   q(`select public.admin_answer_idea('${id}', true)`, admin);
   assert.deepEqual(q(`select state, answered_at is not null from public.ideas where id = '${id}'`, me), ['accepted|t']);
   const st = json('select public.admin_stats()', admin);
   assert.ok(Number.isInteger(st.ideas_new) && Number.isInteger(st.invited));
+});
+
+test('«Можно ответить мне на почту» (2.21): почту видит только администратор и только у отмеченной идеи', () => {
+  const me = account();
+  const other = account();
+  const admin = account();
+  q(`update public.profiles set role = 'admin' where id = '${admin}'`);
+  const email = q(`select email from auth.users where id = '${me}'`)[0];
+  const yes = q(`select public.send_idea('Напишите мне про виджет', true)`, me)[0];
+  const no = q(`select public.send_idea('А эту без ответа', false)`, me)[0];
+  const dflt = q(`select public.send_idea('Старое приложение — без отметки')`, me)[0];
+  const list = json('select public.admin_ideas()', admin);
+  const by = (id) => list.find((x) => x.id === id);
+  assert.equal(by(yes).email, email);
+  assert.equal(by(no).email, null);
+  assert.equal(by(dflt).email, null, 'по умолчанию — не отмечено');
+  assert.ok(list.every((x) => !('user_id' in x)), 'id автора не отдаём');
+  fails('select public.admin_ideas()', me, /forbidden/);
+  fails('select public.admin_ideas()', other, /forbidden/);
+  fails(`select public.send_idea('Чужому нельзя', true)`, 'anon', /permission denied/);
+  // свою отметку автор видит, чужие идеи — нет; поменять напрямую нельзя
+  assert.deepEqual(q(`select reply_ok from public.ideas where id = '${yes}'`, me), ['t']);
+  assert.deepEqual(q(`select count(*) from public.ideas where id = '${yes}'`, other), ['0']);
+  fails(`update public.ideas set reply_ok = true where id = '${no}'`, me, /permission denied/);
+  const mine = json('select public.export_my_data()', me);
+  assert.deepEqual(mine.ideas.map((x) => x.reply_by_email), [true, false, false]);
+  // стёр идею — пропала и почта у администратора
+  q(`select public.delete_idea('${yes}')`, me);
+  assert.equal(json('select public.admin_ideas()', admin).find((x) => x.id === yes), undefined);
 });
 
 test('«Мои данные на сервере»: приглашения, кто пригласил и идеи; удаление аккаунта стирает идеи', () => {

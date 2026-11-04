@@ -76,6 +76,7 @@ test('вид движения: список из четырёх, по умолч
   await f.locator('#tf-sd').fill('2026-10-14');
   await f.locator('#tf-st').fill('08:00');
   await f.locator('#tf-et').fill('11:00');
+  await f.locator('[data-rest=turnaround]').click(); // 2.21: вид отдыха обязателен
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   const t = await store(page, async () => (await import('./js/store.js')).S.trips[0]);

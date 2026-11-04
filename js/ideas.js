@@ -1,6 +1,8 @@
 // «Идеи для CABINA» (2.20, просьба Никиты): человек с аккаунтом отправляет идею, видит ответ («принята» / «не подошла»),
-// за принятые — награда «Идейный». Идею видят только автор и администратор (без почты автора); это не переписка между людьми.
+// за принятые — награда «Идейный». Идею видят только автор и администратор; это не переписка между людьми.
 // На сервере — текст до 500 знаков, дата и ответ. Стереть свою идею можно в любой момент.
+// С 2.21 (просьба Никиты) — галочка «Можно ответить мне на почту» у каждой идеи (по умолчанию снята): только у таких
+// идей администратор видит почту автора (миграция 0006). Без галочки — как раньше, без почты.
 // Просим не писать имена, телефоны, номера поездов и служебную информацию (ДСП) — это предупреждение рядом с полем.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, dayMonth, layerCount } from './ui.js';
 import { nowLocal } from './store.js';
@@ -19,13 +21,19 @@ const when = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; ret
 // Идеи с сервера — непроверенное: известные состояния, текст через cleanText (без служебных символов) и esc() при выводе
 export function cleanIdeas(rows) {
   return (Array.isArray(rows) ? rows : []).filter((x) => x && UUID.test(String(x.id)) && Object.hasOwn(STATES, x.state))
-    .map((x) => ({ id: String(x.id).toLowerCase(), body: cleanText(x.body, IDEA_MAX), state: x.state, created: when(x.created_at), answered: when(x.answered_at) }))
+    .map((x) => ({ id: String(x.id).toLowerCase(), body: cleanText(x.body, IDEA_MAX), state: x.state, created: when(x.created_at), answered: when(x.answered_at),
+      reply: x.reply_ok === true, email: cleanEmail(x.email) }))
     .filter((x) => x.body).slice(0, 200);
+}
+// Почта автора (только у администратора и только у идей с галочкой): простая проверка вида, иначе — нет почты
+export function cleanEmail(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s.length <= 254 && /^[^\s@<>"'`]+@[^\s@<>"'`]+\.[^\s@<>"'`]+$/.test(s) ? s : '';
 }
 // Что отправим: без лишних пробелов и служебных символов (сервер чистит так же)
 export const ideaText = (v) => cleanText(v, IDEA_MAX);
 
-const D = { sub: null, list: null, at: 0, err: '', loading: null, busy: false, draft: '' };
+const D = { sub: null, list: null, at: 0, err: '', loading: null, busy: false, draft: '', reply: false };
 let rerender = () => {};
 export function initIdeas(h) { rerender = h.rerender || rerender; }
 
@@ -60,7 +68,10 @@ export function loadIdeas({ force = false } = {}) {
   if (!force && D.list && Date.now() - D.at < 30e3) return Promise.resolve(D.list);
   const sub = D.sub;
   D.loading = (async () => {
-    const r = await restGet('ideas?select=id,body,state,created_at,answered_at&order=created_at.desc&limit=200');
+    // reply_ok — с сервера 2.21; на старом сервере его нет (42703) — читаем без него
+    const q = 'order=created_at.desc&limit=200';
+    let r = await restGet(`ideas?select=id,body,state,created_at,answered_at,reply_ok&${q}`);
+    if (r && !r.ok && String(r.data?.code || '') === '42703') r = await restGet(`ideas?select=id,body,state,created_at,answered_at&${q}`);
     if (session()?.sub !== sub) return null;
     if (!r?.ok) { D.err = !r ? 'offline' : notReady(r) ? 'server' : 'error'; D.at = Date.now(); return D.list; }
     D.list = cleanIdeas(r.data); D.at = Date.now(); D.err = '';
@@ -72,7 +83,7 @@ export function loadIdeas({ force = false } = {}) {
 
 const wall = (abs) => abs + tzOffset();
 function ideaRow(x) {
-  const meta = [x.created != null ? dayMonth(wall(x.created)) : '', STATES[x.state]].filter(Boolean).join(' · ');
+  const meta = [x.created != null ? dayMonth(wall(x.created)) : '', STATES[x.state], x.reply ? 'можно ответить на почту' : ''].filter(Boolean).join(' · ');
   return `<div class="idea st-${x.state}" data-id="${esc(x.id)}"><div class="grow"><div class="idea-body">${esc(x.body)}</div>
       <div class="t2 idea-meta">${x.state === 'accepted' ? small(I.check, 14) : ''}${esc(meta)}</div></div>
     <button class="icon-btn idea-del" data-act="idea-del" data-id="${esc(x.id)}" aria-label="Стереть идею">${small(I.trash, 18)}</button></div>`;
@@ -95,7 +106,8 @@ export function renderIdeas() {
       <textarea class="input idea-text" id="idea-text" aria-label="Ваша идея" rows="5" maxlength="${IDEA_MAX}" placeholder="Например: напоминание за час до конца отдыха">${esc(D.draft)}</textarea>
       <div class="idea-count hint" id="idea-count" aria-live="polite">${n} / ${IDEA_MAX}</div>
     </div>
-    <div class="notice">${I.alert}<div>Не пишите имена, телефоны, номера поездов и служебную информацию. Идею читает только разработчик — без вашей почты.</div></div>
+    <div class="acc-consent idea-reply"><input type="checkbox" id="idea-reply"${D.reply ? ' checked' : ''}><label for="idea-reply">Можно ответить мне на почту<span class="hint">Разработчик увидит вашу почту только у этой идеи</span></label></div>
+    <div class="notice">${I.alert}<div>Не пишите имена, телефоны, номера поездов и служебную информацию. Идею читает только разработчик — без вашей почты, если не отметите «Можно ответить».</div></div>
     <button class="btn btn-primary" data-act="idea-send" id="idea-send">${small(I.idea, 18)} Отправить</button>
     <div class="hint">Не больше ${IDEAS_PER_DAY} идей в день.${accepted ? ` Принято ваших идей: ${accepted}.` : ''}</div>
     ${D.list && D.list.length ? `<div class="group-title">Мои идеи <span class="hint">${D.list.length}</span></div><div class="panel idea-list" id="idea-list">${D.list.map(ideaRow).join('')}</div>`
@@ -104,6 +116,7 @@ export function renderIdeas() {
 
 // Набор текста: счётчик и черновик (черновик — только в памяти, до закрытия приложения)
 export function ideasInput(t) {
+  if (t.id === 'idea-reply') { D.reply = t.checked === true; return true; }
   if (t.id !== 'idea-text') return false;
   D.draft = t.value.slice(0, IDEA_MAX);
   const c = document.getElementById('idea-count');
@@ -115,13 +128,17 @@ async function send() {
   const box = document.getElementById('idea-text');
   const text = ideaText(box ? box.value : D.draft);
   if (text.length < 3) { toast('Напишите идею хотя бы в несколько слов', { error: true }); box?.focus(); return; }
-  let r = await rpc('send_idea', { p_body: text });
+  const tick = document.getElementById('idea-reply');
+  const reply = tick ? tick.checked === true : D.reply;
+  // без галочки — как раньше, одним текстом (работает и со старым сервером)
+  const args = reply ? { p_body: text, p_reply: true } : { p_body: text };
+  let r = await rpc('send_idea', args);
   if (r && !r.ok && /consent required/.test(msgOf(r))) {
     if (!(await ensureConsent())) return;
-    r = await rpc('send_idea', { p_body: text });
+    r = await rpc('send_idea', args);
   }
   if (!r?.ok) { toast(ideaError(r), { error: true, ms: 6000 }); return; }
-  D.draft = '';
+  D.draft = ''; D.reply = false;
   toast('Спасибо! Идея отправлена');
   await loadIdeas({ force: true });
 }
@@ -147,7 +164,7 @@ export async function ideasClick(act, b) {
 }
 
 // ---------------------------------------------------------------- для администратора (Настройки аккаунта)
-// Без почты и id автора: чтобы решить, хороша ли идея, знать автора не нужно
+// Без id автора; почта — только у идей, где автор отметил «Можно ответить мне на почту»
 export async function openAdminIdeas() {
   const r = await rpc('admin_ideas');
   if (!r?.ok) { toast(ideaError(r), { error: true, ms: 5000 }); return; }
@@ -155,8 +172,9 @@ export async function openAdminIdeas() {
   const fresh = () => list.filter((x) => x.state === 'new').length;
   const rowHtml = (x) => `<div class="idea st-${x.state}" data-id="${esc(x.id)}"><div class="grow"><div class="idea-body">${esc(x.body)}</div>
       <div class="t2 idea-meta">${esc([x.created != null ? dayMonth(wall(x.created)) : '', STATES[x.state]].filter(Boolean).join(' · '))}</div>
+      ${x.email ? `<div class="t2 idea-mail">${small(I.mail, 14)} Можно ответить: <b class="sel">${esc(x.email)}</b></div>` : ''}
       ${x.state === 'new' ? `<div class="idea-ans"><button class="btn btn-primary btn-sm" data-ans="1" data-id="${esc(x.id)}">Принять</button><button class="btn btn-plain btn-sm" data-ans="0" data-id="${esc(x.id)}">Не подошла</button></div>` : ''}</div></div>`;
-  const body = () => (list.length ? `<div class="hint">Новых: ${fresh()}. Автора не видно — только текст.</div><div class="panel idea-list">${list.map(rowHtml).join('')}</div>`
+  const body = () => (list.length ? `<div class="hint">Новых: ${fresh()}. Почта автора видна, только если он сам отметил «Можно ответить мне на почту».</div><div class="panel idea-list">${list.map(rowHtml).join('')}</div>`
     : '<div class="hint">Идей пока нет.</div>');
   const el = openLayer(sheet({ title: 'Идеи пользователей', tall: true, body: `<div id="adm-ideas">${body()}</div>` }));
   let busy = false;

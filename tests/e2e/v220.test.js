@@ -209,6 +209,7 @@ test('«Предложить идею»: без аккаунта — объяс�
   await page.locator('.toast', { hasText: 'Спасибо! Идея отправлена' }).waitFor();
   await page.waitForFunction(() => document.querySelectorAll('#idea-list .idea').length === 2);
   assert.equal(srv.calls('send_idea')[0].body.p_body, 'Напоминание за час до конца отдыха', 'лишние пробелы убраны ещё в телефоне');
+  assert.equal('p_reply' in srv.calls('send_idea')[0].body, false, 'без галочки — как раньше, только текст');
   assert.equal(await page.locator('#idea-text').inputValue(), '');
   assert.match(await text(page, '#idea-list .idea:first-child'), /Напоминание за час до конца отдыха[\s\S]*На рассмотрении/);
   // пусто — не отправляем

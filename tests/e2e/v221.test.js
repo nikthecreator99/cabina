@@ -4,6 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { ready, CUR } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -34,7 +35,7 @@ async function fillTrip(page, st, et) {
   return f;
 }
 
-test('вид отдыха: кнопки внизу формы, после рабочего времени; обязателен, если делитесь статусом и закрываете сразу', async () => {
+test('вид отдыха: кнопки внизу формы, после рабочего времени; обязателен всегда, кнопки пульсируют', async () => {
   const { context, page, errors } = await openApp(env);
   await signedSharing(context, page, true);
   const f = await fillTrip(page, '07:00', '11:00');
@@ -43,24 +44,30 @@ test('вид отдыха: кнопки внизу формы, после раб
   assert.ok(await y('#tf-calc') < await y('#tf-rest'), 'вид отдыха — под рабочим временем');
   assert.ok(await y('[data-act=add-pass]') < await y('#tf-rest'));
   assert.equal(await f.locator('#tf-rest-req').isVisible(), true, '«обязательно» видно');
-  assert.match(await text(f, '#tf-rest-why'), /коллеги не увидят, где вы/);
-  // без выбора не сохраняется: стрелка на кнопки, форма открыта
+  assert.match(await text(f, '#tf-rest-why'), /не посчитаются отдых/);
+  // пока не выбран — кнопки пульсируют; без выбора не сохраняется, форма открыта
+  assert.match(await f.locator('#tf-rest').getAttribute('class'), /rest-pulse/);
   await f.locator('[data-act=save-trip]').click();
   await page.waitForTimeout(300);
-  assert.equal(await f.locator('#tf-rest-arrow').isVisible(), true);
   assert.match(await f.locator('#tf-rest-field').getAttribute('class'), /need/);
   assert.equal((await trips(page)).length, 0);
   // выбрали — сохраняется, отдых посчитан под кнопками
   await f.locator('[data-rest=turnaround]').click();
-  assert.equal(await f.locator('#tf-rest-arrow').isVisible(), false);
+  assert.doesNotMatch(await f.locator('#tf-rest').getAttribute('class'), /rest-pulse/, 'выбрали — пульс выключен');
   assert.match(await text(f, '#tf-rest-calc'), /Отдых в пункте оборота[\s\S]*4 ч/i);
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.equal((await trips(page))[0].restType, 'turnaround');
-  // вносит поездку позже (закончилась больше 2 ч назад) — выбирать не обязательно
-  const g = await fillTrip(page, '01:00', '09:30');
-  assert.equal(await g.locator('#tf-rest-req').isVisible(), false);
-  assert.match(await text(g, '#tf-rest-calc'), /Выберите вид отдыха после поездки/);
+  // вносит поездку позже (закончилась давно) — тоже обязательно (решение Никиты: всегда и у всех)
+  const g = await fillTrip(page, '01:00', '05:30');
+  await g.locator('#tf-sd').fill('2026-10-12');
+  await g.locator('#tf-ed').fill('2026-10-12');
+  assert.equal(await g.locator('#tf-rest-req').isVisible(), true);
+  assert.match(await g.locator('#tf-rest').getAttribute('class'), /rest-pulse/);
+  await g.locator('[data-act=save-trip]').click();
+  await page.waitForTimeout(300);
+  assert.equal((await trips(page)).length, 1, 'без выбора не сохранилась');
+  await g.locator('[data-rest=home]').click();
   await g.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.equal((await trips(page)).length, 2);
@@ -68,15 +75,21 @@ test('вид отдыха: кнопки внизу формы, после раб
   await context.close();
 });
 
-test('вид отдыха: без статуса для коллег (или без аккаунта) не обязателен', async () => {
+test('вид отдыха: обязателен у всех — и без аккаунта, и без статуса для коллег', async () => {
   for (const signed of [false, true]) {
     const { context, page, errors } = await openApp(env);
     if (signed) await signedSharing(context, page, false);
     const f = await fillTrip(page, '07:00', '11:30');
-    assert.equal(await f.locator('#tf-rest-req').isVisible(), false);
+    assert.equal(await f.locator('#tf-rest-req').isVisible(), true);
+    assert.match(await f.locator('#tf-rest').getAttribute('class'), /rest-pulse/, 'кнопки пульсируют');
+    assert.match(await text(f, '#tf-rest-why'), /не посчитаются отдых, переотдых и его оплата/);
+    await f.locator('[data-act=save-trip]').click();
+    await page.waitForTimeout(300);
+    assert.equal((await trips(page)).length, 0, 'без выбора не сохранилась');
+    await f.locator('[data-rest=home]').click();
     await f.locator('[data-act=save-trip]').click();
     await waitNoLayers(page);
-    assert.equal((await trips(page))[0].restType, null);
+    assert.equal((await trips(page))[0].restType, 'home');
     assert.deepEqual(realErrors(errors), []);
     await context.close();
   }
@@ -242,5 +255,41 @@ test('вещи за приглашения: без аккаунта «Отпра
   await page.locator('.screen[data-page=invites]').waitFor();
   assert.match(await text(page, '.screen'), /Нужен аккаунт CABINA/);
   assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('идея: галочка «Можно ответить мне на почту» — по умолчанию снята; почту администратор видит только у отмеченной', async () => {
+  const NEW = { consents: [{ document: CUR, withdrawn_at: null }] };
+  const { context, page, errors } = await openApp(env);
+  const srv = await ready(context, page, NEW);
+  await tab(page, 'extra');
+  await page.locator('#extra-ideas').click();
+  await page.waitForSelector('#idea-reply');
+  assert.equal(await page.locator('#idea-reply').isChecked(), false, 'по умолчанию — без почты');
+  assert.match(await text(page, '.screen'), /Можно ответить мне на почту[\s\S]*только у этой идеи/);
+  await page.locator('#idea-text').fill('Ответьте мне про виджет');
+  await page.locator('label[for=idea-reply]').click();
+  await page.locator('#idea-send').click();
+  await page.locator('.toast', { hasText: 'Спасибо! Идея отправлена' }).waitFor();
+  assert.deepEqual(srv.calls('send_idea')[0].body, { p_body: 'Ответьте мне про виджет', p_reply: true });
+  await page.waitForFunction(() => document.querySelectorAll('#idea-list .idea').length === 1);
+  assert.match(await text(page, '#idea-list'), /можно ответить на почту/);
+  assert.equal(await page.locator('#idea-reply').isChecked(), false, 'после отправки галочка снова снята');
+  await page.locator('#idea-text').fill('А эту — без ответа');
+  await page.locator('#idea-send').click();
+  await page.waitForFunction(() => document.querySelectorAll('#idea-list .idea').length === 2);
+  assert.deepEqual(srv.calls('send_idea')[1].body, { p_body: 'А эту — без ответа' });
+  assert.equal(await fits(page), true);
+  // администратор: почта — только у первой
+  srv.db.role = 'admin';
+  await page.evaluate(async () => { await (await import('./js/ideas.js')).openAdminIdeas(); });
+  const s = sheet(page);
+  await s.locator('.idea').first().waitFor();
+  const rows = s.locator('.idea');
+  assert.equal(await s.locator('.idea-mail').count(), 1);
+  assert.match(await s.locator('.idea-mail').innerText(), /Можно ответить: avtor@example\.com/);
+  assert.match(await s.innerText(), /Почта автора видна, только если он сам отметил/);
+  assert.equal(await rows.count(), 2);
+  assert.deepEqual(realErrors(errors), []);
   await context.close();
 });

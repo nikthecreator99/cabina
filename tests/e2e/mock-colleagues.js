@@ -43,7 +43,7 @@ export async function mockServer(context, init = {}) {
     const rpc = path.replace('/rest/v1/rpc/', '');
     switch (path) {
       case '/rest/v1/profiles': return send(200, [{ role: db.role }]);
-      case '/rest/v1/ideas': return send(200, [...db.ideas].reverse().map(({ id, body: b, state, created_at, answered_at }) => ({ id, body: b, state, created_at, answered_at })));
+      case '/rest/v1/ideas': return send(200, [...db.ideas].reverse().map(({ id, body: b, state, created_at, answered_at, reply_ok = false }) => ({ id, body: b, state, created_at, answered_at, reply_ok })));
       case '/rest/v1/consents': return send(200, db.consents);
       case '/rest/v1/links': return send(200, db.links.filter(mine).map(({ from_id, to_id, state }) => ({ from_id, to_id, state })));
       case '/rest/v1/cards': {
@@ -65,7 +65,7 @@ export async function mockServer(context, init = {}) {
     if (rpc === 'my_invites') return send(200, { ...db.invites, open: db.invites.open.map(({ id, created_at, expires_at }) => ({ id, created_at, expires_at })), limit: 10, need_days: 3 });
     if (rpc === 'drop_invite') { db.invites.open = db.invites.open.filter((x) => x.id !== body.p_id); return send(204); }
     if (rpc === 'delete_idea') { db.ideas = db.ideas.filter((x) => x.id !== body.p_id); return send(204); }
-    if (rpc === 'admin_ideas') return db.role === 'admin' ? send(200, db.ideas.map(({ id, body: b, state, created_at, answered_at }) => ({ id, body: b, state, created_at, answered_at }))) : send(403, { code: '42501', message: 'cabina: forbidden' });
+    if (rpc === 'admin_ideas') return db.role === 'admin' ? send(200, db.ideas.map(({ id, body: b, state, created_at, answered_at, reply_ok, email }) => ({ id, body: b, state, created_at, answered_at, email: reply_ok ? (email || 'avtor@example.com') : null }))) : send(403, { code: '42501', message: 'cabina: forbidden' });
     if (rpc === 'admin_answer_idea') {
       if (db.role !== 'admin') return send(403, { code: '42501', message: 'cabina: forbidden' });
       const d = db.ideas.find((x) => x.id === body.p_id);
@@ -105,7 +105,7 @@ export async function mockServer(context, init = {}) {
       const b = String(body.p_body || '').replace(/\s+/g, ' ').trim().slice(0, 500);
       if (b.length < 3) return fail('empty');
       if (++db.ideasToday > 5) return fail('limit');
-      db.ideas.push({ id: uuid(), body: b, state: 'new', created_at: NOW, answered_at: null });
+      db.ideas.push({ id: uuid(), body: b, state: 'new', created_at: NOW, answered_at: null, reply_ok: body.p_reply === true });
       return send(200, db.ideas.at(-1).id);
     }
     if (rpc === 'save_card') {

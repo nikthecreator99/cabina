@@ -55,7 +55,7 @@ test('добавление поездки через форму: часы, но�
   assert.match(calc, /Рабочее время\s+11 ч 30 мин/);
   assert.match(calc, /Ночные \(22:00–06:00\)\s+8 ч 00 мин/);
   // 2.8: отдых по умолчанию не выбран — выбирается после окончания
-  assert.match(await f.locator('#tf-rest-calc').innerText(), /Выберите вид отдыха/); // 2.21: отдых — под кнопками внизу
+  assert.match(await f.locator('#tf-rest-why').innerText(), /Выберите его, чтобы сохранить поездку/); // 2.21: обязателен, отдых — под кнопками внизу
   assert.equal(await f.locator('[data-rest][aria-pressed=true]').count(), 0);
   await f.locator('[data-rest=turnaround]').click();
   assert.match(await f.locator('#tf-rest-calc').innerText(), /Отдых в пункте оборота\s+Длительность\s+5 ч 45 мин/i);
@@ -187,6 +187,7 @@ test('маршруты: добавить, создать обратный, вы�
   await f.locator('#tf-route-quick .qchip').filter({ hasText: 'Малошуйка → Сумский Посад' }).click();
   await f.locator('#tf-st').fill('08:00');
   await f.locator('#tf-et').fill('11:00');
+  await f.locator('[data-rest=turnaround]').click();
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.match(await text(page, '.trip'), /Малошуйка → Сумский Посад/);

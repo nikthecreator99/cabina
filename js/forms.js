@@ -9,9 +9,7 @@ import {
   autoAbsenceHours, absenceBreakdown, absenceMonths, validateAbsence, monthSummary, DAY, MIN, LEGS_MAX, LEG_NAMES, legsOf,
 } from './calc.js';
 import { dayInfo } from './calendar.js';
-import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restRequired } from './rest.js';
-import { session } from './auth.js';
-import { privacyOf } from './profile.js';
+import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
@@ -307,7 +305,6 @@ export function openTripForm(tripId) {
     <div class="field"><div id="tf-calc"></div></div>
     <div class="field rest-field" id="tf-rest-field">
       <div class="label" id="tf-rest-cap">Вид отдыха после поездки<span class="req" id="tf-rest-req" hidden> · обязательно</span></div>
-      <div class="rest-arrow" id="tf-rest-arrow" hidden aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M5.5 12.5 12 19l6.5-6.5"/></svg></div>
       <div class="seg accent" id="tf-rest">
         <button type="button" data-rest="turnaround">${I.bed2}<span>Отдых в пункте оборота</span></button>
         <button type="button" data-rest="home">${I.home2}<span>Домашний отдых</span></button>
@@ -517,18 +514,13 @@ export function openTripForm(tripId) {
     $(el, '#tf-kind-list').hidden = !F.kindOpen;
     el.querySelectorAll('[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === F.kind)));
   }
-  // Вид отдыха обязателен (2.21): делится статусом с коллегами и закрывает поездку сразу (≤ 2 ч после окончания)
-  function needRest() {
-    if (!F.et || !F.ed) return false;
-    let sharing = false;
-    try { sharing = !!session() && privacyOf().status === true; } catch {}
-    return restRequired(parseLocal(`${F.ed}T${F.et}`), nowLocal(), sharing);
-  }
-  // Сохранить без вида отдыха нельзя: экран доезжает до кнопок, стрелка показывает на них
+  // Вид отдыха обязателен (2.21, решение Никиты): у всех и всегда, как только указано окончание поездки —
+  // без него не посчитаются отдых, переотдых по домам отдыха и его оплата. Пока не выбран — кнопки медленно пульсируют
+  const needRest = () => !!(F.et && F.ed);
+  // Сохранить без вида отдыха нельзя: экран доезжает до кнопок, они вздрагивают и подсвечиваются
   function nudgeRest() {
     const f = $(el, '#tf-rest-field');
     f.classList.remove('need'); void f.offsetWidth; f.classList.add('need');
-    $(el, '#tf-rest-arrow').hidden = false;
     f.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
   // без окончания поездки отдых не выбирается, а кнопка внизу — «В путь» (или «Сохранить явку»)
@@ -541,8 +533,9 @@ export function openTripForm(tripId) {
     $(el, '#tf-rest-req').hidden = !need;
     const why = $(el, '#tf-rest-why');
     why.hidden = !need || !!F.restType;
-    why.textContent = need ? 'Без вида отдыха коллеги не увидят, где вы. Выберите его, чтобы сохранить поездку.' : '';
-    if (!need || F.restType) { $(el, '#tf-rest-field').classList.remove('need'); $(el, '#tf-rest-arrow').hidden = true; }
+    why.textContent = need ? 'Без вида отдыха не посчитаются отдых, переотдых и его оплата. Выберите его, чтобы сохранить поездку.' : '';
+    if (!need || F.restType) $(el, '#tf-rest-field').classList.remove('need');
+    $(el, '#tf-rest').classList.toggle('rest-pulse', !F.restType && need);
     const pending = open && F.sd && F.st && parseLocal(`${F.sd}T${F.st}`) > nowLocal();
     const label = !open ? 'Сохранить' : pending ? 'Сохранить явку' : 'В путь';
     const btn = $(el, '[data-act=save-trip]');
@@ -776,9 +769,10 @@ export function openTripForm(tripId) {
       const d = draft();
       const err = draftError(d);
       if (err) { showError(el, err); return; }
-      if (d.end && !d.restType && needRest()) { nudgeRest(); return; }
       const text = F.note.trim();
       if (text && (!d.locoType || !d.locoNumber)) { showError(el, 'Чтобы сохранить заметку, укажите тип и номер локомотива.'); return; }
+      // сначала ошибки в полях, потом — вид отдыха
+      if (d.end && !d.restType && needRest()) { showError(el, ''); nudgeRest(); return; }
       let noteOp = null;
       if (text) {
         noteOp = { put: linkedNote

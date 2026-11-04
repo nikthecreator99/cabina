@@ -60,6 +60,7 @@ realtime, функции, аналитика и пулер Supabase не ста�
 
 - `https://cabina-app.ru/` открывается, `https://api.cabina-app.ru/` — 404, `https://api.cabina-app.ru/auth/v1/health` — ответ GoTrue.
 - Регистрация без приглашения отклоняется (`cabina: invite required`); `anon` не читает `profiles` и не вызывает `admin_stats`.
+- Ограничение попыток (с 2.21, `GOTRUE_RATE_LIMIT_HEADER`): 31-я попытка ввести неверный код из письма за 5 минут с одного адреса — ответ 429.
 - `ss -tlnp` — снаружи слушают только 22, 80, 443; `docker ps` — порты есть только у `cabina-caddy`.
 
 Проверено 03.11.2026 на копии этого набора в Docker: сайт и заголовки, перенаправление `www`, CORS только для

@@ -1337,6 +1337,11 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 .idea-del { width: 40px; height: 40px; flex: none; color: var(--text-2); }
 .idea-ans { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .idea-ans .btn { width: auto; }
+.idea-reply { margin: 0 0 12px; }
+.idea-reply .hint { display: block; font-weight: 400; margin-top: 2px; }
+.idea-mail { margin-top: 6px; overflow-wrap: anywhere; }
+.idea-mail svg { vertical-align: -2px; margin-right: 3px; }
+.idea-mail .sel { user-select: text; -webkit-user-select: text; }
 .signup-nag { flex-wrap: wrap; background: color-mix(in srgb, var(--ok) 9%, var(--card-solid)); border-color: color-mix(in srgb, var(--ok) 32%, transparent); }
 .signup-nag .grow { flex: 1 1 200px; }
 .signup-nag .nag-btns { width: 100%; flex-wrap: wrap; }
@@ -1350,15 +1355,17 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 .av-rwtxt svg { flex: none; margin-top: 1px; color: var(--ok); }
 .av-rwnote .btn { width: 100%; }
 
-/* 2.21: вид отдыха внизу формы поездки; обязателен — стрелка на кнопки и подсветка */
+/* 2.21: вид отдыха внизу формы поездки; пока не выбран (поездку закрывают сразу) — кнопки медленно пульсируют */
 .rest-field .req { color: var(--accent); font-weight: 700; }
-.rest-arrow { display: flex; justify-content: center; color: var(--accent); margin: -4px 0 2px; animation: rest-bob 1s ease-in-out infinite; }
-.rest-arrow[hidden] { display: none; }
-@keyframes rest-bob { 0%, 100% { transform: translateY(-3px); } 50% { transform: translateY(4px); } }
-.rest-field.need #tf-rest { box-shadow: 0 0 0 2px var(--accent); animation: rest-shake .45s ease-in-out 1; }
+#tf-rest.rest-pulse { animation: rest-pulse 2.2s ease-in-out infinite; }
+@keyframes rest-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+}
+.rest-field.need #tf-rest { box-shadow: 0 0 0 2px var(--accent); animation: rest-shake .45s ease-in-out 1, rest-pulse 2.2s ease-in-out .45s infinite; }
 .rest-field.need #tf-rest-why { color: var(--accent); font-weight: 700; }
 @keyframes rest-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
-@media (prefers-reduced-motion: reduce) { .rest-arrow, .rest-field.need #tf-rest { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #tf-rest.rest-pulse, .rest-field.need #tf-rest { animation: none; box-shadow: 0 0 0 2px var(--accent); } }
 
 /* 2.21: выходной в профиле — кнопка, нажатием меняется окончание */
 button.pr-status { font: inherit; color: inherit; cursor: pointer; }
