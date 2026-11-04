@@ -28,7 +28,7 @@ test('«Пойти на выходной»: таймер на главном, д
   assert.ok(d.y > q.y + q.height - 1, '«Пойти на выходной» под «На очередь»');
   await btn.click();
   assert.equal(await btn.getAttribute('aria-pressed'), 'true');
-  assert.match(await text(f, '#tf-calc'), /Выходной до[\s\S]*22 окт, 18:00/);
+  assert.match(await text(f, '#tf-rest-calc'), /Выходной до[\s\S]*22 окт, 18:00/);
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.match(await text(page, '.rest-banner'), /На выходном · до 22 окт, 18:00/);

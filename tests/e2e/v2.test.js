@@ -3,7 +3,7 @@
 // Все данные — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, text, waitNoLayers, openSettings } from './helpers.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -106,7 +106,7 @@ test('«На очередь»: на главном — когда могут в�
   await f.locator('[data-rest=home]').click();
   await f.locator('[data-choice=queue]').click();
   assert.equal(await f.locator('[data-choice=queue]').getAttribute('aria-pressed'), 'true');
-  assert.match(await f.locator('#tf-calc').innerText(), /Вызов не раньше\s+сегодня, 22:00/);
+  assert.match(await f.locator('#tf-rest-calc').innerText(), /Вызов не раньше\s+сегодня, 22:00/);
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   const b = await text(page, '.rest-banner');
@@ -334,7 +334,7 @@ test('резервная копия из версии 1.x восстанавли
     },
   };
   await tab(page, 'profile');
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-data');
   await page.locator('#bk-import').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...v1, format: 3 })) });
   await page.waitForFunction(() => document.querySelector('.toast-wrap')?.innerText.includes('более новой версии'));
   await page.locator('#bk-import').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(v1)) });

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, text, waitNoLayers, openSettings } from './helpers.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -18,11 +18,8 @@ async function workPage(page, name) {
   await page.locator('.home-head [data-page=work]').click();
   if (name) await page.locator(`.screen [data-act=go][data-page=${name}]`).click();
 }
-async function settingsPage(page) {
-  await tab(page, 'profile');
-  await page.locator('.screen [data-page=settings]').click();
-  await page.waitForSelector('#theme-seg');
-}
+// 2.21: Настройки по разделам
+const settingsPage = (page, section = 'set-data') => openSettings(page, section);
 
 test('первый запуск: приветствие, затем пустой октябрь с нормой 176 ч', async () => {
   const { context, page, errors } = await openApp(env, { onboard: false });
@@ -58,10 +55,10 @@ test('добавление поездки через форму: часы, но�
   assert.match(calc, /Рабочее время\s+11 ч 30 мин/);
   assert.match(calc, /Ночные \(22:00–06:00\)\s+8 ч 00 мин/);
   // 2.8: отдых по умолчанию не выбран — выбирается после окончания
-  assert.match(calc, /Выберите вид отдыха/);
+  assert.match(await f.locator('#tf-rest-calc').innerText(), /Выберите вид отдыха/); // 2.21: отдых — под кнопками внизу
   assert.equal(await f.locator('[data-rest][aria-pressed=true]').count(), 0);
   await f.locator('[data-rest=turnaround]').click();
-  assert.match(await f.locator('#tf-calc').innerText(), /Отдых в пункте оборота\s+Длительность\s+5 ч 45 мин/i);
+  assert.match(await f.locator('#tf-rest-calc').innerText(), /Отдых в пункте оборота\s+Длительность\s+5 ч 45 мин/i);
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.match(await text(page, '.toast-wrap'), /Поездка добавлена/);
@@ -268,11 +265,12 @@ test('настройки: тема и минимальный отдых сохр
   const { context, page } = await openApp(env);
   // по умолчанию тёмная тема, вариантов два
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
-  await settingsPage(page);
+  await settingsPage(page, 'set-look');
   assert.equal(await page.locator('#theme-seg button').count(), 2);
   await page.locator('[data-act=theme][data-v=light]').click();
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   // 2.5: календарь — одной строкой, пояснения в отдельном окне
+  await settingsPage(page, 'set-time');
   assert.match(await text(page, '[data-act=cal-info]'), /РФ, 40-часовая неделя[\s\S]*2026 год — 1972 ч/);
   await page.locator('[data-act=cal-info]').click();
   assert.match(await text(page, '#layers'), /2026 год: 1972 ч[\s\S]*Пятидневная неделя, 40 часов/);
@@ -367,7 +365,8 @@ test('экран телефона: ничего не вылезает за ши�
   };
   for (const name of ['home', 'extra', 'profile']) { await tab(page, name); await check(name); }
   for (const name of ['routes', 'tariffs', 'houses']) { await workPage(page, name); await check(name); }
-  await settingsPage(page); await check('settings');
+  await settingsPage(page, ''); await check('settings');
+  for (const s of ['set-look', 'set-privacy', 'set-data', 'set-time', 'set-install', 'set-about']) { await settingsPage(page, s); await page.waitForTimeout(450); await check(s); } // после анимации появления экрана
   await tab(page, 'home'); await page.locator('.hero').click(); await page.waitForSelector('#st-kind'); await check('stats');
   assert.deepEqual(errors, []);
   await context.close();

@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, text, waitNoLayers, openSettings } from './helpers.js';
 import { ready } from './mock-colleagues.js';
 
 let env;
@@ -101,7 +101,7 @@ test('Настройки: переключатель «Подсказки», «�
   await setDone(page, ALL_IDS); // чтобы подсказки не закрывали кнопки
   await page.reload(); await page.waitForSelector('.hero');
   await tab(page, 'profile');
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-about');
   await page.waitForSelector('#tours-sw');
   // подсказки включены по умолчанию; «Показать заново» — рядом
   assert.equal(await page.locator('#tours-sw').getAttribute('aria-checked'), 'true');
@@ -113,11 +113,13 @@ test('Настройки: переключатель «Подсказки», «�
   await page.locator('#tours-sw').click();
   await page.waitForSelector('#tours-sw[aria-checked=true]');
   assert.equal(await page.evaluate(() => localStorage.getItem('cabina-tours-off')), null);
+  await openSettings(page); // 2.21: аккаунт — на главном экране Настроек
   // аккаунт: без входа — одна крупная строка
   const acc = page.locator('.screen [data-page=account]');
   assert.equal((await acc.innerText()).trim(), 'Войти в аккаунт');
   assert.equal(await acc.locator('.t1').evaluate((e) => getComputedStyle(e).fontSize), '18px');
   // данные: короткая плашка вместо двух длинных текстов, подробности — по нажатию
+  await openSettings(page, 'set-data'); // 2.21: данные — в своём разделе
   const note = page.locator('#storage-note');
   assert.match(await note.innerText(), /Записи — только в этом телефоне[\s\S]*Без копии их не вернуть/);
   assert.doesNotMatch(await text(page, '.screen'), /Локальное хранение|Файл \.json/);
@@ -133,6 +135,7 @@ test('Настройки: переключатель «Подсказки», «�
   assert.ok(await fits(page), '320 px без прокрутки вбок');
   const nb = await note.boundingBox();
   assert.ok(nb.height < 100, `плашка компактная: ${nb.height}`);
+  await openSettings(page, 'set-look'); // 2.21: тема — в «Оформлении»
   await page.locator('[data-act=theme][data-v=light]').click();
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   assert.ok(await fits(page));

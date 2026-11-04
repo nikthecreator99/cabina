@@ -2,7 +2,7 @@
 // Жест — настоящие касания через Chromium (CDP). Сервер «Коллег» подменён (mock-colleagues.js), все люди и станции — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, text, waitNoLayers, openSettings } from './helpers.js';
 import { ME, ANNA, ready, openTeam, CUR } from './mock-colleagues.js';
 
 let env;
@@ -93,7 +93,7 @@ test('без аккаунта свайп работает и ничего не �
 test('Настройки → «Анимация обновления»: четыре варианта, выбор сохраняется и показывается', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-look');
   assert.match(await text(page, '#pull-row'), /Анимация обновления[\s\S]*Светофор/);
   await page.locator('#pull-row').click();
   const s = sheet(page);
@@ -119,7 +119,7 @@ test('Настройки → «Анимация обновления»: четы
   // чужое значение из копии — светофор, как по умолчанию
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveSettings({ pullAnim: '<b>x</b>' }); });
   await page.waitForFunction(() => !document.querySelector('.ptr.on'), null, { timeout: 5000 });
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-look');
   assert.match(await text(page, '#pull-row'), /Светофор/);
   assert.deepEqual(realErrors(errors), []);
   await context.close();

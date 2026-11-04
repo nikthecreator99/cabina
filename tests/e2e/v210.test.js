@@ -2,7 +2,7 @@
 // локомотивы по сериям, время явки, итоги картинкой, «Минимальный междусменный отдых». Данные — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, text, waitNoLayers, openSettings } from './helpers.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -106,7 +106,7 @@ test('скрытие сумм: глаз, переворот экраном вн�
   await page.waitForFunction(() => !document.documentElement.classList.contains('money-off'));
   // выключили переворот — телефон экраном вниз ничего не меняет
   await tab(page, 'profile');
-  await page.locator('[data-page=settings]').click();
+  await openSettings(page, 'set-privacy');
   assert.equal(await page.locator('#flip-sw').getAttribute('aria-checked'), 'true', 'на Android включено сразу');
   await page.locator('#flip-sw').click();
   await page.waitForFunction(() => document.querySelector('#flip-sw')?.getAttribute('aria-checked') === 'false');
@@ -121,7 +121,7 @@ test('код для входа: предупреждение, два раза о
   const { context, page, errors } = await openApp(env);
   await seed(page, { trips: TRIPS.slice(0, 2) });
   await tab(page, 'profile');
-  await page.locator('[data-page=settings]').click();
+  await openSettings(page, 'set-privacy');
   assert.match(await text(page, '#lock-row'), /Код для входа\s+Выключен/);
   await page.locator('#lock-row').click();
   assert.match(await sheet(page).innerText(), /Если забудете код, восстановить его нельзя[\s\S]*резервной копии[\s\S]*не от взлома телефона/);
@@ -148,7 +148,7 @@ test('код для входа: предупреждение, два раза о
   await page.waitForSelector('.screen');
   // выключить можно только с текущим кодом
   await tab(page, 'profile');
-  await page.locator('[data-page=settings]').click();
+  await openSettings(page, 'set-privacy');
   await page.locator('#lock-row').click();
   await sheet(page).locator('[data-act=lk-off]').click();
   await pin(page, '9999');

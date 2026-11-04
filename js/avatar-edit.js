@@ -32,9 +32,10 @@ export async function refreshPremium() {
 
 // ---- Вещи за приглашения (2.20): сколько приглашённых засчитано — число из «Пригласить коллег», в телефоне и только растёт
 export const invitedCount = () => countOf('invited').n;
-// Что можно сохранить и показать коллегам: Премиум (пока — только администратор) и открытые вещи за приглашения
+// Что можно сохранить и показать коллегам: Премиум (пока — только администратор) и открытые вещи за приглашения (их — только за приглашения)
 export const avatarRights = () => ({ premium: premiumOk(), invited: invitedCount() });
-const rewardLocked = (r) => !!r && !E.prem && !(invitedCount() >= r.n);
+// Вещи за приглашения Премиум не открывает (2.21): только засчитанные приглашения
+const rewardLocked = (r) => !!r && !(invitedCount() >= r.n);
 const rwName = (n) => `за ${n} ${plural(n, 'приглашение', 'приглашения', 'приглашений')}`;
 
 const E = { a: null, base: '', hist: [], group: 'face', drag: false, prem: false, chars: false };
@@ -119,8 +120,7 @@ function range(k, label) {
 
 // Что сейчас только примеряется: премиум-детали и неоткрытые вещи за приглашения
 function tryParts() {
-  if (E.prem) return [];
-  return [...A.premiumParts(E.a), ...A.lockedRewards(E.a, invitedCount()).map((r) => `${r.name} (за ${r.n})`)];
+  return [...(E.prem ? [] : A.premiumParts(E.a)), ...A.lockedRewards(E.a, invitedCount()).map((r) => `${r.name} (за ${r.n})`)];
 }
 function stageHtml() {
   const parts = tryParts();
@@ -134,7 +134,7 @@ const groupName = (k, t) => (k !== 'hair' ? t : E.a.sex === 'robot' ? 'Маку�
 const groupsHtml = () => GROUPS.map(([k, t, ic]) => `<button role="tab" data-act="av-group" data-g="${k}" aria-selected="${E.group === k}">${ic}<span>${groupName(k, t)}</span></button>`).join('');
 
 // Разделы панели: id (по нему раздел обновляется отдельно) и разметка — функцией, чтобы собирать только нужное
-function sections() {
+function baseSections() {
   const a = E.a;
   const f = a.sex === 'f', robot = a.sex === 'robot', ch = A.CHARS.find((c) => c.id === a.sex);
   const S_ = (id, title, body, note) => ({ id, html: () => sec(id, title, body(), note) });
@@ -249,6 +249,22 @@ function sections() {
     return `<button class="av-tile${on ? ' on' : ''}" data-act="av-set" data-k="bg" data-v="${b.id}" aria-pressed="${on}" aria-label="${esc(b.name)}${b.premium ? ', Премиум' : ''}${rwLabel('bg', b.id)}">${A.bgSvg(b.id)}${b.premium ? prBadge : rwBadge('bg', b.id)}<span class="n">${esc(b.name)}</span></button>`;
   }).join(''), 'bg3'))];
 }
+// Под надетой неоткрытой вещью за приглашения — пометка «Только за приглашения» и кнопка «Отправить приглашение»
+function rewardNote(r) {
+  const n = invitedCount();
+  return `<section class="av-sec av-rwnote" data-sec="rw-${r.k}" data-h="${hash(r.id + n)}">
+    <div class="av-rwtxt">${small(I.gift, 20)}<div><b>Только за приглашения.</b> ${esc(r.name)} — ${rwName(r.n)}, сейчас засчитано ${n}. Примерить можно, надеть — когда засчитают ${r.n}.</div></div>
+    <button class="btn btn-primary" data-act="av-invite">${small(I.share, 18)} Отправить приглашение</button></section>`;
+}
+function sections() {
+  const list = baseSections();
+  const locks = A.lockedRewards(E.a, invitedCount());
+  for (const r of locks) {
+    const i = list.findIndex((x) => x.id === r.k);
+    if (i >= 0 && !list.some((x) => x.id === `rw-${r.k}`)) list.splice(i + 1, 0, { id: `rw-${r.k}`, html: () => rewardNote(r) });
+  }
+  return list;
+}
 const panelHtml = () => sections().map((x) => x.html()).join('');
 
 export function renderAvatarEdit() {
@@ -360,7 +376,7 @@ async function save(ctx) {
   const prem = premiumOk();
   const invited = invitedCount();
   const parts = A.premiumParts(E.a);
-  const locks = prem ? [] : A.lockedRewards(E.a, invited);
+  const locks = A.lockedRewards(E.a, invited);
   if (parts.length && !prem) {
     const ch = A.CHARS.find((c) => c.id === E.a.sex), rest = parts.filter((p) => !ch || p !== ch.part);
     // вещи за приглашения — не Премиум: о них отдельной фразой
@@ -377,7 +393,7 @@ async function save(ctx) {
     // вещь за приглашения ещё не открыта: сколько нужно и сколько уже есть
     const ok = await confirmDialog({
       title: 'Пока только примерка',
-      text: `${locks.map((r) => `${r.name} — ${rwName(r.n)}`).join(', ')}. Сейчас засчитано: ${invited}. Пригласить коллег — Профиль → «Пригласить коллег». Снять и сохранить остальное?`,
+      text: `${locks.map((r) => `${r.name} — ${rwName(r.n)}`).join(', ')}. Сейчас засчитано: ${invited}. Эти вещи — только за приглашения: «Отправить приглашение» под вещью. Снять и сохранить остальное?`,
       ok: 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
     });
     if (!ok) return;
@@ -391,6 +407,12 @@ async function save(ctx) {
     await saveProfile({ photo: '' });
     toast('Персонаж сохранён, фото удалено');
   } else toast('Персонаж сохранён');
+}
+
+// Вещь за приглашения: сразу создаём приглашение (QR и ссылка); без аккаунта — экран «Пригласить коллег» с объяснением
+async function inviteFromAvatar(ctx) {
+  const { inviteNow } = await import('./invites.js');
+  if (!(await inviteNow())) ctx.go('invites');
 }
 
 export async function avatarClick(act, b, ctx) {
@@ -418,5 +440,6 @@ export async function avatarClick(act, b, ctx) {
   } else if (act === 'av-rand') { remember(); E.a = A.randomAvatar(Math.random, { sex: E.a.sex }); refresh(); }
   else if (act === 'av-undo' && E.hist.length) { E.a = norm(JSON.parse(E.hist.pop())); refresh(); }
   else if (act === 'av-save') await save(ctx);
+  else if (act === 'av-invite') await inviteFromAvatar(ctx);
   return true;
 }

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startEnv, openApp, seed, NOW, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, NOW, waitNoLayers, openSettings } from './helpers.js';
 import { CONSENT_VERSION } from '../../js/legal.js';
 
 const VERSION = (await readFile(new URL('../../js/app.js', import.meta.url), 'utf8')).match(/VERSION = '([\d.]+)'/)[1];
@@ -117,11 +117,13 @@ test('без аккаунта приложение ничего не отпра�
   await page.locator('[data-act=back]').click();
   await page.locator('.page-head h1', { hasText: 'Настройки' }).waitFor();
   // с 2.19.3 в Настройках — короткая плашка, подробности — в её окне
+  await openSettings(page, 'set-data'); // 2.21: данные — в своём разделе
   assert.match(await page.locator('#storage-note').innerText(), /Записи — только в этом телефоне/);
   await page.locator('#storage-note').click();
   assert.match(await sheet(page).innerText(), /В этом телефоне[\s\S]*По сети не передаются[\s\S]*На сервере в России — только с аккаунтом/);
   await sheet(page).getByRole('button', { name: 'Понятно' }).click();
   await waitNoLayers(page);
+  await openSettings(page, 'set-about');
   await page.locator('[data-act=policy]').click();
   assert.match(await sheet(page).innerText(), /Григорьев Никита Сергеевич/);
   await sheet(page).getByRole('button', { name: 'Понятно' }).click();
@@ -233,6 +235,7 @@ test('вход, отметка «заходил сегодня» раз в де�
   await waitNoLayers(page);
   // резервная копия приложения не содержит данных входа
   await page.locator('[data-act=back]').click();
+  await openSettings(page, 'set-data');
   await page.locator('[data-act=export]').click();
   const [bk] = await Promise.all([page.waitForEvent('download'), sheet(page).getByRole('button', { name: 'Сохранить копию' }).click()]);
   await bk.saveAs(join(dir, 'bk.json'));
@@ -240,6 +243,7 @@ test('вход, отметка «заходил сегодня» раз в де�
   assert.ok(!backup.includes('refresh-secret-1') && !backup.includes(ACCESS) && !backup.includes('ivan@example.com'), 'данных входа в копии нет');
   // выход
   await waitNoLayers(page);
+  await openSettings(page); // 2.21: из раздела «Данные» — назад, в Настройки
   await page.locator('.screen [data-page=account]').click();
   await page.locator('[data-act=acc-logout]').click();
   await sheet(page).getByRole('button', { name: 'Выйти' }).click();

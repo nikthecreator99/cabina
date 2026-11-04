@@ -180,6 +180,13 @@ export const notesFor = (type, num) => {
 };
 
 // ---- Сохранение ----
+// «Ещё»: порядок строк (2.21, settings.extraOrder). Сохранённое — сначала, новые пункты — в конец; неизвестное отбрасываем.
+export const EXTRA_KEYS = ['notes', 'docs', 'phones', 'fix', 'help', 'ideas'];
+export function extraOrder(saved = S.settings.extraOrder) {
+  const mine = Array.isArray(saved) ? saved.filter((k, i) => EXTRA_KEYS.includes(k) && saved.indexOf(k) === i) : [];
+  return [...mine, ...EXTRA_KEYS.filter((k) => !mine.includes(k))];
+}
+
 export async function saveSettings(patch) {
   S.settings = { ...S.settings, ...patch };
   await db.put('meta', S.settings);

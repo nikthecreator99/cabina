@@ -337,6 +337,66 @@ export function attachLongPress(root, selector, onLong, ms = 520) {
   root.addEventListener('contextmenu', (e) => { if (e.target.closest(selector)) e.preventDefault(); });
 }
 
+// ---- Порядок строк удержанием пальца (2.21, «Ещё»): удержал — строка приподнялась, двигаешь вверх-вниз, отпустил — порядок сохранён.
+// Строки — прямые дети списка listSel с data-key. Пока строку тащат, экран не прокручивается.
+// onDone(keys) — новый порядок (только если он поменялся).
+export function attachReorder(root, listSel, rowSel, onDone, ms = 450) {
+  let p = null; let d = null; let swallow = 0;
+  const cancel = () => { if (p) clearTimeout(p.timer); p = null; };
+  const keys = (list) => [...list.children].filter((r) => r.matches(rowSel)).map((r) => r.dataset.key);
+  function begin(row, y) {
+    const list = row.parentElement;
+    const top = row.getBoundingClientRect().top;
+    d = { row, list, grab: y - top, before: keys(list).join() };
+    list.classList.add('reordering');
+    row.classList.add('dragging');
+    swallow = Date.now() + 1500;
+    try { navigator.vibrate?.(15); } catch {}
+  }
+  function move(y) {
+    const { row, list } = d;
+    row.style.transform = '';
+    let before = null;
+    for (const r of list.children) {
+      if (r === row || !r.matches(rowSel)) continue;
+      const b = r.getBoundingClientRect();
+      if (y < b.top + b.height / 2) { before = r; break; }
+    }
+    if (before ? row.nextElementSibling !== before : list.lastElementChild !== row) list.insertBefore(row, before);
+    const top = row.getBoundingClientRect().top;
+    row.style.transform = `translateY(${y - d.grab - top}px)`;
+  }
+  function end() {
+    if (!d) return;
+    const { row, list, before } = d;
+    d = null;
+    row.style.transform = '';
+    row.classList.remove('dragging');
+    list.classList.remove('reordering');
+    const now = keys(list);
+    if (now.join() !== before) onDone(now);
+  }
+  root.addEventListener('pointerdown', (e) => {
+    cancel();
+    swallow = 0;
+    const row = e.target.closest(rowSel);
+    if (!row || !root.contains(row) || !row.parentElement?.matches(listSel) || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const y = e.clientY;
+    p = { x: e.clientX, y, id: e.pointerId, timer: setTimeout(() => { p = null; begin(row, y); }, ms) };
+  });
+  root.addEventListener('pointermove', (e) => {
+    if (p && e.pointerId === p.id && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) cancel();
+    if (d) move(e.clientY);
+  });
+  // палец ведёт строку — экран не прокручиваем
+  root.addEventListener('touchmove', (e) => { if (d) { e.preventDefault(); if (e.touches[0]) move(e.touches[0].clientY); } }, { passive: false });
+  ['pointerup', 'pointercancel'].forEach((t) => root.addEventListener(t, () => { cancel(); end(); }));
+  root.addEventListener('touchend', () => { cancel(); end(); });
+  window.addEventListener('scroll', () => { if (!d) cancel(); }, { passive: true });
+  root.addEventListener('click', (e) => { if (Date.now() < swallow && e.target.closest(rowSel)) { swallow = 0; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+  root.addEventListener('contextmenu', (e) => { if (e.target.closest(rowSel)?.parentElement?.matches(listSel)) e.preventDefault(); });
+}
+
 // ---- Свайп влево по строке списка (.swipe > .swipe-row) открывает кнопку удаления ----
 // Возвращает { closeAll, busy }. Клик сразу после свайпа и тап по открытой строке «съедаются».
 export function attachSwipe(root, W = 92) {
@@ -394,7 +454,7 @@ export function attachSwipe(root, W = 92) {
 
 // Заголовок экрана: кнопка «Назад» (data-act="back"), название, справа — кнопка по желанию
 export function pageHead(title, { back = false, right = '' } = {}) {
-  return `<div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="Назад">${I.left}</button>` : ''}<h1>${esc(title)}</h1>${right}</div>`;
+  return `<div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="Назад">${I.left}</button>` : ''}<h1${String(title).split(/\s+/).some((w) => w.length > 13) ? ' class="long"' : ''}>${esc(title)}</h1>${right}</div>`;
 }
 
 // Кнопки −/+ со значением в часах и минутах

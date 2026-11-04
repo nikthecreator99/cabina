@@ -2,7 +2,7 @@
 // Все данные — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, seed, text } from './helpers.js';
+import { startEnv, openApp, seed, text, openSettings } from './helpers.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -18,7 +18,7 @@ test('подменённая резервная копия не восстана
     trips: [{ id: EVIL, start: '2026-10-02T08:00', end: '2026-10-02T16:00', passenger: [], restType: 'turnaround' }],
     absences: [], routes: [], notes: [], meta: [] } };
   await tab(page, 'profile');
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-data');
   await page.locator('#bk-import').setInputFiles({ name: 'copy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(evil)) });
   await page.waitForFunction(() => document.querySelector('.toast-wrap')?.innerText.includes('повреждён или изменён вручную'));
   assert.equal(await page.locator('#layers .layer').count(), 0, 'вопроса «Восстановить?» нет');

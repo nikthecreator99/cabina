@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startEnv, openApp, seed, text, closeTop, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, text, closeTop, waitNoLayers, openSettings } from './helpers.js';
 import { ME, ANNA, OLEG, ready, openTeam, CUR } from './mock-colleagues.js';
 
 let env;
@@ -116,12 +116,12 @@ test('анимация обновления по умолчанию — свет
   const { context, page, errors } = await openApp(env);
   assert.equal(await page.evaluate(async () => (await import('./js/pull.js')).pullStyle(undefined)), 'light');
   await tab(page, 'profile');
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-look');
   assert.match(await text(page, '#pull-row'), /Светофор/);
   // кто сам выбрал другую — у того она и остаётся
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveSettings({ pullAnim: 'train' }); });
   await page.locator('[data-act=back]').click();
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-look');
   assert.match(await text(page, '#pull-row'), /Поезд/);
   assert.deepEqual(errors, []);
   await context.close();

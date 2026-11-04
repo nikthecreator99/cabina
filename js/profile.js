@@ -49,7 +49,7 @@ export function statusFacts(now = nowLocal()) {
   const abs = S.absences.find((a) => a.start <= today && a.end >= today);
   if (abs) return { kind: 'abs', end: abs.end };
   const off = dayOffIntervals().find((x) => x.s <= now && now < x.e);
-  if (off) return { kind: 'dayoff', until: off.e };
+  if (off) return { kind: 'dayoff', until: off.e, tripId: off.trip.id };
   if (!S.trips.length) return null;
   // после поездки с отдыхом в пункте оборота: «На отдыхе», а когда отдых вышел — «Жду явку» (до 48 ч)
   let last = null;
@@ -72,7 +72,7 @@ export function profileStatus(now = nowLocal()) {
   // «В пути: Сумский Посад → Малошуйка · с 05:40» — откуда и куда
   const path = (t) => { if (hasLegs(t)) return routeOf(t); const e = routeEnds(t); return e ? `${e.from} → ${e.to}` : routeOf(t); };
   const legPath = (l) => { const e = legEnds(l); return e ? `${e.from} → ${e.to}` : legRoute(l); };
-  const st = (label, sub = '') => ({ kind: f.kind, label, sub });
+  const st = (label, sub = '') => ({ kind: f.kind, label, sub, tripId: f.tripId || null });
   switch (f.kind) {
     case 'soon': return st('Скоро явка', [whenShort(f.start, now), path(f.trip)].filter(Boolean).join(' · '));
     case 'trip': return st('В пути', [f.leg ? legPath(f.leg) : path(f.trip), `с\u00a0${when(f.start, now)}`].filter(Boolean).join(' · '));
@@ -82,6 +82,13 @@ export function profileStatus(now = nowLocal()) {
     case 'wait': return st('Жду явку', f.house);
     default: return st('Между поездками', f.rest ? `${f.rest.label.toLowerCase()} · до ${when(f.rest.until, now)}` : '');
   }
+}
+
+// Выходной (2.21): нажатием можно поправить, когда он заканчивается
+function statusHtml(st) {
+  const inner = `<span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}`;
+  if (st.kind === 'dayoff' && st.tripId) return `<button class="pr-status st-dayoff" id="pr-status" data-act="dayoff-edit" data-id="${esc(st.tripId)}" aria-label="${esc(`${st.label} ${st.sub}`)}. Изменить окончание выходного">${inner}${small(I.edit, 14)}</button>`;
+  return `<div class="pr-status st-${st.kind}" id="pr-status">${inner}</div>`;
 }
 
 // colleagues — раздел «Коллеги» (colleagues.js собирает его в app.js: так модули не зависят друг от друга по кругу)
@@ -97,7 +104,7 @@ export function renderProfile(colleagues = '') {
       <div class="profile-sub">${esc(subLine(p))}</div>
       ${p.phone ? `<div class="profile-sub">${small(I.call, 14)} <span class="nw">${esc(p.phone)}</span></div>` : ''}
       ${(() => { const t = totalTenure(careerOf(p)); return t ? `<div class="profile-sub">${small(I.briefcase, 14)} Стаж ${tenureText(t)}</div>` : ''; })()}
-      ${st ? `<div class="pr-status st-${st.kind}" id="pr-status"><span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}</div>` : ''}
+      ${st ? statusHtml(st) : ''}
     </section>
     ${awardsStripHtml()}
     ${colleagues}

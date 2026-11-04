@@ -896,8 +896,7 @@ function skelFace(a, g, bone, u) {
     r += `<path d="M${f1(x - w)},${f1(ey)} C${f1(x - w)},${f1(ey - h * 1.3)} ${f1(x + w)},${f1(ey - h * 1.3)} ${f1(x + w)},${f1(ey)} C${f1(x + w)},${f1(ey + h)} ${f1(x - w)},${f1(ey + h)} ${f1(x - w)},${f1(ey)}Z" fill="${hole}"/>`;
     const py = a.sEyes === 'tired' ? ey + h * .35 : ey;
     r += `<circle cx="${f1(x)}" cy="${f1(py)}" r="${f1(2.3 * s * odd)}" fill="${glow}"/>`;
-    if (a.sEyes === 'tired') r += `<path d="M${f1(x - w - 1)},${f1(ey - 1)} C${f1(x - w)},${f1(ey - h * 1.4)} ${f1(x + w)},${f1(ey - h * 1.4)} ${f1(x + w + 1)},${f1(ey - 1)} Q${f1(x)},${f1(ey + 2)} ${f1(x - w - 1)},${f1(ey - 1)}Z" fill="${bone}"/><path d="M${f1(x - w)},${f1(ey - 1)} Q${f1(x)},${f1(ey + 2)} ${f1(x + w)},${f1(ey - 1)}" stroke="${hole}" stroke-width="1.6" fill="none"/>` +
-      `<path d="M${f1(x - w + 1)},${f1(ey + h + 3)} Q${f1(x)},${f1(ey + h + 7)} ${f1(x + w - 1)},${f1(ey + h + 3)}" stroke="#8b7aa8" stroke-width="2.2" fill="none" opacity=".75" stroke-linecap="round"/>`;
+    if (a.sEyes === 'tired') r += `<path d="M${f1(x - w - 1)},${f1(ey - 1)} C${f1(x - w)},${f1(ey - h * 1.4)} ${f1(x + w)},${f1(ey - h * 1.4)} ${f1(x + w + 1)},${f1(ey - 1)} Q${f1(x)},${f1(ey + 2)} ${f1(x - w - 1)},${f1(ey - 1)}Z" fill="${bone}"/><path d="M${f1(x - w)},${f1(ey - 1)} Q${f1(x)},${f1(ey + 2)} ${f1(x + w)},${f1(ey - 1)}" stroke="${hole}" stroke-width="1.6" fill="none"/>`; // подглазников нет (2.21, просьба Никиты)
   }
   if (a.sEyes === 'sleepy') r += `<path d="M${f1(cx + rx + 2)},${f1(cy - ry * .5)} h7 l-7,7 h7 M${f1(cx + rx + 12)},${f1(cy - ry * .78)} h5 l-5,5 h5" stroke="${dk(bone, .5)}" stroke-width="1.8" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
   // нос — перевёрнутое сердечко
@@ -935,7 +934,11 @@ export const isPremiumBg = (id) => PREMIUM.bg.includes(id);
 
 // Только известные значения; всё неизвестное — по умолчанию. premium: false — премиум-детали снимаются.
 // invited — сколько приглашённых засчитано: неоткрытые вещи за приглашения (REWARDS) снимаются.
-export function normalizeAvatar(src, { premium = false, invited = 0 } = {}) {
+// С 2.21 вещи за приглашения не открывает и Премиум (просьба Никиты): их проверяем всегда, когда передан invited
+// или нет Премиума. Без invited и с premium: true — «нарисовать как есть» (примерка, плитки, карточка коллеги).
+export function normalizeAvatar(src, opts = {}) {
+  const { premium = false, invited = 0 } = opts;
+  const checkRewards = !premium || 'invited' in opts;
   const a = src && typeof src === 'object' && !Array.isArray(src) ? src : {};
   const sex = a.sex === 'f' || isChar(a.sex) ? a.sex : 'm';
   const r = (k, def) => num(a[k], RANGES[k][0], RANGES[k][1], def);
@@ -967,9 +970,9 @@ export function normalizeAvatar(src, { premium = false, invited = 0 } = {}) {
     if (isPremiumHat(o.hat)) o.hat = null;
     if (isPremiumBg(o.bg)) o.bg = 'mist';
     o.mazut = false;
-    // вещи за приглашения: пока засчитано меньше нужного — снимаются (примерить можно, сохранить нельзя)
-    for (const r of lockedRewards(o, invited)) { o[r.k] = r.off; if (r.k === 'outfit') o.outfitC = null; }
   }
+  // вещи за приглашения: пока засчитано меньше нужного — снимаются (примерить можно, сохранить нельзя)
+  if (checkRewards) for (const r of lockedRewards(o, invited)) { o[r.k] = r.off; if (r.k === 'outfit') o.outfitC = null; }
   return o;
 }
 

@@ -172,7 +172,7 @@ export function openLockSettings(onChange) {
         <button class="row" data-act="lk-change"><span class="ico" style="--c:var(--accent)">${I.lock}</span><div class="grow"><div class="t1">Сменить код</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="lk-off"><span class="ico" style="--c:var(--holiday)">${I.x}</span><div class="grow"><div class="t1">Выключить код</div></div>${small(I.right, 18)}</button>
       </div><div class="lk-pad"></div>`
-      : `<div class="notice">${I.alert}<div><b>Если забудете код, восстановить его нельзя.</b> Останется только стереть записи в этом телефоне и вернуть их из резервной копии. Поэтому сначала сохраните резервную копию: Настройки → «Создать резервную копию».</div></div>
+      : `<div class="notice">${I.alert}<div><b>Если забудете код, восстановить его нельзя.</b> Останется только стереть записи в этом телефоне и вернуть их из резервной копии. Поэтому сначала сохраните резервную копию: Настройки → «Данные и резервная копия» → «Создать резервную копию».</div></div>
       <div class="hint">Код защищает от посторонних глаз, но не от взлома телефона. Он хранится только в этом телефоне и в резервную копию не попадает.</div>
       <div class="lk-pad"></div>`,
     foot: on ? '' : '<button class="btn btn-primary" data-act="lk-set">Задать код</button>',

@@ -72,7 +72,8 @@ test('в пути: «Добавить локомотив» — время «се
   const f2 = top(page);
   await f2.locator('#tf-et').fill('11:50');
   await f2.locator('[data-rest=turnaround]').click();
-  assert.match(await text(f2, '#tf-calc'), /Рабочее время\s+6 ч 50 мин[\s\S]*Дом отдыха\s+Сосновка/);
+  assert.match(await text(f2, '#tf-calc'), /Рабочее время\s+6 ч 50 мин/);
+  assert.match(await text(f2, '#tf-rest-calc'), /Дом отдыха\s+Сосновка/); // 2.21: отдых — под кнопками внизу
   await f2.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   t = await tripOf(page, 'v');

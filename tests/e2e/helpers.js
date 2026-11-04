@@ -47,3 +47,17 @@ export async function seed(page, { trips = [], absences = [], routes = [], setti
 export const text = (page, sel) => page.locator(sel).first().innerText();
 export const closeTop = (page) => page.locator('.layer').last().locator('button[data-close]').first().click();
 export const waitNoLayers = (page) => page.waitForFunction(() => !document.querySelector('#layers .layer:not(.closing)'));
+
+// Настройки (2.21): разделы — отдельные экраны. Открыть Настройки (из любого места) и, если нужно, раздел set-…
+export async function openSettings(page, section = '') {
+  if (section && await page.locator(`.screen[data-page=${section}]`).count()) return;
+  if (await page.locator('.screen[data-page^=set-]').count()) await page.locator('.screen .page-head [data-act=back]').click();
+  if (!(await page.locator('.screen[data-page=settings]').count())) {
+    await page.locator('.tab[data-tab=profile]').click();
+    await page.locator('.screen [data-page=settings]').click();
+  }
+  await page.waitForSelector('.screen[data-page=settings] #set-list');
+  if (!section) return;
+  await page.locator(`#${section}-row`).click();
+  await page.waitForSelector(`.screen[data-page=${section}]`);
+}

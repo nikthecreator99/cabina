@@ -2,7 +2,7 @@
 // Сервер подменён (mock-colleagues.js), данные выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, text } from './helpers.js';
+import { startEnv, openApp, text, openSettings } from './helpers.js';
 import { ready } from './mock-colleagues.js';
 import { helpCount } from '../../js/help.js';
 
@@ -77,7 +77,7 @@ test('поиск: «копия» — два ответа и сразу откр�
   // «Открыть «Резервная копия»» — Настройки, строка копии подсвечена
   await faq(page, 'data-lost').locator('summary').click();
   await faq(page, 'data-lost').locator('.faq-go').click();
-  await page.waitForSelector('.screen[data-page=settings] [data-act=export].spot-flash', { timeout: 3000 });
+  await page.waitForSelector('.screen[data-page=set-data] [data-act=export].spot-flash', { timeout: 3000 });
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -85,7 +85,7 @@ test('поиск: «копия» — два ответа и сразу откр�
 test('Настройки → «Помощь»; без входа нет кнопки «Приватность», после входа — есть; 320 px и обе темы', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
-  await page.locator('.screen [data-page=settings]').click();
+  await openSettings(page, 'set-about');
   await page.locator('#settings-help').click();
   await page.waitForSelector('#help-q');
   await faq(page, 'col-see').locator('summary').click();

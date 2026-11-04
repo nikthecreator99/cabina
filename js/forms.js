@@ -9,7 +9,9 @@ import {
   autoAbsenceHours, absenceBreakdown, absenceMonths, validateAbsence, monthSummary, DAY, MIN, LEGS_MAX, LEG_NAMES, legsOf,
 } from './calc.js';
 import { dayInfo } from './calendar.js';
-import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
+import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restRequired } from './rest.js';
+import { session } from './auth.js';
+import { privacyOf } from './profile.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
@@ -302,14 +304,17 @@ export function openTripForm(tripId) {
         <input id="tf-rn" class="input" inputmode="numeric" placeholder="Например, 123456" autocomplete="off" maxlength="20">
       </div>
     </div>
-    <div class="field">
-      <div class="label">Вид отдыха после поездки</div>
+    <div class="field"><div id="tf-calc"></div></div>
+    <div class="field rest-field" id="tf-rest-field">
+      <div class="label" id="tf-rest-cap">Вид отдыха после поездки<span class="req" id="tf-rest-req" hidden> · обязательно</span></div>
+      <div class="rest-arrow" id="tf-rest-arrow" hidden aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M5.5 12.5 12 19l6.5-6.5"/></svg></div>
       <div class="seg accent" id="tf-rest">
         <button type="button" data-rest="turnaround">${I.bed2}<span>Отдых в пункте оборота</span></button>
         <button type="button" data-rest="home">${I.home2}<span>Домашний отдых</span></button>
       </div>
       <div class="hint" id="tf-rest-hint" hidden>Отдых можно выбрать, когда укажете время окончания поездки.</div>
-      <div id="tf-calc"></div>
+      <div class="hint" id="tf-rest-why" hidden></div>
+      <div id="tf-rest-calc"></div>
       <div class="list" id="tf-home"></div>
     </div>
     <div data-error></div>`;
@@ -512,12 +517,32 @@ export function openTripForm(tripId) {
     $(el, '#tf-kind-list').hidden = !F.kindOpen;
     el.querySelectorAll('[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === F.kind)));
   }
+  // Вид отдыха обязателен (2.21): делится статусом с коллегами и закрывает поездку сразу (≤ 2 ч после окончания)
+  function needRest() {
+    if (!F.et || !F.ed) return false;
+    let sharing = false;
+    try { sharing = !!session() && privacyOf().status === true; } catch {}
+    return restRequired(parseLocal(`${F.ed}T${F.et}`), nowLocal(), sharing);
+  }
+  // Сохранить без вида отдыха нельзя: экран доезжает до кнопок, стрелка показывает на них
+  function nudgeRest() {
+    const f = $(el, '#tf-rest-field');
+    f.classList.remove('need'); void f.offsetWidth; f.classList.add('need');
+    $(el, '#tf-rest-arrow').hidden = false;
+    f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
   // без окончания поездки отдых не выбирается, а кнопка внизу — «В путь» (или «Сохранить явку»)
   function renderRest() {
     const open = !F.et;
     if (open && F.restType) { F.restType = null; F.homeChoice = null; F.homeOpen = false; }
     el.querySelectorAll('[data-rest]').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.rest === F.restType)); b.disabled = open; });
     $(el, '#tf-rest-hint').hidden = !open;
+    const need = needRest();
+    $(el, '#tf-rest-req').hidden = !need;
+    const why = $(el, '#tf-rest-why');
+    why.hidden = !need || !!F.restType;
+    why.textContent = need ? 'Без вида отдыха коллеги не увидят, где вы. Выберите его, чтобы сохранить поездку.' : '';
+    if (!need || F.restType) { $(el, '#tf-rest-field').classList.remove('need'); $(el, '#tf-rest-arrow').hidden = true; }
     const pending = open && F.sd && F.st && parseLocal(`${F.sd}T${F.st}`) > nowLocal();
     const label = !open ? 'Сохранить' : pending ? 'Сохранить явку' : 'В путь';
     const btn = $(el, '[data-act=save-trip]');
@@ -532,12 +557,13 @@ export function openTripForm(tripId) {
     const d = draft();
     const err = draftError(d);
     const box = $(el, '#tf-calc');
+    const rbox = $(el, '#tf-rest-calc');
     const home = $(el, '#tf-home');
     const nowMs = nowLocal();
     if (err) {
       const incomplete = !d.start;
       setHTML(box, `<div class="calc"><div class="calc-row"><span>${incomplete ? 'Заполните начало поездки — здесь появится рабочее время.' : esc(err)}</span></div></div>`);
-      setHTML(home, '');
+      setHTML(home, ''); setHTML(rbox, '');
       if (existing) $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Рабочее время</div><div class="v">—</div></div>`;
       return;
     }
@@ -549,7 +575,7 @@ export function openTripForm(tripId) {
         <div class="calc-row"><span>Явка</span><b>${whenShort(st.start, nowMs)}</b></div>
         ${startNormsHtml(d, st.start, nowMs, calcRow)}
         <div class="calc-row"><span>Когда время явки наступит, поездка сама станет «в пути».</span></div></div>`);
-      setHTML(home, '');
+      setHTML(home, ''); setHTML(rbox, '');
       if (existing) $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">Ждёт явки</div><div class="v">${hm(st.start)}</div></div>`;
       return;
     }
@@ -567,23 +593,27 @@ export function openTripForm(tripId) {
       html += `<div class="calc-head">По месяцам</div>` + months.map((mk) => `<div class="calc-row"><span>${monthName(mk)}</span><b>${fmtDur(st.byMonth[mk].work)}</b></div>`).join('');
     }
     if (live) html += `<div class="calc-row"><span>Время окончания и отдых посчитаются, когда вы завершите поездку.</span></div>`;
-    else if (!F.restType) html += `<div class="calc-row"><span>Выберите вид отдыха после поездки — он появится на главном.</span></div>`;
-    else if (F.restType === 'turnaround') html += restBlock(d);
+    html += '</div>';
+    setHTML(box, html);
+    // отдых — под кнопками вида отдыха (2.21: кнопки внизу формы)
+    let rh = '';
+    if (live) rh = '';
+    else if (!F.restType) rh = needRest() ? '' : `<div class="calc-row"><span>Выберите вид отдыха после поездки — он появится на главном.</span></div>`;
+    else if (F.restType === 'turnaround') rh = restBlock(d);
     else if (F.homeChoice === 'queue') {
       const until = queueUntil(st.end);
-      html += `<div class="calc-head">На очереди</div>
+      rh = `<div class="calc-head">На очереди</div>
         <div class="calc-row main"><span>Вызов не раньше</span><b>${whenShort(until, nowMs)}</b></div>
         <div class="calc-row"><span>Междусменный отдых</span><b>${shiftH()}</b></div>
         <div class="calc-row"><span>Статус</span>${statusOf(nowMs, st.end, until)}</div>`;
     } else if (F.homeChoice === 'dayOff') {
       const until = dayOffUntil(st.end, d);
-      html += `<div class="calc-head">Выходной</div>
+      rh = `<div class="calc-head">Выходной</div>
         <div class="calc-row main"><span>Выходной до</span><b>${whenShort(until, nowMs)}</b></div>
         <div class="calc-row"><span>Длительность</span><b>${fmtDur(d.dayOffMin, { short: true })}</b></div>
         <div class="calc-row"><span>Статус</span>${statusOf(nowMs, st.end, until, { on: 'Выходной ещё идёт', off: 'Выходной закончился' })}</div>`;
     }
-    html += '</div>';
-    setHTML(box, html);
+    setHTML(rbox, rh ? `<div class="calc">${rh}</div>` : '');
 
     // Домашний отдых: «На очередь» или расчёт полного отдыха по кнопке
     if (F.restType !== 'home' || live) { setHTML(home, ''); renderSummary(st, live, pay); return; }
@@ -746,6 +776,7 @@ export function openTripForm(tripId) {
       const d = draft();
       const err = draftError(d);
       if (err) { showError(el, err); return; }
+      if (d.end && !d.restType && needRest()) { nudgeRest(); return; }
       const text = F.note.trim();
       if (text && (!d.locoType || !d.locoNumber)) { showError(el, 'Чтобы сохранить заметку, укажите тип и номер локомотива.'); return; }
       let noteOp = null;
@@ -1175,6 +1206,69 @@ export function openAbsenceList(y, m) {
       const ok = await confirmDialog({ title: 'Вы действительно хотите удалить отвлечение?', text: `${(ABS_TYPES[a.type] || ABS_TYPES.sick).label}, ${dateRange(a.start, a.end)}`, ok: 'Да', cancel: 'Нет' });
       if (ok) { await deleteAbsence(a.id); toast('Отвлечение удалено'); } else swipe.closeAll();
     }
+  });
+  return el;
+}
+
+// =====================================================================
+// Выходной: поправить время окончания руками (2.21, просьба Никиты) — с главной и из профиля.
+// Храним только длительность выходного у поездки (dayOffMin): так же, как при выборе «Пойти на выходной».
+export const DAYOFF_MAX_MIN = 14 * 24 * 60; // не дольше двух недель после поездки
+export function dayOffEditError(endMs, untilMs) {
+  if (!Number.isFinite(untilMs)) return 'Укажите дату и время окончания выходного.';
+  if (untilMs <= endMs) return 'Выходной заканчивается после окончания поездки.';
+  if (untilMs - endMs > DAYOFF_MAX_MIN * MIN) return 'Выходной не может быть дольше двух недель после поездки.';
+  return null;
+}
+export function openDayOffEdit(tripId) {
+  const trip = S.trips.find((t) => t.id === tripId);
+  if (!trip || trip.restType !== 'home' || trip.homeChoice !== 'dayOff' || isLive(trip)) return null;
+  const end = tripStats(trip).end;
+  const until = dayOffUntil(end, trip);
+  const v = fmtLocal(until);
+  const def = dayOffMin();
+  const el = openLayer(sheet({
+    title: 'Окончание выходного',
+    body: `<p class="hint">Поездка закончилась ${esc(whenShort(end, nowLocal()))}. Если выходной дали другой длины — поправьте, когда он заканчивается.</p>
+      <div class="field">
+        <label for="do-d">Выходной до</label>
+        <div class="dt"><input type="date" id="do-d" class="input" aria-label="Дата окончания выходного" value="${v.slice(0, 10)}"><input type="time" id="do-t" class="input" aria-label="Время окончания выходного" value="${v.slice(11, 16)}"></div>
+        <div class="hint" id="do-len"></div>
+      </div>
+      ${trip.dayOffMin && trip.dayOffMin !== def ? `<button type="button" class="link-btn" data-act="do-reset">Как в настройках: ${esc(fmtDur(def, { short: true }))}</button>` : ''}
+      <div data-error></div>`,
+    foot: `<button class="btn btn-primary" data-act="do-save">${I.check} Сохранить</button>`,
+  }));
+  const read = () => { const d = $(el, '#do-d').value, t = $(el, '#do-t').value; return d && t ? parseLocal(`${d}T${t}`) : NaN; };
+  const show = () => {
+    const u = read();
+    const err = dayOffEditError(end, u);
+    $(el, '#do-len').textContent = err ? '' : `Выходной — ${fmtDur((u - end) / MIN, { short: true })}`;
+  };
+  el.addEventListener('input', show);
+  el.addEventListener('change', show);
+  show();
+  el.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b || !el.contains(b)) return;
+    if (b.hasAttribute('data-close')) { closeLayer(el); return; }
+    if (b.dataset.act === 'do-reset') {
+      const x = fmtLocal(end + def * MIN);
+      $(el, '#do-d').value = x.slice(0, 10); $(el, '#do-t').value = x.slice(11, 16); show();
+      return;
+    }
+    if (b.dataset.act !== 'do-save') return;
+    const u = read();
+    const err = dayOffEditError(end, u);
+    if (err) { showError(el, err); return; }
+    const min = Math.round((u - end) / MIN);
+    const fresh = S.trips.find((t) => t.id === tripId);
+    if (!fresh) { closeLayer(el); return; }
+    const d = { ...JSON.parse(JSON.stringify({ ...fresh, _stats: undefined, _statsAt: undefined })), dayOffMin: min, updatedAt: Date.now() };
+    delete d._stats; delete d._statsAt;
+    try { await saveTrip(d, null); } catch { showError(el, 'Не удалось сохранить. Возможно, на устройстве закончилась память.'); return; }
+    closeLayer(el);
+    toast(`Выходной до ${whenShort(u, nowLocal())}`);
   });
   return el;
 }

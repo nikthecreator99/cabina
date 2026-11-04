@@ -2,7 +2,7 @@
 // заработок по среднему, настройки, медкомиссия в отвлечении, «Пропустить» в подсказках (с 2.19.3 см. и v2193). Данные — выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
+import { startEnv, openApp, seed, text, waitNoLayers, openSettings } from './helpers.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -191,9 +191,14 @@ test('«Считать зарплату по среднему» (2.6): пере�
 test('настройки: новый порядок, календарь и часовой пояс — одной строкой с окном', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'profile');
-  await page.locator('[data-page=settings]').click();
+  // 2.21: сверху аккаунт, дальше разделы строками
+  await openSettings(page);
+  assert.equal(await page.locator('.screen [data-page=account]').count(), 1);
+  const rows = (await page.locator('#set-list > .row .t1').allInnerTexts()).map((s) => s.trim().toLowerCase());
+  assert.deepEqual(rows, ['оформление', 'конфиденциальность', 'данные и резервная копия', 'календарь и часовой пояс', 'установка на экран', 'о приложении']);
+  await openSettings(page, 'set-time');
   const titles = (await page.locator('.screen .group-title').allInnerTexts()).map((s) => s.trim().toLowerCase());
-  assert.deepEqual(titles, ['аккаунт', 'оформление', 'конфиденциальность', 'данные и резервная копия', 'производственный календарь', 'часовой пояс', 'установка на экран', 'о приложении']);
+  assert.deepEqual(titles, ['производственный календарь', 'часовой пояс']);
   assert.equal(await page.locator('#tz').count(), 0, 'длинного списка в самих настройках нет');
   assert.match(await text(page, '#tz-row'), /Москва \(МСК\)/);
   await page.locator('#tz-row').click();

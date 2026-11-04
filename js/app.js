@@ -1,9 +1,9 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
-import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
-import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo } from './store.js';
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, attachReorder, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
+import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo, EXTRA_KEYS, extraOrder } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
-import { openTripForm, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
+import { openTripForm, openDayOffEdit, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
@@ -36,7 +36,7 @@ import { renderHelp, helpListHtml } from './help.js';
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.20.1';
+export const VERSION = '2.21.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -274,7 +274,7 @@ function renderHome() {
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${departBanner(lt && !pend ? lt : null, now)}
-    ${rest ? `<button class="rest-banner" data-act="trip" data-id="${esc(rest.trip.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${rest ? `<button class="rest-banner" data-act="${rest.kind === 'dayOff' ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${rest.kind === 'dayOff' ? ' aria-label="Выходной — изменить время окончания"' : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() : ''}
     ${backupNag(now) || (isCurrent && !OLD_SITE ? signupNagHtml() : '')}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
@@ -356,20 +356,23 @@ function renderExtra() {
   else {
     const locos = new Set(S.notes.map((n) => locoKey(n.type, n.number))).size;
     const docs = docsCount();
+    const rows = {
+      notes: `<button class="row" data-act="extra-notes" data-key="notes"><span class="ico" style="--c:var(--accent)">${I.note}</span>
+          <div class="grow"><div class="t1">Заметки о локомотивах</div><div class="t2">${S.notes.length ? `${S.notes.length} ${plural(S.notes.length, 'заметка', 'заметки', 'заметок')} · ${locos} ${plural(locos, 'локомотив', 'локомотива', 'локомотивов')}` : 'Пока пусто'}</div></div>${small(I.right, 18)}</button>`,
+      docs: `<button class="row" data-act="extra-docs" data-key="docs"><span class="ico" style="--c:var(--warn)">${I.folder}</span>
+          <div class="grow"><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div>${small(I.right, 18)}</button>`,
+      phones: `<button class="row" data-act="extra-phones" data-key="phones"><span class="ico" style="--c:var(--ok)">${I.book}</span>
+          <div class="grow"><div class="t1">Телефоны</div><div class="t2">${S.contacts.length ? `${S.contacts.length} ${plural(S.contacts.length, 'контакт', 'контакта', 'контактов')} · только в этом телефоне` : 'Нарядчик, дежурный, коллеги'}</div></div>${small(I.right, 18)}</button>`,
+      fix: `<button class="row" data-act="extra-fix" data-key="fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
+          <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>`,
+      help: `<button class="row" data-act="go" data-page="help" id="extra-help" data-key="help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
+          <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button>`,
+      ideas: legalReady() ? ideasRowHtml('extra-ideas').replace('<button class="row"', '<button class="row" data-key="ideas"') : '',
+    };
+    // один общий список; порядок меняется удержанием пальца (2.21) и хранится в настройках
     html = `<div class="page-head"><h1>Ещё</h1></div>
-      <div class="panel extra-list">
-        <button class="row" data-act="extra-notes"><span class="ico" style="--c:var(--accent)">${I.note}</span>
-          <div class="grow"><div class="t1">Заметки о локомотивах</div><div class="t2">${S.notes.length ? `${S.notes.length} ${plural(S.notes.length, 'заметка', 'заметки', 'заметок')} · ${locos} ${plural(locos, 'локомотив', 'локомотива', 'локомотивов')}` : 'Пока пусто'}</div></div>${small(I.right, 18)}</button>
-        <button class="row" data-act="extra-docs"><span class="ico" style="--c:var(--warn)">${I.folder}</span>
-          <div class="grow"><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div>${small(I.right, 18)}</button>
-        <button class="row" data-act="extra-phones"><span class="ico" style="--c:var(--ok)">${I.book}</span>
-          <div class="grow"><div class="t1">Телефоны</div><div class="t2">${S.contacts.length ? `${S.contacts.length} ${plural(S.contacts.length, 'контакт', 'контакта', 'контактов')} · только в этом телефоне` : 'Нарядчик, дежурный, коллеги'}</div></div>${small(I.right, 18)}</button>
-        <button class="row" data-act="extra-fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
-          <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>
-      </div>
-      <div class="panel"><button class="row" data-act="go" data-page="help" id="extra-help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
-        <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button>
-        ${legalReady() ? ideasRowHtml('extra-ideas') : ''}</div>`;
+      <div class="panel extra-list" id="extra-list">${extraOrder().map((k) => rows[k]).join('')}</div>
+      <p class="hint extra-tip">Порядок можно поменять: удержите строку пальцем и двигайте вверх или вниз.</p>`;
   }
   return html;
 }
@@ -383,7 +386,7 @@ const TZ = [
   ['Asia/Kamchatka', 'Камчатка (МСК+9)'], ['auto', 'Как на устройстве'],
 ];
 let deferredInstall = null;
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; if (page() === 'settings') render(); });
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; if (['settings', 'set-install'].includes(page())) render(); });
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let storageInfo = null;
@@ -442,65 +445,97 @@ function openTzPicker() {
   });
 }
 
+// Настройки (2.21, просьба Никиты): разделы спрятаны по строкам — нажал и попал внутрь. Аккаунт — сверху, как был.
+// Каждый раздел — свой экран (V.pages: 'set-look' и т.д.), кнопки внутри те же, что и раньше.
+const SET_SECTIONS = [
+  ['set-look', 'Оформление', I.sun, 'var(--warn)'],
+  ['set-privacy', 'Конфиденциальность', I.lock, 'var(--accent)'],
+  ['set-data', 'Данные и резервная копия', I.download, 'var(--ok)'],
+  ['set-time', 'Календарь и часовой пояс', I.calendar, 'var(--holiday)'],
+  ['set-install', 'Установка на экран', I.phone, 'var(--night)'],
+  ['set-about', 'О приложении', I.info, 'var(--muted)'],
+];
+const inFrame = () => { try { return window.top !== window; } catch { return true; } };
+const lastBackupText = () => (S.backup.lastAt ? `Последняя копия: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Копия ещё не сохранялась');
+function setSub(id) {
+  const s = S.settings;
+  if (id === 'set-look') return `${s.theme === 'light' ? 'Светлая' : 'Тёмная'} тема · ${PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name.toLowerCase()}`;
+  if (id === 'set-privacy') return `Код для входа ${lockOn() ? 'включён' : 'выключен'}${flipOn() ? ' · суммы скрываются переворотом' : ''}`;
+  if (id === 'set-data') return isMemoryMode() ? 'Записи не сохраняются — откройте в обычном окне' : lastBackupText();
+  if (id === 'set-time') return `${tzLabel(s.tz)} · ${yearInfo(new Date(nowLocal()).getUTCFullYear()).hours} ч в году`;
+  if (id === 'set-install') return inFrame() ? 'Доступно по прямому адресу' : isStandalone() ? 'CABINA установлена' : 'Иконка на главном экране, работа без интернета';
+  return `Помощь, что нового, подсказки, политика · ${VERSION}`;
+}
 function renderSettings() {
+  const warnData = !isMemoryMode() && !S.backup.lastAt && S.trips.length > 0;
+  return `${pageHead('Настройки', { back: true })}
+    ${accountRowHtml()}
+    <div class="panel set-list" id="set-list">${SET_SECTIONS.map(([id, t, ic, c]) => `<button class="row" data-act="go" data-page="${id}" id="${id}-row"><span class="ico" style="--c:${id === 'set-data' && (warnData || isMemoryMode()) ? 'var(--warn)' : c}">${ic}</span><div class="grow"><div class="t1">${t}</div><div class="t2">${esc(setSub(id))}</div></div>${small(I.right, 18)}</button>`).join('')}</div>`;
+}
+function renderSetLook() {
+  const s = S.settings;
+  const themeBtn = (v, label, ic) => `<button data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${small(ic, 16)} ${label}</button>`;
+  return `${pageHead('Оформление', { back: true })}
+    <div class="group"><div class="group-title">Тема</div>
+      <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div></div>
+    <div class="group"><div class="group-title">Обновление</div>
+      <div class="panel"><button class="row" data-act="pull-style" id="pull-row"><span class="ico" style="--c:var(--night)">${I.refresh}</span><div class="grow"><div class="t1">Анимация обновления</div><div class="t2">${esc(PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name)} · потяните экран вниз, чтобы обновить</div></div>${small(I.right, 18)}</button></div></div>`;
+}
+function renderSetPrivacy() {
+  return `${pageHead('Конфиденциальность', { back: true })}
+    <div class="panel">
+      <div class="row"><span class="ico" style="--c:var(--ok)">${I.eyeOff}</span><div class="grow"><div class="t1">Скрывать суммы переворотом</div><div class="t2">Экраном вниз — суммы скрыты, ещё раз — видны</div></div>
+        <button class="switch" role="switch" id="flip-sw" aria-checked="${flipOn()}" aria-label="Скрывать суммы переворотом телефона" data-act="flip-toggle"></button></div>
+      <button class="row" data-act="lock-settings" id="lock-row"><span class="ico" style="--c:var(--accent)">${I.lock}</span><div class="grow"><div class="t1">Код для входа</div><div class="t2">${lockOn() ? 'Включён' : 'Выключен'}</div></div>${small(I.right, 18)}</button>
+    </div>
+    <div class="hint">Суммы можно скрыть и значком-глазом на главном экране.</div>`;
+}
+function renderSetData() {
+  return `${pageHead('Данные и резервная копия', { back: true })}
+    ${isMemoryMode() ? `<div class="notice">${I.alert}<div><b>Записи не сохраняются.</b> Хранилище браузера недоступно — данные пропадут после закрытия. Откройте CABINA в обычном (не приватном) окне.</div></div>`
+      : `<button class="notice notice-btn" data-act="storage-info" id="storage-note">${I.alert}<div class="grow"><b>Записи — только в этом телефоне.</b> Без копии их не вернуть.</div>${small(I.right, 18)}</button>`}
+    <div class="panel">
+      <div class="row"><span class="ico" style="--c:var(--warn)">${I.folder}</span><div class="grow"><div class="t1">Документы в копии</div><div class="t2">Файл копии будет больше</div></div>
+        <button class="switch" role="switch" id="bk-docs" aria-checked="${V.bkDocs !== false}" aria-label="Сохранять рабочие документы в копию" data-act="bk-docs"></button></div>
+      <button class="row" data-act="export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Создать резервную копию</div><div class="t2">${S.backup.lastAt ? `Последняя: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Ещё не сохранялась'}</div></div>${small(I.right, 18)}</button>
+      <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные заменятся</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
+    </div>`;
+}
+function renderSetTime() {
   const s = S.settings;
   const y = new Date(nowLocal()).getUTCFullYear();
   const yi = yearInfo(y);
-  const themeBtn = (v, label, ic) => `<button data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${small(ic, 16)} ${label}</button>`;
-  const lastBk = S.backup.lastAt ? `Последняя: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Ещё не сохранялась';
-  return `${pageHead('Настройки', { back: true })}
-    ${accountRowHtml()}
-    <div class="group"><div class="group-title">Оформление</div>
-      <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div>
-      <div class="panel"><button class="row" data-act="pull-style" id="pull-row"><span class="ico" style="--c:var(--night)">${I.refresh}</span><div class="grow"><div class="t1">Анимация обновления</div><div class="t2">${esc(PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name)} · потяните экран вниз, чтобы обновить</div></div>${small(I.right, 18)}</button></div>
-    </div>
-    <div class="group"><div class="group-title">Конфиденциальность</div>
-      <div class="panel">
-        <div class="row"><span class="ico" style="--c:var(--ok)">${I.eyeOff}</span><div class="grow"><div class="t1">Скрывать суммы переворотом</div><div class="t2">Экраном вниз — суммы скрыты, ещё раз — видны</div></div>
-          <button class="switch" role="switch" id="flip-sw" aria-checked="${flipOn()}" aria-label="Скрывать суммы переворотом телефона" data-act="flip-toggle"></button></div>
-        <button class="row" data-act="lock-settings" id="lock-row"><span class="ico" style="--c:var(--accent)">${I.lock}</span><div class="grow"><div class="t1">Код для входа</div><div class="t2">${lockOn() ? 'Включён' : 'Выключен'}</div></div>${small(I.right, 18)}</button>
-      </div>
-    </div>
-    <div class="group"><div class="group-title">Данные и резервная копия</div>
-      ${isMemoryMode() ? `<div class="notice">${I.alert}<div><b>Записи не сохраняются.</b> Хранилище браузера недоступно — данные пропадут после закрытия. Откройте CABINA в обычном (не приватном) окне.</div></div>`
-        : `<button class="notice notice-btn" data-act="storage-info" id="storage-note">${I.alert}<div class="grow"><b>Записи — только в этом телефоне.</b> Без копии их не вернуть.</div>${small(I.right, 18)}</button>`}
-      <div class="panel">
-        <div class="row"><span class="ico" style="--c:var(--warn)">${I.folder}</span><div class="grow"><div class="t1">Документы в копии</div><div class="t2">Файл копии будет больше</div></div>
-          <button class="switch" role="switch" id="bk-docs" aria-checked="${V.bkDocs !== false}" aria-label="Сохранять рабочие документы в копию" data-act="bk-docs"></button></div>
-        <button class="row" data-act="export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Создать резервную копию</div><div class="t2">${lastBk}</div></div>${small(I.right, 18)}</button>
-        <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные заменятся</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
-      </div>
-    </div>
+  return `${pageHead('Календарь и часовой пояс', { back: true })}
     <div class="group"><div class="group-title">Производственный календарь</div>
-      <div class="panel"><button class="row" data-act="cal-info"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">РФ, 40-часовая неделя</div><div class="t2">${y} год — ${yi.hours} ч</div></div>${small(I.right, 18)}</button></div>
-    </div>
+      <div class="panel"><button class="row" data-act="cal-info"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">РФ, 40-часовая неделя</div><div class="t2">${y} год — ${yi.hours} ч</div></div>${small(I.right, 18)}</button></div></div>
     <div class="group"><div class="group-title">Часовой пояс</div>
-      <div class="panel"><button class="row" data-act="tz-pick" id="tz-row"><span class="ico" style="--c:var(--night)">${I.globe}</span><div class="grow"><div class="t1">${esc(tzLabel(s.tz))}</div><div class="t2">Для отметки «сейчас», поездки «в пути» и статуса отдыха</div></div>${small(I.right, 18)}</button></div>
-    </div>
-    <div class="group"><div class="group-title">Установка на экран</div>
-      <div class="panel">
-        ${(() => { try { return window.top !== window; } catch { return true; } })() ? `<div class="row"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">Установка на экран</div><div class="t2">Иконка CABINA на главном экране и работа без интернета доступны, когда приложение открыто по своему прямому адресу.</div></div></div>`
-          : isStandalone() ? `<div class="row"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">CABINA установлена</div><div class="t2">Работает как отдельное приложение, в том числе без интернета</div></div></div>`
-          : deferredInstall ? `<button class="row" data-act="install"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">Установить CABINA</div><div class="t2">Добавить иконку на главный экран</div></div>${small(I.right, 18)}</button>`
-          : `<div class="row"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">${isIOS() ? 'iPhone: Safari → «Поделиться» → «На экран „Домой“»' : 'Android: Chrome → меню ⋮ → «Добавить на гл. экран»'}</div><div class="t2">После установки приложение запускается с иконки и работает без интернета</div></div></div>`}
-      </div>
-    </div>
-    <div class="group"><div class="group-title">О приложении</div>
-      <div class="panel">
-        <button class="row" data-act="go" data-page="help" id="settings-help"><span class="ico" style="--c:var(--accent)">${I.help}</span><div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы и ответы</div></div>${small(I.right, 18)}</button>
-        ${legalReady() ? ideasRowHtml('settings-ideas') : ''}
-        <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
-        <div class="row"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Подсказки</div><div class="t2">Короткие объяснения при первом открытии</div></div>
-          <button class="switch" role="switch" id="tours-sw" aria-checked="${!toursOff()}" aria-label="Показывать подсказки" data-act="tours-toggle"></button></div>
-        ${toursOff() ? '' : `<button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.refresh}</span><div class="grow"><div class="t1">Показать подсказки заново</div></div>${small(I.right, 18)}</button>`}
-        ${legalReady() ? `<button class="row" data-act="policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки персональных данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>` : ''}
-        <button class="row" data-act="about"><span class="ico">${I.info}</span><div class="grow"><div class="t1">CABINA ${VERSION}</div><div class="t2">Личный учёт поездок. Не является официальной системой ОАО «РЖД».</div></div>${small(I.right, 18)}</button>
-      </div>
+      <div class="panel"><button class="row" data-act="tz-pick" id="tz-row"><span class="ico" style="--c:var(--night)">${I.globe}</span><div class="grow"><div class="t1">${esc(tzLabel(s.tz))}</div><div class="t2">Для отметки «сейчас», поездки «в пути» и статуса отдыха</div></div>${small(I.right, 18)}</button></div></div>`;
+}
+function renderSetInstall() {
+  return `${pageHead('Установка на экран', { back: true })}
+    <div class="panel">
+      ${inFrame() ? `<div class="row"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">Установка на экран</div><div class="t2">Иконка CABINA на главном экране и работа без интернета доступны, когда приложение открыто по своему прямому адресу.</div></div></div>`
+        : isStandalone() ? `<div class="row"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">CABINA установлена</div><div class="t2">Работает как отдельное приложение, в том числе без интернета</div></div></div>`
+        : deferredInstall ? `<button class="row" data-act="install"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">Установить CABINA</div><div class="t2">Добавить иконку на главный экран</div></div>${small(I.right, 18)}</button>`
+        : `<div class="row"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">${isIOS() ? 'iPhone: Safari → «Поделиться» → «На экран „Домой“»' : 'Android: Chrome → меню ⋮ → «Добавить на гл. экран»'}</div><div class="t2">После установки приложение запускается с иконки и работает без интернета</div></div></div>`}
+    </div>`;
+}
+function renderSetAbout() {
+  return `${pageHead('О приложении', { back: true })}
+    <div class="panel">
+      <button class="row" data-act="go" data-page="help" id="settings-help"><span class="ico" style="--c:var(--accent)">${I.help}</span><div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы и ответы</div></div>${small(I.right, 18)}</button>
+      ${legalReady() ? ideasRowHtml('settings-ideas') : ''}
+      <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
+      <div class="row"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Подсказки</div><div class="t2">Короткие объяснения при первом открытии</div></div>
+        <button class="switch" role="switch" id="tours-sw" aria-checked="${!toursOff()}" aria-label="Показывать подсказки" data-act="tours-toggle"></button></div>
+      ${toursOff() ? '' : `<button class="row" data-act="tours-reset"><span class="ico" style="--c:var(--accent)">${I.refresh}</span><div class="grow"><div class="t1">Показать подсказки заново</div></div>${small(I.right, 18)}</button>`}
+      ${legalReady() ? `<button class="row" data-act="policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки персональных данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>` : ''}
+      <button class="row" data-act="about"><span class="ico">${I.info}</span><div class="grow"><div class="t1">CABINA ${VERSION}</div><div class="t2">Личный учёт поездок. Не является официальной системой ОАО «РЖД».</div></div>${small(I.right, 18)}</button>
     </div>`;
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
@@ -673,6 +708,7 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
 
 // ---------------------------------------------------------------- действия
 const swipe = attachSwipe(app);
+attachReorder(app, '#extra-list', '.row', async (keys) => { await saveSettings({ extraOrder: [...keys, ...extraOrder().filter((k) => !keys.includes(k))].filter((k) => EXTRA_KEYS.includes(k)) }); toast('Порядок сохранён'); });
 attachLongPress(app, '.swipe > .trip.swipe-row', (row) => { if (!V.sel && V.tab === 'home' && !V.pages.length) startSel(row.dataset.id); });
 const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll(), openAbsenceForm, myDataHtml };
 
@@ -722,6 +758,7 @@ app.addEventListener('click', async (e) => {
     case 'next': shiftMonth(1); break;
     case 'today': goToday(); render(); break;
     case 'add-trip': openTripForm(); break;
+    case 'dayoff-edit': if (!openDayOffEdit(id)) openTripForm(id); break;
     case 'trip':
       if (V.sel && b.classList.contains('swipe-row')) {
         if (b.dataset.off) { toast('Отправить можно только законченную поездку'); break; }

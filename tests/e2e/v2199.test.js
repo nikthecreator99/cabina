@@ -32,7 +32,7 @@ test('прошлая работа: добавить, стаж за период 
   // пока прошлой работы нет — общего стажа нет, есть подсказка, когда это нужно
   assert.match(await text(page, '.screen'), /Непрерывный стаж\s+3 года 8 месяцев/);
   assert.equal(await page.locator('#cr-total').count(), 0);
-  assert.match(await text(page, '.screen'), /Увольнялись и потом вернулись на железную дорогу\?/);
+  assert.match(await text(page, '.screen'), /Работали на ЖД раньше, уволились и вернулись — эти годы войдут в общий стаж/);
   // добавляем
   await page.locator('#cr-past-add').click();
   const f = sheet(page);

@@ -121,3 +121,11 @@ export function dayOffIntervals(pool = S.trips) {
   }
   return out;
 }
+
+// Вид отдыха обязателен (2.21, просьба Никиты): без него коллеги не увидят, где человек.
+// Только у того, кто делится статусом с коллегами (вход в аккаунт и «Показывать статус»), и только когда поездку
+// закрывают сразу — не позже 2 ч после окончания. Кто вносит поездки потом, выбирать не обязан.
+export const REST_REQUIRED_MIN = 120;
+export function restRequired(endMs, nowMs, sharing) {
+  return !!sharing && Number.isFinite(endMs) && Number.isFinite(nowMs) && nowMs - endMs <= REST_REQUIRED_MIN * MIN;
+}

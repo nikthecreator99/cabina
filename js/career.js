@@ -164,36 +164,47 @@ export function renderCareer() {
       ${oklad ? '' : `<button class="link-btn" data-act="career-oklad">${small(I.wallet, 16)} Указать оклад, чтобы посчитать сумму</button>`}
     </section>`;
   }
+  // 2.21 (просьба Никиты: «нелогично, непонятно»): сверху — итог (стаж), потом где и когда работали — нынешняя
+  // и прошлая работа одним списком, потом должности, в конце — вознаграждение за преданность с окладом.
+  const pastRows = c.past.map((x) => `<button class="row" data-act="past-edit" data-id="${esc(x.id)}"><span class="ico" style="--c:var(--muted)">${I.briefcase}</span>
+        <div class="grow"><div class="t1">${esc(x.place || 'Место не указано')}</div><div class="t2">${pastRole(x) ? `${esc(pastRole(x))} · ` : ''}${tenureText(periodTenure(x))}</div><div class="t2">с ${dateText(x.from)} по ${dateText(x.to)}</div></div>${small(I.edit, 18)}</button>`).join('');
+  const sum = t ? `<section class="panel career-sum" id="cr-sum">
+      ${total ? `<div class="cs-row main"><span>Всего на железной дороге</span><b class="num" id="cr-total">${tenureText(total)}</b></div>` : ''}
+      <div class="cs-row${total ? '' : ' main'}"><span>${total ? 'Непрерывный, на нынешней работе' : 'Непрерывный стаж'}</span><b class="num" id="cr-tenure">${tenureText(t)}</b></div>
+      ${total ? '<div class="hint">«Всего» — нынешняя и прошлая работа, перерывы не считаются. От непрерывного стажа — вознаграждение за преданность.</div>' : ''}
+    </section>` : `<div class="notice">${I.info}<div><b>Укажите дату устройства на работу</b> — посчитаем стаж и вознаграждение за преданность.</div></div>`;
   return `${pageHead('Карьера', { back: true })}
-    <div class="panel pay-panel">
-      <div class="pay-field"><label for="cr-hired">Дата устройства на работу</label>
+    ${sum}
+    <div class="sec-head"><h2>Где и когда работали</h2></div>
+    <div class="panel career-work">
+      <div class="pay-field"><label for="cr-hired">${small(I.briefcase, 16)} Нынешняя работа — дата устройства</label>
         <input type="date" class="input" id="cr-hired" value="${esc(c.hired)}" max="${today}">
-        <div class="hint">Начало непрерывного стажа в компании. От неё считается вознаграждение за преданность. Если увольнялись и вернулись — дата последнего устройства, а прошлую работу добавьте ниже.</div></div>
-      ${t ? `<div class="pay-field"><div class="label">Непрерывный стаж</div><div class="career-tenure num" id="cr-tenure">${tenureText(t)}</div></div>` : ''}
-      ${total ? `<div class="pay-field"><div class="label">Всего на железной дороге</div><div class="career-tenure num" id="cr-total">${tenureText(total)}</div>
-        <div class="hint">Нынешняя и прошлая работа, перерывы не считаются.</div></div>` : ''}
-      <div class="pay-field"><label for="cr-oklad">Оклад, ₽ в месяц</label>
-        <div class="input-unit"><input class="input" id="cr-oklad" inputmode="decimal" autocomplete="off" value="${oklad ? esc(okladText(oklad)) : ''}" placeholder="Например, 48 000"><span>₽</span></div>
-        <div class="hint">Нужен для расчёта вознаграждения за преданность.</div></div>
+        <div class="hint">Если увольнялись и вернулись — дата последнего устройства, а прошлую работу добавьте ниже.</div></div>
+      ${c.past.length ? `<div class="cw-head">Раньше</div><div id="cr-past">${pastRows}</div>` : ''}
+      <button class="row add-row" data-act="past-add" id="cr-past-add"><span class="ico" style="--c:var(--accent)">${I.plus}</span>
+        <div class="grow"><div class="t1">Добавить прошлую работу</div>${c.past.length ? '' : '<div class="t2">Работали на ЖД раньше, уволились и вернулись — эти годы войдут в общий стаж</div>'}</div></button>
     </div>
-    ${nextHtml}
     <div class="sec-head"><h2>Должности</h2></div>
-    ${jobs.length ? `<div class="panel" id="cr-jobs">${jobs.map((j, i) => {
+    <div class="panel">
+      ${jobs.length ? `<div id="cr-jobs">${jobs.map((j, i) => {
       // должность заканчивается накануне следующей, а если начата на прошлой работе — не позже её окончания
       let end = i > 0 ? prevDayKey(jobs[i - 1].from) : '';
       const was = pastAt(c, j.from);
       if (was && (!end || was.to < end)) end = was.to;
       return `<button class="row" data-act="job-edit" data-id="${esc(j.id)}"><span class="ico" style="--c:${i === 0 && !end ? 'var(--ok)' : 'var(--muted)'}">${I.briefcase}</span>
         <div class="grow"><div class="t1">${esc(jobTitle(j))}</div><div class="t2">с ${dateText(j.from)}${end ? ` по ${dateText(end)}` : ' · сейчас'}</div></div>${small(I.edit, 18)}</button>`;
-    }).join('')}</div>` : '<div class="hint">Добавьте должности, чтобы видеть свой путь: например, «Помощник машиниста» с одной даты и «Машинист» — с другой.</div>'}
-    <button class="btn btn-ghost" data-act="job-add">${I.plus} Добавить должность</button>
-    <div class="sec-head"><h2>Прошлая работа на ЖД</h2></div>
-    ${c.past.length ? `<div class="panel" id="cr-past">${c.past.map((x) => `<button class="row" data-act="past-edit" data-id="${esc(x.id)}"><span class="ico" style="--c:var(--muted)">${I.briefcase}</span>
-        <div class="grow"><div class="t1">${esc(x.place || 'Место не указано')}</div><div class="t2">${pastRole(x) ? `${esc(pastRole(x))} · ` : ''}${tenureText(periodTenure(x))}</div><div class="t2">с ${dateText(x.from)} по ${dateText(x.to)}</div></div>${small(I.edit, 18)}</button>`).join('')}</div>`
-      : '<div class="hint">Увольнялись и потом вернулись на железную дорогу? Добавьте, где и когда работали раньше: эти годы войдут в общий стаж.</div>'}
-    <button class="btn btn-ghost" data-act="past-add" id="cr-past-add">${I.plus} Добавить прошлую работу</button>
-    ${ms.length ? `<div class="sec-head"><h2>Вознаграждение за преданность</h2></div>
-    <div class="panel loyal-list">${shown.map((x) => `<div class="row ${x.date <= today ? 'done' : ''}"><span class="ico" style="--c:${x.date <= today ? 'var(--ok)' : 'var(--warn)'}">${x.date <= today ? I.check : I.medal}</span>
+    }).join('')}</div>` : ''}
+      <button class="row add-row" data-act="job-add"><span class="ico" style="--c:var(--accent)">${I.plus}</span>
+        <div class="grow"><div class="t1">Добавить должность</div>${jobs.length ? '' : '<div class="t2">Например, «Помощник машиниста» с одной даты и «Машинист» — с другой</div>'}</div></button>
+    </div>
+    <div class="sec-head"><h2>Вознаграждение за преданность</h2></div>
+    <div class="panel pay-panel">
+      <div class="pay-field"><label for="cr-oklad">Оклад, ₽ в месяц</label>
+        <div class="input-unit"><input class="input" id="cr-oklad" inputmode="decimal" autocomplete="off" value="${oklad ? esc(okladText(oklad)) : ''}" placeholder="Например, 48 000"><span>₽</span></div>
+        <div class="hint">Нужен для расчёта вознаграждения за преданность.</div></div>
+    </div>
+    ${nextHtml}
+    ${ms.length ? `<div class="panel loyal-list">${shown.map((x) => `<div class="row ${x.date <= today ? 'done' : ''}"><span class="ico" style="--c:${x.date <= today ? 'var(--ok)' : 'var(--warn)'}">${x.date <= today ? I.check : I.medal}</span>
       <div class="grow"><div class="t1">${x.years} ${plural(x.years, 'год', 'года', 'лет')} — ${x.salaries} ${plural(x.salaries, 'оклад', 'оклада', 'окладов')}${amount(x)}</div><div class="t2">право ${dateText(x.date)} · выплата: ${monthText(x.payMonth)}</div></div></div>`).join('')}</div>` : ''}
     <div class="notice">${I.info}<div><b>Расчёт ориентировочный.</b> За 3 года непрерывного стажа — 2 оклада, за 5 лет — 3, за 10 лет — 4, за 15 лет и дальше каждые 5 лет — 5 окладов. Выплата — с зарплатой за первый месяц следующего квартала. Сумма может быть больше при высокой эффективности и меньше при взысканиях. Итог — по вашему расчётному листку.</div></div>`;
 }
@@ -360,6 +371,7 @@ export async function careerChange(e) {
   }
   if (t.id !== 'cr-hired') return false;
   const v = t.value;
+  if (v === careerOf().hired) return true; // не изменилась (повторное «change») — молча
   if (v && (!isDateKey(v) || v > todayKey())) { toast('Дата устройства не может быть в будущем', { error: true }); t.value = careerOf().hired; return true; }
   const lastTo = careerOf().past.reduce((m, x) => (x.to > m ? x.to : m), '');
   if (v && lastTo && v <= lastTo) { toast(`Дата устройства должна быть позже прошлой работы — она закончилась ${dateText(lastTo)}`, { error: true, ms: 4500 }); t.value = careerOf().hired; return true; }

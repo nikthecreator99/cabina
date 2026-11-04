@@ -175,6 +175,15 @@ async function createInvite() {
   loadInvites({ force: true });
 }
 
+// «Отправить приглашение» из других экранов (персонаж, 2.21): сразу окно с QR и ссылкой. Без входа — false (покажите экран приглашений).
+export async function inviteNow() {
+  if (!legalReady() || !session()) return false;
+  if (N.busy) return true;
+  N.busy = true;
+  try { await createInvite(); } finally { N.busy = false; }
+  return true;
+}
+
 export async function invitesClick(act, b) {
   if (!act.startsWith('inv-') || !['inv-new', 'inv-drop'].includes(act)) return false;
   if (N.busy) return true;
