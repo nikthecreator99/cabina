@@ -57,7 +57,9 @@ LAST=$(ls -1 "$DIR"/cabina-*.tar 2>/dev/null | sort | tail -n 1 || true)
 NAME=$(basename "$LAST")
 if [ -s "$STATE" ] && [ "$(cat "$STATE")" = "$NAME" ]; then echo "уже отправлена $NAME"; exit 0; fi
 # защита от пустой или обрезанной копии: настоящая начинается как tar с файлом db.dump.enc
-tar -tf "$LAST" 2>/dev/null | grep -qx 'db.dump.enc' || { echo "копия $NAME не похожа на настоящую, не отправляю" >&2; exit 1; }
+# без конвейера: с pipefail «grep -q» мог закрыть канал раньше tar, и проверка ложно не проходила (04.11.2026)
+LIST=$(tar -tf "$LAST" 2>/dev/null) || LIST=
+case $'\n'"$LIST"$'\n' in *$'\n'db.dump.enc$'\n'*) ;; *) echo "копия $NAME не похожа на настоящую, не отправляю" >&2; exit 1 ;; esac
 
 put "$LAST" "$NAME"
 LOCAL=$(wc -c < "$LAST" | tr -d ' ')
