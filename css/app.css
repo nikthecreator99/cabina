@@ -1570,6 +1570,8 @@ button.pr-status svg { color: var(--text-2); }
 .rd-svg { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; }
 .rd-sleep { fill: none; stroke: var(--lr-sleep); stroke-width: 24; stroke-dasharray: 4 9; }
 .rd-rail { fill: none; stroke: var(--lr-rail); stroke-width: 13; }
+.rd-gauge { fill: none; stroke: var(--bg); stroke-width: 8.6; }
+.rd-sleep-in { stroke-width: 8.6; }
 .rd-plan { fill: none; stroke: var(--lr-plan); stroke-width: 24; stroke-dasharray: 4 12; }
 .rd-mod { position: relative; z-index: 1; align-self: stretch; margin: 14px 0 26px; padding: 16px; border-radius: var(--r-md); background: var(--card-solid); border: 1px solid var(--line-2); box-shadow: var(--shadow); }
 .rd-mod-k { font-size: calc(12px * var(--fs)); letter-spacing: .1em; text-transform: uppercase; color: var(--accent-2); font-weight: 800; }

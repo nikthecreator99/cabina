@@ -23,8 +23,8 @@ test('нижнее меню (2.5): Главная · Ещё · Профиль, �
   assert.ok(Math.max(...xs) - Math.min(...xs) <= 1 && xs[0] >= 100, `ширины вкладок: ${xs}`);
   await tab(page, 'extra');
   assert.match(await text(page, '.page-head'), /^Ещё$/);
-  // пункты одним списком (2.6: + «Телефоны»; 2.21: и «Помощь», «Предложить идею» — в том же списке)
-  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.key)), ['notes', 'docs', 'phones', 'fix', 'help', 'ideas']);
+  // пункты одним списком (2.6: + «Телефоны»; 2.21: и «Помощь», «Предложить идею» — в том же списке; 2.21.11: «Обучение» — первым)
+  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.key)), ['learn', 'notes', 'docs', 'phones', 'fix', 'help', 'ideas']);
   await tab(page, 'profile');
   await page.locator('.screen [data-page=profile-edit]').click();
   assert.match(await text(page, '.page-head'), /Редактировать профиль/);

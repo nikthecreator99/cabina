@@ -79,7 +79,7 @@ function noteHtml(s) {
   if (!n || n.at !== today()) return '';
   const missed = n.n === 1 ? 'Вчера не было урока' : `${days(n.n)} без урока`;
   const text = n.k === 'gift'
-    ? `${missed}, а заморозок не хватало — CABINA подарила заморозку, и серия цела.`
+    ? `${missed}, а заморозок не хватало — CABINA подарила заморозку, и серия цела. В запасе: ${n.left} из ${L.FREEZE_MAX}.`
     : `${missed} — серию ${n.n === 1 ? 'сохранила заморозка' : 'сохранили заморозки'}. Осталось: ${n.left} из ${L.FREEZE_MAX}.`;
   return `<div class="lr-note ${n.k}" role="status"><span class="lr-note-ico">${n.k === 'gift' ? I.gift : LI.snow(22)}</span><p>${text}</p>
     <button class="icon-btn" data-act="lr-note-x" aria-label="Понятно">${small(I.x, 18)}</button></div>`;
@@ -209,7 +209,8 @@ export function renderLearnRoad() {
 }
 
 // Рисуем путь по точкам (станции, огни, «строится»): кривая с вертикальными касательными в каждой точке.
-// Готовые участки — шпалы и два рельса (рельсы — маской, чтобы шпалы между ними были видны), строящиеся — одни шпалы.
+// Готовые участки — шпалы и два рельса, строящиеся — одни шпалы. Рельсы без маски (на длинной дороге маска во весь экран
+// тяжела для телефона): широкая линия рельсов, поверх — колея цветом фона и снова шпалы, только внутри колеи.
 function drawTrack(el) {
   const svg = el.querySelector('.rd-svg');
   if (!svg) return;
@@ -234,11 +235,11 @@ function drawTrack(el) {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('width', W);
   svg.setAttribute('height', H);
-  svg.innerHTML = `<defs><mask id="rd-rails" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
-      <path d="${built}" stroke="#fff" stroke-width="13" fill="none"/><path d="${built}" stroke="#000" stroke-width="8.6" fill="none"/></mask></defs>
-    <path class="rd-plan" d="${plan}"/>
+  svg.innerHTML = `<path class="rd-plan" d="${plan}"/>
     <path class="rd-sleep" d="${built}"/>
-    <path class="rd-rail" d="${built}" mask="url(#rd-rails)"/>`;
+    <path class="rd-rail" d="${built}"/>
+    <path class="rd-gauge" d="${built}"/>
+    <path class="rd-sleep rd-sleep-in" d="${built}"/>`;
 }
 function topLabel() {
   const el = document.getElementById('rd');
@@ -392,7 +393,13 @@ function openShop(focus) {
 }
 
 // ---------------------------------------------------------------- урок
+let starting = false; // двойное нажатие на «Начать» не открывает урок дважды
 async function start(id) {
+  if (starting) return;
+  starting = true;
+  try { await begin(id); } finally { starting = false; }
+}
+async function begin(id) {
   const f = find(id);
   if (!f || (f.lesson.draft && !opts().drafts)) return;
   const x = L.lessonStates(course(), S.learn, opts()).find((y) => y.lesson.id === id);
