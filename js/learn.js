@@ -1,4 +1,5 @@
-// «Обучение» (2.21.11): экран «Обучение», дорога курса от станции к станции, «Все модули», окна серии и магазина.
+// «Обучение» (2.21.11): своя вкладка в нижнем меню (справа от «Главной», просьба Никиты 05.11.2026) — экран «Обучение»,
+// дорога курса от станции к станции, «Все модули», окна серии и магазина.
 // Прогресс — только в телефоне (meta 'learn'), правила серии и проверки — в learn-state.js, курс — в js/learn/pte.js,
 // сам урок — в learn-play.js. Тексты курса — наши, но всё равно выводятся через esc().
 import { I, esc, small, sheet, openLayer, closeLayer, toast, plural, confirmDialog } from './ui.js';
@@ -51,17 +52,6 @@ function weakest(s) {
 }
 const topicNo = (id) => { let n = 0; for (const m of course().modules) for (const t of m.topics) { n++; if (t.id === id) return n; } return 0; };
 const topicsTotal = () => course().modules.reduce((s, m) => s + m.topics.length, 0);
-
-// ---------------------------------------------------------------- «Ещё» → «Обучение»
-export function learnRowHtml() {
-  const s = S.learn;
-  const p = L.courseProgress(course(), s, opts());
-  const streak = L.streakAt(s, today());
-  const started = Object.keys(s.done).length > 0;
-  const sub = started ? `${esc(course().title)} · пройдено ${L.progressLabel(p)}${streak ? ` · серия ${days(streak)}` : ''}` : `${esc(course().title)}: уроки на 1–2 минуты`;
-  return `<button class="row" data-act="go" data-page="learn" data-key="learn" id="extra-learn"><span class="ico" style="--c:var(--accent-2)">${I.learn}</span>
-    <div class="grow"><div class="t1">Обучение${started ? '' : '<span class="tag on">новое</span>'}</div><div class="t2">${sub}</div></div>${small(I.right, 18)}</button>`;
-}
 
 // ---------------------------------------------------------------- экран «Обучение»
 function pillsHtml(s) {
@@ -123,8 +113,7 @@ export function renderLearn() {
   const s = daily();
   const c = course();
   const p = L.courseProgress(c, s, opts());
-  return `<div class="page-head"><button class="icon-btn" data-act="back" aria-label="Назад">${I.left}</button><h1>Обучение</h1>
-      <button class="icon-btn" data-act="lr-shop" aria-label="Магазин">${LI.bag(22)}</button></div>
+  return `<div class="page-head"><h1>Обучение</h1><button class="icon-btn" data-act="lr-shop" aria-label="Магазин">${LI.bag(22)}</button></div>
     ${pillsHtml(s)}
     ${noteHtml(s)}
     ${repairHtml(s)}

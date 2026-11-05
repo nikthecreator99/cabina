@@ -11,20 +11,25 @@ after(async () => { await env?.stop(); });
 const sheet = (page) => page.locator('#layers .layer:not(.closing)').last();
 const tab = (page, name) => page.locator(`.tab[data-tab=${name}]`).click();
 
-test('нижнее меню (2.5): Главная · Ещё · Профиль, помещается на 320 px', async () => {
+test('нижнее меню (2.5, с 2.21.11 — и «Обучение»): Главная · Обучение · Ещё · Профиль, помещается на 320 px', async () => {
   const { context, page, errors } = await openApp(env);
   await page.setViewportSize({ width: 320, height: 640 });
   const labels = await page.locator('.tab').allInnerTexts();
-  assert.deepEqual(labels.map((s) => s.trim()), ['Главная', 'Ещё', 'Профиль']);
-  const fits = await page.$$eval('.tab', (els) => els.every((e) => e.scrollWidth <= e.clientWidth + 1));
-  assert.ok(fits, 'подписи вкладок не обрезаются');
-  // три вкладки делят ширину поровну
+  assert.deepEqual(labels.map((s) => s.trim()), ['Главная', 'Обучение', 'Ещё', 'Профиль']);
+  // подписи не обрезаются и с очень крупным текстом
+  for (const size of ['m', 'xl']) {
+    await page.evaluate((v) => { document.documentElement.dataset.text = v; }, size);
+    const fits = await page.$$eval('.tab', (els) => els.every((e) => e.scrollWidth <= e.clientWidth + 1));
+    assert.ok(fits, `подписи вкладок не обрезаются (${size})`);
+  }
+  await page.evaluate(() => { delete document.documentElement.dataset.text; });
+  // четыре вкладки делят ширину поровну
   const xs = await page.$$eval('.tab', (els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
-  assert.ok(Math.max(...xs) - Math.min(...xs) <= 1 && xs[0] >= 100, `ширины вкладок: ${xs}`);
+  assert.ok(Math.max(...xs) - Math.min(...xs) <= 1 && xs[0] >= 76, `ширины вкладок: ${xs}`);
   await tab(page, 'extra');
   assert.match(await text(page, '.page-head'), /^Ещё$/);
-  // пункты одним списком (2.6: + «Телефоны»; 2.21: и «Помощь», «Предложить идею» — в том же списке; 2.21.11: «Обучение» — первым)
-  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.key)), ['learn', 'notes', 'docs', 'phones', 'fix', 'help', 'ideas']);
+  // пункты одним списком (2.6: + «Телефоны»; 2.21: и «Помощь», «Предложить идею» — в том же списке)
+  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.key)), ['notes', 'docs', 'phones', 'fix', 'help', 'ideas']);
   await tab(page, 'profile');
   await page.locator('.screen [data-page=profile-edit]').click();
   assert.match(await text(page, '.page-head'), /Редактировать профиль/);

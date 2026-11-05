@@ -18,10 +18,10 @@ const learnOf = (page) => page.evaluate(async () => (await import('./js/store.js
 const stored = (page) => page.evaluate(async () => (await (await import('./js/db.js')).getAll('meta')).find((m) => m.id === 'learn') || null);
 // уроки-черновики (вопросы ещё не проверены машинистом) видны только с этой отметкой
 const drafts = (page) => page.evaluate(() => localStorage.setItem('cabina-learn-drafts', '1'));
+// «Обучение» — своя вкладка внизу (2.21.11, справа от «Главной»); нажатие на открытую вкладку перерисовывает экран
 async function openLearn(page) {
-  await page.locator('.tab[data-tab=extra]').click();
-  await page.locator('#extra-learn').click();
-  await page.waitForSelector('.screen[data-page=learn] .lr-course');
+  await page.locator('.tab[data-tab=learn]').click();
+  await page.waitForSelector('.screen.lr-hub .lr-course');
 }
 async function openRoad(page) {
   await page.locator('.lr-course-main').click();
@@ -55,14 +55,18 @@ const seedLearn = (page, st) => page.evaluate(async (st) => {
 }, st);
 const days = (from, n) => Array.from({ length: n }, (_, i) => new Date(Date.parse(`${from}T00:00:00Z`) + i * 864e5).toISOString().slice(0, 10));
 
-test('«Обучение» — первая строка в «Ещё»; урок без проверки машинистом виден только проверяющему', async () => {
+test('«Обучение» — своя вкладка справа от «Главной»; урок без проверки машинистом виден только проверяющему', async () => {
   const { context, page, errors } = await openApp(env);
+  // в «Ещё» строки «Обучение» нет — всё обучение во вкладке
   await page.locator('.tab[data-tab=extra]').click();
-  const row = page.locator('#extra-list > .row').first();
-  assert.equal(await row.getAttribute('data-key'), 'learn');
-  assert.match(await row.innerText(), /Обучение\s*новое[\s\S]*ПТЭ: уроки на 1–2 минуты/);
-  await row.click();
-  await page.waitForSelector('.lr-course');
+  assert.equal(await page.locator('#extra-list > .row[data-key=learn]').count(), 0);
+  await page.locator('.tab[data-tab=learn]').click();
+  await page.waitForSelector('.screen.lr-hub .lr-course');
+  assert.equal(await page.locator('.tab[data-tab=learn]').getAttribute('aria-current'), 'page');
+  // экран вкладки: без «Назад», справа — магазин
+  assert.equal(await page.locator('.screen .page-head [data-act=back]').count(), 0);
+  assert.match(await page.locator('.screen .page-head').innerText(), /^Обучение$/);
+  assert.equal(await page.locator('.screen .page-head [data-act=lr-shop]').count(), 1);
   assert.match(await page.locator('.lr-course').innerText(), /Твой курс[\s\S]*ПТЭ[\s\S]*Правила технической эксплуатации[\s\S]*Пройдено 0%[\s\S]*Все модули/i);
   assert.match(await page.locator('.lr-pills').innerText(), /0\s*дней[\s\S]*0[\s\S]*∞/);
   const gate = await page.evaluate(async () => {
@@ -80,8 +84,7 @@ test('«Обучение» — первая строка в «Ещё»; урок
   }
   // проверяющему черновики видны
   await drafts(page);
-  await page.locator('.screen .page-head [data-act=back]').click();
-  await page.locator('#extra-learn').click();
+  await openLearn(page);
   await page.waitForSelector('.lr-next [data-act=lr-start]');
   assert.match(await page.locator('.lr-next').innerText(), /Начните с первого урока[\s\S]*Что такое ПТЭ[\s\S]*Урок 1 · 5 вопросов/i);
   assert.deepEqual(errors, []);
@@ -173,10 +176,10 @@ test('урок: ошибка уходит в конец и повторяетс�
   assert.match(await page.locator('.lr-prog').innerText(), /Пройдено 1%/);
   assert.match(await page.locator('.lr-next').innerText(), /Все готовые уроки пройдены[\s\S]*Повторить урок/i);
   assert.match(await page.locator('.lr-pills').innerText(), /1\s*день/);
-  // строка в «Ещё» — без «новое», с прогрессом и серией
-  await page.locator('.screen .page-head [data-act=back]').click();
-  assert.match(await page.locator('#extra-learn').innerText(), /ПТЭ · пройдено 1% · серия 1 день/);
-  assert.doesNotMatch(await page.locator('#extra-learn').innerText(), /новое/);
+  // с другой вкладки и обратно — тот же экран курса, дорога не открыта
+  await page.locator('.tab[data-tab=home]').click();
+  await openLearn(page);
+  assert.equal(await page.locator('.screen[data-page=learn-road]').count(), 0);
   // после перезапуска всё на месте
   await page.reload(); await page.waitForSelector('.screen');
   await openLearn(page);
@@ -215,14 +218,14 @@ test('выйти из урока можно только с вопросом; «
   await page.waitForSelector('.dialog');
   await top(page).getByRole('button', { name: 'Выйти' }).click();
   await page.waitForFunction(() => !document.querySelector('#layers .layer:not(.closing)'));
-  assert.equal(await page.locator('.screen[data-page=learn]').count(), 1, 'остались на экране «Обучение»');
+  assert.equal(await page.locator('.screen.lr-hub').count(), 1, 'остались на экране «Обучение»');
   // прерванный урок не засчитан, серии нет
   const st = await learnOf(page);
   assert.deepEqual(st.done, {});
   assert.deepEqual(st.days, []);
-  // после выхода «Назад» работает как обычно: экран «Обучение» → «Ещё»
+  // после выхода из урока лишнего шага в истории нет: системная «Назад» уходит с экрана «Обучение», урок не возвращается
   await page.goBack();
-  await page.waitForFunction(() => !document.querySelector('.screen[data-page=learn]'));
+  await page.waitForFunction(() => !document.querySelector('.screen.lr-hub'));
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -305,15 +308,13 @@ test('пропуск дня: заморозка и подарок — откры
 
   // серия 9 дней, вчера пропуск, есть заморозка → сработала заморозка
   await seedLearn(page, { days: days('2026-10-10', 9), freezes: 1, best: 9 });
-  await page.locator('.screen .page-head [data-act=back]').click();
-  await page.locator('#extra-learn').click();
+  await openLearn(page);
   await page.locator('.lr-note.froze').waitFor();
   assert.match(await page.locator('.lr-note.froze').innerText(), /Вчера не было урока — серию сохранила заморозка. Осталось: 0 из 2/);
 
   // серия 15 дней, три дня пропуска, заморозок нет, подарок был недавно → серия сгорела, но её можно вернуть
   await seedLearn(page, { days: days('2026-10-02', 15), freezes: 0, best: 15, giftAt: '2026-10-12' });
-  await page.locator('.screen .page-head [data-act=back]').click();
-  await page.locator('#extra-learn').click();
+  await openLearn(page);
   const rep = page.locator('.lr-repair');
   await rep.waitFor();
   assert.match(await rep.innerText(), /Верните серию 15 дней[\s\S]*Пройдите урок 3 дня подряд — и серия вернётся/);

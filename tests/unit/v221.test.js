@@ -40,13 +40,11 @@ test('скелет: у глаз «Уставшие» больше нет под�
 
 test('«Ещё»: порядок — сохранённый, новые пункты в конце, чужое отбрасывается', () => {
   assert.deepEqual(extraOrder(undefined), EXTRA_KEYS);
-  // «Обучение» (2.21.11) — новый пункт: первым, пока человек сам не поставит его на своё место
-  assert.deepEqual(extraOrder(['help', 'phones']), ['learn', 'help', 'phones', 'notes', 'docs', 'fix', 'ideas']);
-  assert.deepEqual(extraOrder(['fix', '<img>', 'fix', 7, 'notes']), ['learn', 'fix', 'notes', 'docs', 'phones', 'help', 'ideas']);
-  assert.deepEqual(extraOrder(['help', 'phones', 'learn']), ['help', 'phones', 'learn', 'notes', 'docs', 'fix', 'ideas']);
+  assert.deepEqual(extraOrder(['help', 'phones']), ['help', 'phones', 'notes', 'docs', 'fix', 'ideas']);
+  assert.deepEqual(extraOrder(['fix', '<img>', 'fix', 7, 'notes']), ['fix', 'notes', 'docs', 'phones', 'help', 'ideas']);
   assert.deepEqual(extraOrder('notes'), EXTRA_KEYS);
   S.settings = { extraOrder: ['ideas'] };
-  assert.deepEqual(extraOrder().slice(0, 2), ['learn', 'ideas']);
+  assert.equal(extraOrder()[0], 'ideas');
 });
 
 test('окончание выходного: после поездки и не дольше двух недель', () => {

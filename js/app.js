@@ -40,7 +40,7 @@ import { renderHelp, helpListHtml } from './help.js';
 import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, joinByCode } from './groups.js';
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
-import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, learnClick, learnAfter, learnRowHtml } from './learn.js';
+import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, learnClick, learnAfter } from './learn.js';
 
 export const VERSION = '2.21.10';
 const app = document.getElementById('app');
@@ -382,7 +382,6 @@ function renderExtra() {
       help: `<button class="row" data-act="go" data-page="help" id="extra-help" data-key="help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
           <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button>`,
       ideas: legalReady() ? ideasRowHtml('extra-ideas').replace('<button class="row"', '<button class="row" data-key="ideas"') : '',
-      learn: learnRowHtml(),
     };
     // один общий список; порядок меняется удержанием пальца (2.21) и хранится в настройках
     html = `<div class="page-head"><h1>Ещё</h1></div>
@@ -558,7 +557,7 @@ function renderSetAbout() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, groups: renderGroups, group: renderGroup, learn: renderLearn, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
@@ -588,6 +587,7 @@ function render({ still = false } = {}) {
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
+  else if (V.tab === 'learn') app.innerHTML = `<div class="screen lr-hub">${renderLearn()}</div>`; // «Обучение» — своя вкладка (2.21.11)
   else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()) || signupTeaserHtml())}</div>`;
   learnAfter(p);
   renderTabbar();

@@ -196,13 +196,10 @@ export const notesFor = (type, num) => {
 
 // ---- Сохранение ----
 // «Ещё»: порядок строк (2.21, settings.extraOrder). Сохранённое — сначала, новые пункты — в конец; неизвестное отбрасываем.
-// EXTRA_TOP — новые пункты, которые встают первыми, пока человек сам не поставит их на своё место («Обучение», 2.21.11).
-export const EXTRA_KEYS = ['learn', 'notes', 'docs', 'phones', 'fix', 'help', 'ideas'];
-const EXTRA_TOP = ['learn'];
+export const EXTRA_KEYS = ['notes', 'docs', 'phones', 'fix', 'help', 'ideas'];
 export function extraOrder(saved = S.settings.extraOrder) {
   const mine = Array.isArray(saved) ? saved.filter((k, i) => EXTRA_KEYS.includes(k) && saved.indexOf(k) === i) : [];
-  const top = EXTRA_TOP.filter((k) => !mine.includes(k));
-  return [...top, ...mine, ...EXTRA_KEYS.filter((k) => !mine.includes(k) && !top.includes(k))];
+  return [...mine, ...EXTRA_KEYS.filter((k) => !mine.includes(k))];
 }
 
 // Размер текста (2.21.6): 'm' обычный, 'l' крупный, 'xl' очень крупный
