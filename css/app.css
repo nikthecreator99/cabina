@@ -1473,3 +1473,12 @@ button.pr-status svg { color: var(--text-2); }
 :root[data-text] .sel-mode > .trip { grid-template-columns: 24px 44px minmax(0, 1fr); }
 :root[data-text] .sel-mode > .trip .sel-dot { grid-row: span 2; }
 :root[data-text] .sel-mode > .trip .trip-right { grid-column: 3; }
+/* «Напомнить в календаре» (2.21.7): колокольчик рядом с отдыхом и явкой, окно с выбором «за сколько» */
+.banner-row { display: flex; gap: 8px; align-items: stretch; }
+.banner-row > .rest-banner { flex: 1; min-width: 0; }
+.banner-row > .remind-btn { width: 52px; height: auto; min-height: 52px; border-radius: var(--r-md); color: var(--warn); background: var(--card-solid); border-color: var(--line-2); }
+.remind-when { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-md); background: var(--card-2); border: 1px solid var(--line); margin-bottom: 14px; }
+.remind-when .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); flex: none; }
+.remind-when b { display: block; font-size: calc(17px * var(--fs)); }
+.remind-when small { display: block; font-size: calc(14px * var(--fs)); color: var(--text-2); margin-top: 2px; }
+#rm-alarm { margin-top: 10px; }

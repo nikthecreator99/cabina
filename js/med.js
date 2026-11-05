@@ -38,6 +38,7 @@ export function medBannerHtml(r) {
   const sub = `${r.left < 0 ? 'Срок был' : 'Срок'} ${dateText(r.due)} · прошлая ${dateText(r.last)}`;
   return `<div class="loyal-banner med-banner" role="status"><button class="grow" data-act="med-add" aria-label="${title}. Добавить пройденную медкомиссию"><span class="ico">${I.medical}</span>
     <span class="txt"><b>${title}</b><small>${sub}</small></span></button>
+    <button class="icon-btn" data-act="remind" data-what="med" data-date="${r.due}" aria-label="Напомнить о медкомиссии в календаре">${small(I.bell, 18)}</button>
     <button class="icon-btn" data-act="med-hide" aria-label="Скрыть напоминание о медкомиссии">${small(I.x, 18)}</button></div>`;
 }
 
@@ -91,7 +92,8 @@ export function medFormHtml(end) {
   return `<div class="switch-row"><div class="grow"><div style="font-weight:700">Напомнить о следующей</div><div class="hint">${sub}</div></div>
       <button type="button" class="switch" role="switch" id="med-on" aria-checked="${cfg.on}" aria-label="Напомнить о следующей медкомиссии" data-act="med-toggle"></button></div>
     <div class="row-field"><label class="hint" for="med-period">Как часто проходите</label>
-      <select class="input" id="med-period" style="width:auto">${MED_PERIODS.map(([m, l]) => `<option value="${m}" ${cfg.months === m ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+      <select class="input" id="med-period" style="width:auto">${MED_PERIODS.map(([m, l]) => `<option value="${m}" ${cfg.months === m ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    ${due && due > todayKey() ? `<button type="button" class="btn btn-ghost btn-sm" data-act="remind" data-what="med" data-date="${due}">${I.bell} Добавить в календарь телефона</button>` : ''}`;
 }
 
 function keyMinusDays(k, n) { return new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10) - n)).toISOString().slice(0, 10); }

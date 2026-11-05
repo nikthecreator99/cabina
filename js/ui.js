@@ -13,6 +13,7 @@ export const I = {
   medical: sv('<path d="M6 3v5a4 4 0 0 0 8 0V3"/><path d="M10 12v2a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="10" r="2"/><path d="M5 3h2M13 3h2"/>'),
   overtime: sv('<path d="M20 12.5A8 8 0 1 1 12 4.5"/><path d="M12 8.5V12l2.5 1.6"/><path d="M18 3v6M15 6h6"/>'),
   clock: sv('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  bell: sv('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>'),
   train: sv('<rect x="5" y="3" width="14" height="14" rx="4"/><path d="M5 10h14"/><circle cx="9" cy="13.5" r="1" fill="currentColor"/><circle cx="15" cy="13.5" r="1" fill="currentColor"/><path d="m8 21 2-4M16 21l-2-4"/>'),
   plus: sv('<path d="M12 5v14M5 12h14"/>'),
   left: sv('<path d="m15 5-7 7 7 7"/>'),

@@ -112,3 +112,18 @@ test('отпуск на дни с поездкой — спросить', async 
   assert.deepEqual(errors.filter((e) => !/Failed to load resource|ERR_/.test(e)), []);
   await context.close();
 });
+
+test('поездка в день медкомиссии — тоже «Проверьте…» (2.21.7)', async () => {
+  const { context, page, errors } = await openApp(env);
+  await seed(page, { trips: [T1, T2], absences: [{ id: 'm1', type: 'medical', start: '2026-10-12', end: '2026-10-12', auto: true, monthHours: {}, createdAt: 1 }] });
+  await page.reload(); await page.waitForSelector('.screen');
+  const f = await openTrip(page, 't2');
+  await setTimes(f, '2026-10-12', '08:00', '2026-10-12', '16:00');
+  await f.locator('[data-act=save-trip]').click();
+  const dlg = page.locator('.dialog');
+  await dlg.waitFor();
+  assert.match(await dlg.innerText(), /попадает на медкомиссию \(12 октября\)/);
+  await dlg.locator('[data-act=no]').click();
+  assert.deepEqual(errors, []);
+  await context.close();
+});

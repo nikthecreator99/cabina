@@ -13,6 +13,7 @@ import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, 
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
+import { openRemind } from './remind.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
 import { tripOverlap, tripAbsences, absenceTrips, tripLength, LONG_TRIP_MIN } from './checks.js';
 import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour } from './tours.js';
@@ -22,8 +23,8 @@ export { computeHomeRest };
 const $ = (root, sel) => root.querySelector(sel);
 const setHTML = (node, html) => { if (node && node.__html !== html) { node.innerHTML = html; node.__html = html; } };
 const addDays = (key, n) => fmtLocal(parseLocal(`${key}T00:00`) + n * DAY).slice(0, 10);
-// Отвлечения, на которые поездка попадать не должна (медкомиссия — несколько часов, с поездкой в один день бывает)
-const ABS_CLASH = { sick: 'больничный', vacation: 'отпуск', study: 'учёбу' };
+// Отвлечения, на которые поездка попадать не должна (медкомиссия — с 2.21.7: Никита — «в день медкомиссии поездки быть не может»)
+const ABS_CLASH = { sick: 'больничный', vacation: 'отпуск', study: 'учёбу', medical: 'медкомиссию' };
 const timesKey = (t) => JSON.stringify([t?.start || '', t?.end || '', (t?.passenger || []).map((p) => [p.start, p.end]), (t?.waiting || []).map((p) => [p.start, p.end])]);
 const monthName = (mk) => `${MONTHS[+mk.slice(5, 7) - 1]} ${mk.slice(0, 4)}`;
 
@@ -1010,6 +1011,7 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
     if (b.dataset.type) { A.type = b.dataset.type; render(); return; }
     if (b.dataset.act === 'med-toggle') { await medClick('med-toggle', b); renderMed(); return; }
+    if (b.dataset.act === 'remind') { openRemind({ what: 'med', date: b.dataset.date }); return; }
     if (b.id === 'af-auto') {
       if (A.auto !== false) {
         A.auto = false;

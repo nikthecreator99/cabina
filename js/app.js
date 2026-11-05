@@ -24,6 +24,7 @@ import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
 import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
 import { medReminder, medBannerHtml, medClick } from './med.js';
+import { openRemind, restRemindKind } from './remind.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml, startSignup } from './account.js';
 import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite } from './auth.js';
 import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
@@ -37,7 +38,7 @@ import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, j
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.21.6';
+export const VERSION = '2.21.7';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -183,6 +184,8 @@ function departBanner(t, now) {
 
 // Напоминание о вознаграждении за преданность (за 90 дней до срока и до месяца выплаты)
 function loyaltyBanner() { const r = loyaltyReminder(); return r ? reminderHtml(r) : ''; }
+// Колокольчик «Напомнить в календаре» (2.21.7) рядом с отдыхом и явкой
+const remindBtn = (what, at, label) => `<button class="icon-btn remind-btn" data-act="remind" data-what="${what}" data-at="${at}" aria-label="${label}">${I.bell}</button>`;
 function medBanner() { const r = medReminder(); return r ? medBannerHtml(r) : ''; }
 
 // 2.16.1: сайт переехал с GitHub на наш сервер в России. Записи привязаны к адресу сайта, поэтому переносятся копией.
@@ -279,9 +282,9 @@ function renderHome() {
     ${moveNag()}
     <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
-    ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${pend ? `<div class="banner-row"><button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn('yavka', statsOf(pend).start, 'Напомнить о явке в календаре')}</div>` : ''}
     ${departBanner(lt && !pend ? lt : null, now)}
-    ${rest ? `<button class="rest-banner" data-act="${editableRest(rest) ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${editableRest(rest) ? ` aria-label="${rest.kind === 'dayOff' ? 'Выходной' : 'Полный отдых'} — изменить время окончания"` : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${rest ? `<div class="banner-row"><button class="rest-banner" data-act="${editableRest(rest) ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${editableRest(rest) ? ` aria-label="${rest.kind === 'dayOff' ? 'Выходной' : 'Полный отдых'} — изменить время окончания"` : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn(restRemindKind(rest.kind), rest.until, 'Напомнить о конце отдыха в календаре')}</div>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() : ''}
     ${backupNag(now) || (isCurrent && !OLD_SITE ? signupNagHtml() : '')}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
@@ -770,6 +773,7 @@ app.addEventListener('click', async (e) => {
     case 'next': shiftMonth(1); break;
     case 'today': goToday(); render(); break;
     case 'add-trip': openTripForm(); break;
+    case 'remind': openRemind({ what: b.dataset.what, at: b.dataset.at ? +b.dataset.at : undefined, date: b.dataset.date || undefined }); break;
     case 'dayoff-edit': if (!openDayOffEdit(id)) openTripForm(id); break;
     case 'trip':
       if (V.sel && b.classList.contains('swipe-row')) {
