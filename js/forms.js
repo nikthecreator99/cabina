@@ -14,6 +14,7 @@ import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
+import { tripOverlap, tripAbsences, absenceTrips, tripLength, LONG_TRIP_MIN } from './checks.js';
 import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour } from './tours.js';
 
 export { computeHomeRest };
@@ -21,6 +22,9 @@ export { computeHomeRest };
 const $ = (root, sel) => root.querySelector(sel);
 const setHTML = (node, html) => { if (node && node.__html !== html) { node.innerHTML = html; node.__html = html; } };
 const addDays = (key, n) => fmtLocal(parseLocal(`${key}T00:00`) + n * DAY).slice(0, 10);
+// Отвлечения, на которые поездка попадать не должна (медкомиссия — несколько часов, с поездкой в один день бывает)
+const ABS_CLASH = { sick: 'больничный', vacation: 'отпуск', study: 'учёбу' };
+const timesKey = (t) => JSON.stringify([t?.start || '', t?.end || '', (t?.passenger || []).map((p) => [p.start, p.end]), (t?.waiting || []).map((p) => [p.start, p.end])]);
 const monthName = (mk) => `${MONTHS[+mk.slice(5, 7) - 1]} ${mk.slice(0, 4)}`;
 
 export let navigateToMonth = () => {};
@@ -242,7 +246,21 @@ export function openTripForm(tripId) {
       const other = S.trips.find((t) => t.id !== d.id && isLive(t));
       if (other) return `Уже есть поездка «в пути» (${tripLabelShort(other).split(' · ')[0]}). Сначала завершите её или укажите окончание этой поездки.`;
     }
+    // поездки не идут одновременно (2.21.5)
+    const clash = tripOverlap(d, S.trips, nowLocal());
+    if (clash) return `Поездка налезает на другую: ${tripLabelShort(clash)}. Две поездки не могут идти одновременно — проверьте дату и время.`;
     return null;
+  };
+  // Мягкие проверки (2.21.5): сохранить можно, но сначала спросим. Время не меняли — не спрашиваем снова.
+  const draftWarnings = (d) => {
+    if (existing && timesKey(existing) === timesKey(d)) return [];
+    const out = [];
+    for (const a of tripAbsences(d, S.absences.filter((x) => ABS_CLASH[x.type]), nowLocal()).slice(0, 2)) {
+      out.push(`Поездка попадает на ${ABS_CLASH[a.type]} (${dateRange(a.start, a.end)}).`);
+    }
+    const len = tripLength(d);
+    if (len > LONG_TRIP_MIN) out.push(`Поездка длиной ${fmtDur(len, { short: true })} — точно так?`);
+    return out;
   };
 
   const types = knownTypes();
@@ -814,6 +832,11 @@ export function openTripForm(tripId) {
       if (text && (!d.locoType || !d.locoNumber)) { showError(el, 'Чтобы сохранить заметку, укажите тип и номер локомотива.'); return; }
       // сначала ошибки в полях, потом — вид отдыха
       if (d.end && !d.restType && needRest()) { showError(el, ''); nudgeRest(); return; }
+      const warn = draftWarnings(d);
+      if (warn.length) {
+        const ok = await confirmDialog({ title: 'Проверьте поездку', text: warn.join(' '), ok: 'Сохранить', cancel: 'Исправить', danger: false });
+        if (!ok) return;
+      }
       let noteOp = null;
       if (text) {
         noteOp = { put: linkedNote
@@ -1012,6 +1035,15 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
       }
       const err = validateAbsence(obj, S.absences);
       if (err) { showError(el, err); return; }
+      // на эти дни уже есть поездки — спросить (2.21.5); даты и вид не меняли — не спрашиваем
+      if (ABS_CLASH[obj.type] && !(existing && existing.start === obj.start && existing.end === obj.end && existing.type === obj.type)) {
+        const trips = absenceTrips(obj, S.trips, nowLocal());
+        if (trips.length) {
+          const n = trips.length;
+          const ok = await confirmDialog({ title: 'Проверьте даты', text: `На эти дни уже ${n === 1 ? `есть поездка: ${tripLabelShort(trips[0])}` : `есть поездки (${n})`}. ${ABS_TYPES[obj.type].label} и поездка в одно время — точно так?`, ok: 'Сохранить', cancel: 'Исправить', danger: false });
+          if (!ok) return;
+        }
+      }
       obj.updatedAt = Date.now();
       try { await saveAbsence(obj); } catch { showError(el, 'Не удалось сохранить. Попробуйте ещё раз.'); return; }
       closeLayer(el);
