@@ -310,15 +310,19 @@ const awardLabel = (a, s) => [a.name, s.tier ? (tierName(a, s.tier) || 'полу
 const order = (aw) => [...AWARDS].sort((a, b) => (aw[b.id].tier > 0) - (aw[a.id].tier > 0)
   || aw[b.id].tier / b.goals.length - aw[a.id].tier / a.goals.length
   || (aw[b.id].last || aw[b.id].days.at(-1) || '').localeCompare(aw[a.id].last || aw[a.id].days.at(-1) || ''));
+// 2.22 (пример Никиты): заголовок «Награды» и справа «Все N из 39 ›»; в полоске — только полученные награды
+// (пока полученных нет — первые, которые можно получить, серыми)
 export function awardsStripHtml() {
   const { aw } = computeAwards();
   const n = medalsOf(aw);
   // без поездок полоска пустая, но награды без поездок бывают («Свой человек», «Идейный», «Наставник») — тогда показываем
   if (!S.trips.length && !n) return '';
-  const shown = order(aw).slice(0, 6);
-  return `<div class="group" id="pr-awards"><div class="group-title">Награды <span class="hint">${n} из ${MEDALS_TOTAL}</span></div>
+  const all = order(aw);
+  const got = all.filter((a) => aw[a.id].tier);
+  const shown = (got.length ? got : all).slice(0, 6);
+  return `<div class="group" id="pr-awards"><div class="group-title pr-gt"><span>Награды</span><button class="pr-all" data-act="go" data-page="awards" id="pr-awards-all">Все ${n} из ${MEDALS_TOTAL}${small(I.right, 16)}</button></div>
     <button class="panel aw-strip" data-act="go" data-page="awards" aria-label="Все награды: получено ${n} из ${MEDALS_TOTAL}">
-      ${shown.map((a) => `<span class="aw-mini ${aw[a.id].tier ? '' : 'locked'}">${pic(a, aw[a.id], 44)}</span>`).join('')}<span class="chev">${small(I.right, 18)}</span></button></div>`;
+      ${shown.map((a) => `<span class="aw-mini ${aw[a.id].tier ? '' : 'locked'}">${pic(a, aw[a.id], 52)}</span>`).join('')}</button></div>`;
 }
 
 // ---- экран «Награды» ----

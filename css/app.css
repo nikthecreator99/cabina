@@ -1393,3 +1393,54 @@ button.pr-status svg { color: var(--text-2); }
 .career-work .pay-field > label { display: flex; align-items: center; gap: 6px; }
 .career-work .cw-head { padding: 10px 14px 2px; font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .06em; }
 .row.add-row .t1 { color: var(--accent); }
+
+/* ---- 2.22: новый вид профиля (пример Никиты): персонаж слева, сведения справа, крупные заголовки разделов ---- */
+.pr-page { display: flex; flex-direction: column; gap: 14px; }
+.pr-card { align-items: stretch; text-align: left; gap: 12px; padding: 16px; }
+.pr-top { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.pr-card .avatar.big { width: 104px; height: 104px; flex: none; }
+.pr-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.pr-card .profile-name { margin-top: 0; }
+.pr-card .profile-name.with-edit { justify-content: space-between; align-items: flex-start; padding-left: 0; gap: 8px; }
+.pr-card .profile-name.with-edit > span { padding-top: 6px; line-height: 1.2; }
+.pr-card .profile-sub { line-height: 1.35; }
+.pr-phone { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.pr-phone svg { flex: none; color: var(--text-2); }
+.pr-card .pr-status { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-top: 0; padding: 10px 14px; border-radius: 18px; text-align: center; font-size: 16px; }
+.pr-card .pr-status > b { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.pr-card .pr-status small { font-size: 14px; }
+.pr-card .pr-status .dot { display: none; }
+.pr-card .pr-status > b::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.pr-card .pr-status.st-trip > b::before { animation: pulse 1.6s infinite; }
+#app.still .pr-card .pr-status > b::before { animation: none; }
+.pr-card button.pr-status { flex-direction: column; }
+.pr-card button.pr-status > svg { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); }
+.pr-card button.pr-status { position: relative; }
+.pr-page .group { gap: 10px; }
+.pr-page .group-title { font-size: 26px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--text); padding: 6px 2px 0; }
+.pr-page .group-title .hint { font-size: 15px; font-weight: 600; }
+.pr-gt { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.pr-all { display: inline-flex; align-items: center; gap: 2px; font-size: 16px; font-weight: 600; color: var(--text-2); padding: 6px 0 6px 8px; min-height: 36px; }
+.pr-page #col-entry-sec .col-search { margin-bottom: 0; }
+.pr-page .aw-strip { justify-content: flex-start; gap: 8px; padding: 14px 12px; }
+.pr-page .aw-mini .aw-art { width: 48px; height: 48px; }
+.pr-page .aw-mini .aw-n { font-size: 11px; line-height: 16px; min-width: 22px; right: -6px; top: -4px; }
+@media (max-width: 360px) {
+  .pr-card .avatar.big { width: 84px; height: 84px; }
+  .pr-top { gap: 10px; }
+  .pr-page .group-title { font-size: 22px; }
+  .pr-page .aw-mini .aw-art { width: 42px; height: 42px; }
+  .pr-page .aw-mini:nth-of-type(n+6) { display: none; }
+}
+
+/* ---- 2.22: группы ---- */
+.grp-btns { display: grid; gap: 10px; }
+.grp-ava { display: grid; place-items: center; background: color-mix(in srgb, var(--night) 18%, transparent); color: var(--night); }
+.grp-ava svg { width: 22px; height: 22px; }
+.grp-sub { margin-top: -6px; }
+.grp-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
+.grp-empty { padding: 4px 2px; }
+#grp-page, #grp-sec { display: flex; flex-direction: column; gap: 12px; }
+#grp-page .group-title, #grp-sec .group-title { margin-top: 6px; }
+.t1 .col-tag { font-size: 11px; padding: 2px 7px; vertical-align: 2px; margin-left: 4px; }
+#grp-delete { color: var(--holiday); background: color-mix(in srgb, var(--holiday) 12%, transparent); border-color: color-mix(in srgb, var(--holiday) 35%, transparent); }

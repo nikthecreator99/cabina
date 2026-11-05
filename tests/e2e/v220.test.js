@@ -53,7 +53,7 @@ test('«Пригласить коллег»: строка в профиле, с�
   const srv = await ready(context, page, OLD);
   await tab(page, 'profile');
   await page.locator('#inv-entry').waitFor();
-  assert.match(await text(page, '#inv-entry'), /Пригласить коллег[\s\S]*Засчитано: 0 · до «Напарник» — ещё 1 приглашение/);
+  assert.match(await text(page, '#inv-entry'), /Пригласить коллег[\s\S]*До «Напарник» — 1 приглашение/);
   await page.locator('#inv-entry').click();
   await page.waitForSelector('.screen[data-page=invites] #inv-new:not([disabled])');
   const scr = await text(page, '.screen');
@@ -121,7 +121,7 @@ test('засчитанные приглашения: число запомина
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.invited?.n === 1);
   assert.deepEqual((await profileOf(page)).invited, { n: 1, days: ['2026-10-20'] });
   await tab(page, 'profile');
-  assert.match(await text(page, '#inv-entry'), /Засчитано: 1 · до «Сменщик» — ещё 2 приглашения/);
+  assert.match(await text(page, '#inv-entry'), /До «Сменщик» — 2 приглашения/);
   await page.locator('#inv-entry').click();
   await page.waitForSelector('#inv-tiers');
   assert.match(await text(page, '#inv-sum'), /Засчитано[\s\S]*1[\s\S]*Ещё не засчитаны[\s\S]*1/);

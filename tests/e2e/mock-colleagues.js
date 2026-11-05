@@ -19,7 +19,9 @@ export async function mockServer(context, init = {}) {
     cards: { [ANNA]: { user_id: ANNA, name: 'Анна Тестовая', role: 'other', depot: 'Сосновка', avatar: null, searchable: true }, [OLEG]: { user_id: OLEG, name: 'Олег Пробный', role: 'driver', depot: null, avatar: null, searchable: true } },
     links: [], statuses: {}, access: [],
     // 2.20: приглашения (как в миграции 0005: в ответе — только числа и срок, без кодов) и идеи
-    role: 'user', invites: { open: [], joined: 0, counted: 0 }, ideas: [], ideasToday: 0, ...init,
+    role: 'user', invites: { open: [], joined: 0, counted: 0 }, ideas: [], ideasToday: 0,
+    // 2.22: группы (как в миграции 0007). groupsOff — сервер без групп (старый): таблиц нет, 404
+    groups: [], members: [], ginvites: [], codes: {}, bans: [], groupsOff: false, ...init,
   };
   let seq = 0;
   const uuid = () => `aaaaaaaa-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
@@ -28,6 +30,17 @@ export async function mockServer(context, init = {}) {
   const main = () => db.consents.some((c) => c.document === CUR && !c.withdrawn_at);
   const mine = (l) => l.state !== 'declined' && (l.from_id === ME || l.to_id === ME);
   const other = (l) => (l.from_id === ME ? l.to_id : l.from_id);
+  // группы: в каких я, кто со мной в общей группе, показывает ли он мне статус через группу
+  const myGroups = () => new Set(db.members.filter((m) => m.user_id === ME).map((m) => m.group_id));
+  const mates = () => new Set(db.members.filter((m) => myGroups().has(m.group_id) && m.user_id !== ME).map((m) => m.user_id));
+  const viaGroup = (id, what) => db.members.some((m) => m.user_id === id && myGroups().has(m.group_id) && m.show_status && (what === 'status' || m.show_place));
+  const gShares = (what) => db.members.some((m) => m.user_id === ME && (what === 'place' ? m.show_place : m.show_status) && db.members.some((x) => x.group_id === m.group_id && x.user_id !== ME));
+  const isAdmin = (g) => db.members.some((m) => m.group_id === g && m.user_id === ME && m.role === 'admin');
+  const gone = (g) => { // ушёл участник: нет админа — дольше всех в группе; никого — группы нет
+    const left = db.members.filter((m) => m.group_id === g);
+    if (!left.length) { db.groups = db.groups.filter((x) => x.id !== g); db.ginvites = db.ginvites.filter((i) => i.group_id !== g); delete db.codes[g]; return; }
+    if (!left.some((m) => m.role === 'admin')) left.sort((a, b) => a.joined_at.localeCompare(b.joined_at))[0].role = 'admin';
+  };
   await context.route('https://api.cabina-app.ru/**', async (route) => {
     const req = route.request();
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
@@ -46,16 +59,23 @@ export async function mockServer(context, init = {}) {
       case '/rest/v1/ideas': return send(200, [...db.ideas].reverse().map(({ id, body: b, state, created_at, answered_at, reply_ok = false }) => ({ id, body: b, state, created_at, answered_at, reply_ok })));
       case '/rest/v1/consents': return send(200, db.consents);
       case '/rest/v1/links': return send(200, db.links.filter(mine).map(({ from_id, to_id, state }) => ({ from_id, to_id, state })));
+      case '/rest/v1/groups': case '/rest/v1/group_members': case '/rest/v1/group_invites': {
+        if (db.groupsOff) return send(404, { code: 'PGRST205', message: 'not found' });
+        const mg = myGroups();
+        if (path.endsWith('/groups')) return send(200, db.groups.filter((g) => mg.has(g.id) || db.ginvites.some((i) => i.group_id === g.id && i.user_id === ME)));
+        if (path.endsWith('/group_members')) return send(200, db.members.filter((m) => mg.has(m.group_id)));
+        return send(200, db.ginvites.filter((i) => i.user_id === ME || isAdmin(i.group_id)));
+      }
       case '/rest/v1/cards': {
-        const seen = new Set([ME, ...db.links.filter((l) => mine(l)).map(other)]);
+        const seen = new Set([ME, ...db.links.filter((l) => mine(l)).map(other), ...mates()]);
         return send(200, Object.values(db.cards).filter((c) => seen.has(c.user_id)));
       }
       case '/rest/v1/statuses': {
-        const seen = new Set([ME, ...db.links.filter((l) => mine(l) && l.state === 'accepted').map(other)]);
+        const seen = new Set([ME, ...db.links.filter((l) => mine(l) && l.state === 'accepted').map(other), ...[...mates()].filter((id) => viaGroup(id, 'status'))]);
         return send(200, Object.entries(db.statuses).filter(([k]) => seen.has(k)).map(([user_id, { place, dest, ...s }]) => ({ user_id, ...s, place: null, dest: null })));
       }
       case '/rest/v1/status_places': {
-        const seen = new Set([ME, ...db.links.filter((l) => mine(l) && l.state === 'accepted').map(other)]);
+        const seen = new Set([ME, ...db.links.filter((l) => mine(l) && l.state === 'accepted').map(other), ...[...mates()].filter((id) => viaGroup(id, 'place'))]);
         return send(200, Object.entries(db.statuses).filter(([k, s]) => seen.has(k) && (s.place || s.dest)).map(([user_id, s]) => ({ user_id, place: s.place || null, dest: s.dest || null })));
       }
       case '/rest/v1/access': return send(200, db.access.filter((a) => a.user_id === ME));
@@ -82,8 +102,28 @@ export async function mockServer(context, init = {}) {
       if (body.p_all) db.access.push({ user_id: ME, item: body.p_item, viewer_id: null });
       else for (const id of body.p_ids || []) if (colleague(id)) db.access.push({ user_id: ME, item: body.p_item, viewer_id: id });
       const has = (item) => db.access.some((a) => a.user_id === ME && a.item === item);
-      if (!has('status')) delete db.statuses[ME];
-      if (!has('place') && db.statuses[ME]) { db.statuses[ME].place = null; db.statuses[ME].dest = null; }
+      if (!has('status') && !gShares('status')) delete db.statuses[ME];
+      if (!has('place') && !gShares('place') && db.statuses[ME]) { db.statuses[ME].place = null; db.statuses[ME].dest = null; }
+      return send(204);
+    }
+    // группы: выйти, отказаться, отменить, исключить, удалить — без согласия; остальное — ниже, после проверки согласия
+    if (rpc === 'leave_group') { db.members = db.members.filter((m) => !(m.group_id === body.p_group && m.user_id === ME)); gone(body.p_group); return send(204); }
+    if (rpc === 'answer_group_invite' && !body.p_accept) { db.ginvites = db.ginvites.filter((i) => !(i.group_id === body.p_group && i.user_id === ME)); return send(204); }
+    if (rpc === 'cancel_group_invite') { if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' }); db.ginvites = db.ginvites.filter((i) => !(i.group_id === body.p_group && i.user_id === body.p_user)); return send(204); }
+    if (rpc === 'remove_from_group') {
+      if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+      db.members = db.members.filter((m) => !(m.group_id === body.p_group && m.user_id === body.p_user)); db.bans.push({ group_id: body.p_group, user_id: body.p_user });
+      return send(204);
+    }
+    if (rpc === 'delete_group') {
+      if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+      db.members = db.members.filter((m) => m.group_id !== body.p_group); gone(body.p_group); return send(204);
+    }
+    if (rpc === 'set_group_share' && !body.p_status) {
+      const m = db.members.find((x) => x.group_id === body.p_group && x.user_id === ME);
+      if (!m) return fail('not found');
+      Object.assign(m, { show_status: false, show_place: false });
+      if (!gShares('status') && !db.access.some((a) => a.user_id === ME && a.item === 'status')) delete db.statuses[ME];
       return send(204);
     }
     if (rpc === 'leave_colleagues') { db.links = db.links.filter((l) => !mine(l)); db.access = db.access.filter((a) => a.user_id !== ME); delete db.cards[ME]; delete db.statuses[ME]; db.consents.forEach((c) => { if (c.document === 'publish-2') c.withdrawn_at = NOW; }); return send(204); }
@@ -107,6 +147,59 @@ export async function mockServer(context, init = {}) {
       if (++db.ideasToday > 5) return fail('limit');
       db.ideas.push({ id: uuid(), body: b, state: 'new', created_at: NOW, answered_at: null, reply_ok: body.p_reply === true });
       return send(200, db.ideas.at(-1).id);
+    }
+    if (rpc === 'create_group') {
+      if (!db.cards[ME]) return fail('name required');
+      if (myGroups().size >= 10) return fail('groups limit');
+      const g = { id: uuid(), name: String(body.p_name || '').trim().slice(0, 30) };
+      db.groups.push(g); db.members.push({ group_id: g.id, user_id: ME, role: 'admin', show_status: false, show_place: false, joined_at: NOW });
+      return send(200, g.id);
+    }
+    if (rpc === 'rename_group') { if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' }); db.groups.find((g) => g.id === body.p_group).name = String(body.p_name).trim().slice(0, 30); return send(204); }
+    if (rpc === 'group_code') {
+      if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+      if (!db.codes[body.p_group] || body.p_new) db.codes[body.p_group] = `G7K2M9Q4X${++seq % 10}`;
+      return send(200, db.codes[body.p_group]);
+    }
+    if (rpc === 'peek_group' || rpc === 'join_group') {
+      const code = String(body.p_code || '').toUpperCase().replace(/[\s-]/g, '');
+      const gid = Object.keys(db.codes).find((k) => db.codes[k] === code);
+      if (!gid) return send(200, null);
+      const g = db.groups.find((x) => x.id === gid);
+      const member = db.members.some((m) => m.group_id === gid && m.user_id === ME);
+      if (rpc === 'peek_group') return send(200, { id: gid, name: g.name, members: db.members.filter((m) => m.group_id === gid).length, member });
+      if (member) return send(200, gid);
+      if (db.bans.some((b) => b.group_id === gid && b.user_id === ME)) return fail('banned');
+      if (!db.cards[ME]) return fail('name required');
+      if (myGroups().size >= 10) return fail('groups limit');
+      db.members.push({ group_id: gid, user_id: ME, role: 'member', show_status: false, show_place: false, joined_at: NOW });
+      return send(200, gid);
+    }
+    if (rpc === 'invite_to_group') {
+      if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+      if (!db.links.some((l) => mine(l) && l.state === 'accepted' && other(l) === body.p_user)) return fail('not found');
+      if (!db.ginvites.some((i) => i.group_id === body.p_group && i.user_id === body.p_user)) db.ginvites.push({ group_id: body.p_group, user_id: body.p_user, invited_by: ME });
+      return send(200, 'sent');
+    }
+    if (rpc === 'answer_group_invite') {
+      if (!db.ginvites.some((i) => i.group_id === body.p_group && i.user_id === ME)) return fail('not found');
+      if (!db.cards[ME]) return fail('name required');
+      db.ginvites = db.ginvites.filter((i) => !(i.group_id === body.p_group && i.user_id === ME));
+      db.members.push({ group_id: body.p_group, user_id: ME, role: 'member', show_status: false, show_place: false, joined_at: NOW });
+      return send(204);
+    }
+    if (rpc === 'make_group_admin') {
+      if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+      const t = db.members.find((m) => m.group_id === body.p_group && m.user_id === body.p_user);
+      if (!t) return fail('not found');
+      db.members.find((m) => m.group_id === body.p_group && m.user_id === ME).role = 'member'; t.role = 'admin';
+      return send(204);
+    }
+    if (rpc === 'set_group_share') {
+      const m = db.members.find((x) => x.group_id === body.p_group && x.user_id === ME);
+      if (!m) return fail('not found');
+      Object.assign(m, { show_status: true, show_place: !!body.p_place });
+      return send(204);
     }
     if (rpc === 'save_card') {
       if (body.p_searchable && !db.consents.some((c) => c.document === 'publish-2' && !c.withdrawn_at)) return fail('publish consent required');
@@ -133,8 +226,8 @@ export async function mockServer(context, init = {}) {
     }
     if (rpc === 'set_status') {
       const has = (item) => db.access.some((a) => a.user_id === ME && a.item === item);
-      if (!db.links.some((l) => mine(l) && l.state === 'accepted') || !has('status')) { delete db.statuses[ME]; return send(204); }
-      const pl = has('place');
+      if ((!db.links.some((l) => mine(l) && l.state === 'accepted') || !has('status')) && !gShares('status')) { delete db.statuses[ME]; return send(204); }
+      const pl = has('place') || gShares('place');
       db.statuses[ME] = { kind: body.p_kind, place: pl ? body.p_place : null, dest: pl ? body.p_dest : null, part: body.p_part, note: body.p_note, until_at: body.p_until, updated_at: NOW };
       return send(204);
     }

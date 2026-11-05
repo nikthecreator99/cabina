@@ -26,17 +26,18 @@ import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml 
 import { medReminder, medBannerHtml, medClick } from './med.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml, startSignup } from './account.js';
 import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite } from './auth.js';
-import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
+import { initColleagues, colleaguesHtml, profilePrivacyRowHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 import { renderHelp, helpListHtml } from './help.js';
+import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, joinByCode } from './groups.js';
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.21.0';
+export const VERSION = '2.22.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -535,7 +536,7 @@ function renderSetAbout() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, groups: renderGroups, group: renderGroup };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
@@ -565,7 +566,7 @@ function render({ still = false } = {}) {
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
-  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(inviteRowHtml()) || signupTeaserHtml())}</div>`;
+  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()) || signupTeaserHtml(), profilePrivacyRowHtml())}</div>`;
   renderTabbar();
   scheduleTours();
   checkAccountAward();
@@ -608,6 +609,7 @@ function go(name) {
   if (name === 'account') accountEnter().then(() => page() === 'account' && rerender());
   if (name === 'colleagues') setTimeout(() => app.querySelector('#col-name:placeholder-shown')?.focus(), 50);
   if (name === 'team') teamReset();
+  if (name === 'groups' || name === 'group') loadColleagues({ force: true });
   if (name === 'help') { V.helpQ = ''; V.helpOpen = new Set(); }
   if (name === 'invites') loadInvites({ force: true });
   if (name === 'ideas') loadIdeas({ force: true });
@@ -667,7 +669,7 @@ export { scheduleTours };
 onChange(() => rerender());
 initInvites({ rerender });
 initIdeas({ rerender });
-initColleagues({ rerender, go, active: () => (V.tab === 'profile' && !V.pages.length) || ['team', 'colleagues', 'privacy', 'account'].includes(page()) });
+initColleagues({ rerender, go, back, active: () => (V.tab === 'profile' && !V.pages.length) || ['team', 'colleagues', 'privacy', 'account', 'groups', 'group'].includes(page()) });
 
 function openTariffsPage() { go('work'); V.pages.push('tariffs'); render(); }
 setTariffsOpener((id = 'pay-sick') => { openTariffsPage(); setTimeout(() => (document.getElementById(id) || document.getElementById('pay-avg'))?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); });
@@ -742,6 +744,7 @@ app.addEventListener('click', async (e) => {
   if (await careerClick(act, b, ctx)) return;
   if (await medClick(act, b, ctx)) return;
   if (await accountClick(act, b, ctx)) return;
+  if (await groupsClick(act, b)) return;
   if (await invitesClick(act, b)) return;
   if (await ideasClick(act, b)) return;
   if (nagClick(act, ctx)) return;
@@ -976,6 +979,19 @@ function checkInviteHash() {
   return true;
 }
 
+// Открыли ссылку группы (2.22): код убираем из адреса; с аккаунтом — показываем, что за группа, и спрашиваем, вступать ли
+function checkGroupHash() {
+  const code = groupFromHash(location.hash);
+  if (!code) return false;
+  history.replaceState(history.state, '', location.pathname + location.search);
+  if (!legalReady()) return true;
+  V.tab = 'profile'; V.pages = [];
+  if (!session()) { toast('Чтобы вступить в группу, войдите в аккаунт и откройте ссылку ещё раз', { ms: 6000 }); go('account'); return true; }
+  go('groups');
+  joinByCode(code);
+  return true;
+}
+
 // ---------------------------------------------------------------- старт
 async function start() {
   goToday();
@@ -997,7 +1013,9 @@ async function start() {
   checkShareHash();
   // ссылка-приглашение от коллеги: форма «Создать аккаунт» с кодом (код тоже после «#», сервер сайта его не видит)
   checkInviteHash();
-  window.addEventListener('hashchange', () => { checkShareHash(); checkInviteHash(); });
+  // ссылка группы (код после «#»)
+  checkGroupHash();
+  window.addEventListener('hashchange', () => { checkShareHash(); checkInviteHash(); checkGroupHash(); });
   // аккаунт: отметка «заходил сегодня» для статистики (раз в день; без аккаунта ничего не отправляется)
   touch(VERSION).catch(() => {});
   // премиум-персонаж: права с сервера (своя отметка у каждого адреса сайта); изменились — перерисовать персонажа

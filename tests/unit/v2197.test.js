@@ -215,6 +215,6 @@ test('статус для коллег и в профиле — плечо, по
   // профиль: живая поездка сегодня, сменили в 09:00
   S.trips = [T('v', '2026-10-20T05:00', '', { routeId: 'ab', legs: [{ id: 'l', start: '2026-10-20T09:00', routeId: 'ba' }] })];
   const st = profileStatus(NOW);
-  assert.equal(st.label, 'В пути');
-  assert.match(st.sub, /^Ольховка → Сосновка · с 05:00$/);
+  assert.equal(st.label, 'В пути с\u00a005:00'); // 2.22: время в заголовке, ниже — откуда и куда
+  assert.equal(st.sub, 'Ольховка → Сосновка');
 });

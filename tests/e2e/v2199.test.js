@@ -88,7 +88,7 @@ test('прошлая работа: добавить, стаж за период 
   await page.locator('[data-act=back]').first().click();
   assert.match(await text(page, '[data-page=career]'), /Стаж 7 лет 2 месяца/);
   await page.locator('[data-act=back]').first().click();
-  assert.match(await text(page, '.profile-card'), /Стаж 7 лет 2 месяца/);
+  assert.match(await text(page, '.profile-card'), /Стаж\s7\sлет\s2\sмес\./);
   assert.deepEqual(errors, []);
   await context.close();
 });

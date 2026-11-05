@@ -105,7 +105,7 @@ test('карьера: дата устройства, должности, окл�
   await page.waitForFunction(() => !document.querySelector('.loyal-banner'));
   // в профиле — стаж
   await tab(page, 'profile');
-  assert.match(await text(page, '.profile-card'), /Машинист[\s\S]*Стаж 4 года 10 месяцев/);
+  assert.match(await text(page, '.profile-card'), /Машинист[\s\S]*Стаж\s4\sгода\s10\sмес\./);
   assert.deepEqual(errors, []);
   await context.close();
 });

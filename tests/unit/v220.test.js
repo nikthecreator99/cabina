@@ -177,8 +177,8 @@ test('плашка «кто из коллег в пути»: от 5 поездо
   assert.equal(NAG_SNOOZE, 30 * DAY);
 });
 
-test('согласие privacy-3: приглашения, идеи, число дней захода — названы прямо; пригласивший видит только числа', () => {
-  assert.equal(CONSENT_VERSION, 'privacy-3');
+test('согласие (с 2.20, privacy-3 и дальше): приглашения, идеи, число дней захода — названы прямо; пригласивший видит только числа', () => {
+  assert.match(CONSENT_VERSION, /^privacy-[3-9]$/);
   const all = SERVER_DATA.join(' ');
   assert.match(all, /число разных дней.*без самих дат/);
   assert.match(all, /по чьему приглашению/);

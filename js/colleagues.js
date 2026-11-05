@@ -124,7 +124,8 @@ function accessRows(rows, me) {
 
 // Снимок с сервера: согласия, моя карточка, предложения мне, мои предложения, коллеги со статусом, кому что видно.
 // Станции статуса (с 2.16) приходят отдельно — их сервер отдаёт только тем, кому человек показывает, где он.
-export function buildSnapshot(me, { consents, links, cards, statuses, places, access }) {
+// Группы (2.22): groups/members/ginvites — null, если на сервере их ещё нет (тогда groupsOn = false).
+export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null }) {
   me = String(me).toLowerCase();
   const ok = (doc) => arr(consents).some((c) => c && c.document === doc && !c.withdrawn_at);
   const cardOf = new Map();
@@ -155,8 +156,49 @@ export function buildSnapshot(me, { consents, links, cards, statuses, places, ac
   }
   const byName = (a, b) => a.card.name.localeCompare(b.card.name, 'ru');
   out.colleagues.sort(byName); out.incoming.sort(byName); out.outgoing.sort(byName);
+  Object.assign(out, buildGroups(me, { groups, members, ginvites, cardOf, statusOf }));
   return out;
 }
+
+const noCard = (id) => ({ id, name: 'Без имени', role: '', depot: '', avatar: null, searchable: false });
+// Группы: в каких я, кто в них (статус участника — только если он показывает его этой группе), приглашения мне.
+// Всё — непроверенное: id только uuid, название — через txt (не длиннее 30), роли — из списка.
+function buildGroups(me, { groups, members, ginvites, cardOf, statusOf }) {
+  if (!Array.isArray(groups) || !Array.isArray(members) || !Array.isArray(ginvites)) return { groupsOn: false, groups: [], groupInvites: [] };
+  const gname = new Map();
+  for (const g of groups) if (g && UUID.test(String(g.id))) gname.set(String(g.id).toLowerCase(), txt(g.name, 30) || 'Группа');
+  const by = new Map();
+  for (const m of members) {
+    if (!m || !UUID.test(String(m.group_id)) || !UUID.test(String(m.user_id))) continue;
+    const gid = m.group_id.toLowerCase(); const uid = m.user_id.toLowerCase();
+    if (!gname.has(gid)) continue;
+    if (!by.has(gid)) by.set(gid, new Map());
+    const st = m.show_status === true;
+    by.get(gid).set(uid, { id: uid, card: cardOf.get(uid) || noCard(uid), admin: m.role === 'admin', show: { status: st, place: st && m.show_place === true },
+      joined: time(m.joined_at), status: st && uid !== me ? statusOf.get(uid) || null : null });
+  }
+  const out = [];
+  for (const [gid, mm] of by) {
+    const mine = mm.get(me);
+    if (!mine) continue; // приглашённый видит только название, участников — нет
+    const list = [...mm.values()].sort((a, b) => (b.admin - a.admin) || a.card.name.localeCompare(b.card.name, 'ru'));
+    const pending = arr(ginvites).filter((i) => i && String(i.group_id).toLowerCase() === gid && UUID.test(String(i.user_id)) && String(i.user_id).toLowerCase() !== me)
+      .map((i) => { const id = String(i.user_id).toLowerCase(); return { id, card: cardOf.get(id) || noCard(id) }; });
+    out.push({ id: gid, name: gname.get(gid), admin: mine.admin, me: mine.show, members: list, pending });
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const invites = [];
+  for (const i of arr(ginvites)) {
+    if (!i || !UUID.test(String(i.group_id)) || String(i.user_id).toLowerCase() !== me) continue;
+    const gid = i.group_id.toLowerCase();
+    if (!gname.has(gid) || out.some((g) => g.id === gid)) continue;
+    const from = UUID.test(String(i.invited_by)) ? String(i.invited_by).toLowerCase() : '';
+    invites.push({ id: gid, name: gname.get(gid), from: from ? (cardOf.get(from) || noCard(from)) : null });
+  }
+  return { groupsOn: true, groups: out, groupInvites: invites };
+}
+// Показываю ли я статус ('status') или «где я» ('place') хоть одной группе, где есть кто-то кроме меня
+export const groupShare = (snap, item) => !!snap?.groups?.some((g) => g.me[item] && g.members.length > 1);
 
 // Кому сейчас виден статус ('status') или «где я» ('place'): none — никому, all — всем коллегам,
 // some — выбранным (только тем, кто и сейчас коллега). Статус выключен в телефоне — никому, «где я» без статуса — тоже.
@@ -296,7 +338,15 @@ export function loadColleagues({ force = false } = {}) {
       restGet('status_places?select=user_id,place,dest'),
       restGet('access?select=user_id,item,viewer_id'),
     ]);
+    // группы (2.22) — отдельно: старый сервер без них не должен ломать «Коллег»
+    const gs = await Promise.all([
+      restGet('groups?select=id,name'),
+      restGet('group_members?select=group_id,user_id,role,show_status,show_place,joined_at'),
+      restGet('group_invites?select=group_id,user_id,invited_by'),
+    ]);
     if (mine()?.sub?.toLowerCase() !== sub) return null; // за это время вышли из аккаунта
+    const gBad = gs.find((r) => !r?.ok);
+    if (gBad !== undefined && !notReady(gBad)) rs.push(gBad);
     const bad = rs.find((r) => !r?.ok);
     if (bad !== undefined) {
       C.err = !bad ? 'offline' : notReady(bad) ? 'server' : 'error';
@@ -304,7 +354,8 @@ export function loadColleagues({ force = false } = {}) {
       return C.snap;
     }
     const [consents, links, cards, statuses, places, access] = rs.map((r) => r.data);
-    C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access });
+    const [groups, members, ginvites] = gBad === undefined ? gs.map((r) => r.data) : [null, null, null];
+    C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access, groups, members, ginvites });
     C.at = Date.now(); C.err = '';
     return C.snap;
   })().finally(() => { C.loading = null; });
@@ -368,10 +419,11 @@ async function sync() {
       }
     }
     // статус включён, а показывать некому (выбрали «никто» на другом устройстве, удалили всех выбранных) — выключаем
-    if (pv.status && accessMode(snap, 'status', pv).mode === 'none') { await saveProfile({ privacy: { ...pv, status: false } }); return; }
-    let st = pv.status && snap.colleagues.length ? statusPayload(statusFacts()) : null;
+    // (группы, 2.22: показываю статус группе — значит, показывать есть кому)
+    if (pv.status && accessMode(snap, 'status', pv).mode === 'none' && !groupShare(snap, 'status')) { await saveProfile({ privacy: { ...pv, status: false } }); return; }
+    let st = pv.status && (snap.colleagues.length || groupShare(snap, 'status')) ? statusPayload(statusFacts()) : null;
     // «где я» никому не показываем — станции не отправляем вовсе
-    if (st && accessMode(snap, 'place', pv).mode === 'none') st = { ...st, p_place: null, p_dest: null };
+    if (st && accessMode(snap, 'place', pv).mode === 'none' && !groupShare(snap, 'place')) st = { ...st, p_place: null, p_dest: null };
     if (st) {
       const m = mark(st);
       if (m !== last.status || Date.now() - last.statusAt > RESEND) {
@@ -444,7 +496,7 @@ export async function ensureConsent() {
 }
 
 // Без имени коллеги не поймут, кто это: сервер карточку без имени не принимает
-async function ensureCard() {
+export async function ensureCard() {
   const pv = privacyOf();
   const want = cardPayload(S.profile, { findable: pv.find && !!C.snap?.consent.publish, ...avatarRights() });
   if (!want) {
@@ -513,6 +565,14 @@ function cardAvatar(card, size = 44) {
   const ini = initials(card.name);
   return ini ? `<span class="ava-txt">${esc(ini)}</span>` : I.user;
 }
+export const colSnap = () => C.snap;
+export const colSub = () => C.sub;
+export const colMarkStatusCleared = () => { const last = readSync(C.sub); last.status = ''; last.statusAt = 0; writeSync(last); if (C.snap) C.snap.myStatus = null; };
+export const colSync = () => scheduleSync(0);
+export const colRerender = () => hooks.rerender();
+export const colGo = (p) => hooks.go(p);
+export const colBack = () => hooks.back?.();
+export { cardAvatar, cardSub, pill, avaBox, mine as colMine, snapOrSay, notReady, OFFLINE, needAccount };
 const cardSub = (card) => [card.role === 'other' ? '' : ROLE_NAMES[card.role], card.depot ? `депо ${card.depot}` : ''].filter(Boolean).join(' · ');
 const pill = (line, cls = 'col-st') => `<span class="${cls} st-${line.kind}"><span class="dot"></span><b>${esc(line.label)}</b>${line.sub ? `<small>${esc(line.sub)}</small>` : ''}</span>`;
 const avaBox = (card) => `<span class="col-ava" aria-hidden="true">${cardAvatar(card)}</span>`;
@@ -591,9 +651,16 @@ export function colleaguesHtml(extra = '') {
     if (k) badge = `<span class="col-badge" aria-label="Новых предложений: ${k}">${k}</span>`;
   }
   return `<div class="group" id="col-entry-sec"><div class="group-title">Коллеги</div>
-    <button class="col-search" data-act="go" data-page="colleagues" id="col-find" aria-label="Найти коллегу">${small(I.search, 20)}<span>Найти</span></button>
+    <button class="col-search" data-act="go" data-page="colleagues" id="col-find" aria-label="Найти коллегу">${small(I.search, 20)}<span>Найти коллегу</span></button>
     <div class="panel"><button class="row" data-act="go" data-page="team" id="col-entry"><span class="ico" style="--c:var(--ok)">${I.users}</span>
       <div class="grow"><div class="t1">Мои коллеги</div><div class="t2">${esc(sub)}</div></div>${badge}${small(I.right, 18)}</button>${extra}</div></div>`;
+}
+
+// Строка «Приватность профиля» внизу профиля (2.22): с аккаунтом — экран «Приватность»
+export function profilePrivacyRowHtml() {
+  if (!legalReady() || !mine()) return '';
+  return `<div class="panel"><button class="row" data-act="go" data-page="privacy" id="pr-privacy"><span class="ico" style="--c:var(--ok)">${I.shield}</span>
+    <div class="grow"><div class="t1">Приватность профиля</div><div class="t2">Вы выбираете, что видят коллеги</div></div>${small(I.right, 18)}</button></div>`;
 }
 
 export function teamReset() { C.teamQ = ''; }
@@ -611,7 +678,7 @@ export function renderTeam() {
   if (!snap) return `${head}<div class="col-sec" id="col-sec">${loadingHtml()}</div>`;
   if (!snap.consent.main) {
     return `${head}<div class="col-sec" id="col-sec">
-      <div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились личные приглашения и «Идеи». Чтобы пользоваться «Коллегами», прочитайте и примите согласие.</div></div>
+      <div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились группы коллег. Чтобы пользоваться «Коллегами», прочитайте и примите согласие.</div></div>
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
   const q = C.teamQ;
@@ -653,9 +720,10 @@ export function renderPrivacy() {
   const snap = C.snap;
   const pv = privacyOf();
   let mineLine = null;
-  if (snap && accessMode(snap, 'status', pv).mode !== 'none') {
+  const toGroups = snap ? snap.groups.filter((g) => g.me.status && pv.status) : [];
+  if (snap && (accessMode(snap, 'status', pv).mode !== 'none' || toGroups.length)) {
     let st = statusPayload(statusFacts());
-    if (st && accessMode(snap, 'place', pv).mode === 'none') st = { ...st, p_place: null, p_dest: null };
+    if (st && accessMode(snap, 'place', pv).mode === 'none' && !groupShare(snap, 'place')) st = { ...st, p_place: null, p_dest: null };
     mineLine = colleagueLine(payloadStatus(st));
   }
   const findSub = pv.find ? `Включено: вас найдут по имени «${esc(cleanText(S.profile.name))}».` : 'Выключено: в поиске вас нет, предложить стать коллегами можете только вы.';
@@ -670,6 +738,7 @@ export function renderPrivacy() {
         ${accessRow('status', I.train, '--accent', snap)}
         ${accessRow('place', I.route, '--night', snap)}
       </div>
+      ${toGroups.length ? `<div class="hint" id="pv-groups">Ещё статус видят группы: ${esc(toGroups.map((g) => `«${g.name}»`).join(', '))}. Это меняется в самой группе.</div>` : ''}
       ${!snap ? `<div class="hint">${C.err ? esc(C.err === 'server' ? SERVER_OFF : 'Нет связи с сервером — покажем, когда появится интернет.') : 'Загружаем…'}</div>`
         : mineLine ? `<div class="hint pv-preview">Так вас видят: ${pill(mineLine)}</div>`
         : accessMode(snap, 'status', pv).mode !== 'none' ? '<div class="hint">Пока нечего показать: добавьте поездку.</div>' : ''}
@@ -678,10 +747,10 @@ export function renderPrivacy() {
     <div class="group"><div class="group-title">Поиск и карточка</div>
       <div class="panel" id="pv-card">
         ${cardRow('find', 'Меня можно найти', findSub, pv.find)}
-        ${cardRow('depot', 'Депо', 'Видят коллеги, те, с кем есть предложение, и поиск — если вас можно найти.', pv.depot)}
+        ${cardRow('depot', 'Депо', 'Видят коллеги, участники ваших групп, те, с кем есть предложение, и поиск — если вас можно найти.', pv.depot)}
         ${cardRow('avatar', 'Персонаж', 'Без этого вместо персонажа — первые буквы имени.', pv.avatar)}
       </div>
-      <div class="hint">Имя и должность видят коллеги и те, с кем есть предложение. Изменить их — «Редактировать профиль».</div>
+      <div class="hint">Имя и должность видят коллеги, участники ваших групп и те, с кем есть предложение. Изменить их — «Редактировать профиль».</div>
     </div>`;
 }
 
@@ -768,10 +837,21 @@ export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
       ${nums || fact('Коллеги', 'Пока нет')}`
     : '<div class="row"><div class="grow t2">Вы не включали «Коллеги» — о коллегах на сервере ничего нет.</div></div>';
 
+  // группы (2.22): название, роль, сколько участников, показываю ли статус
+  const grs = arr(d.groups).filter((g) => g && typeof g === 'object').map((g) => {
+    const m = Number.isInteger(g.members) && g.members > 0 ? g.members : 0;
+    const shown = g.show_status === true ? (g.show_place === true ? 'видят статус и где вы' : 'видят статус') : 'статус не видят';
+    return `<div class="row"><div class="grow"><div class="t1">${esc(txt(g.name, 30) || 'Группа')}</div>
+      <div class="t2">${esc([g.role === 'admin' ? 'вы администратор' : 'участник', m ? `${m} ${plural(m, 'участник', 'участника', 'участников')}` : '', shown].filter(Boolean).join(' · '))}</div></div></div>`;
+  }).join('');
+  const ginv = arr(d.group_invites).filter((g) => g && typeof g === 'object');
+  const ginvRows = [[ginv.filter((g) => g.to_me === true).length, 'Приглашения вам в группы'], [ginv.filter((g) => g.to_me !== true).length, 'Ваши приглашения в группы без ответа']]
+    .filter(([k]) => k > 0).map(([k, label]) => `<div class="row"><div class="grow"><div class="t1">${label}</div><div class="t2">стираются через 30 дней</div></div><b class="num">${k}</b></div>`).join('');
   return `<p class="hint">Это всё, что хранится о вас на сервере CABINA в России.</p>
     <div class="group-title">Аккаунт</div><div class="panel">${account}</div>
     ${consents ? `<div class="group-title">Согласия</div><div class="panel">${consents}</div>` : ''}
     <div class="group-title">Коллеги</div><div class="panel">${col}</div>
+    ${grs || ginvRows ? `<div class="group-title">Группы</div><div class="panel" id="my-groups">${grs}${ginvRows}</div>` : ''}
     ${invRows ? `<div class="group-title">Приглашения</div><div class="panel">${invRows}</div>` : ''}
     ${ideas ? `<div class="group-title">Ваши идеи</div><div class="panel">${ideas}</div>` : ''}
     <div class="notice ok">${I.shield}<div><b>Не на сервере:</b> поездки, заработок, отвлечения, документы, заметки и телефонная книжка — они только в вашем телефоне.</div></div>
@@ -911,11 +991,12 @@ async function setAccess(item, mode, ids = []) {
   if (!r?.ok) { toast(colError(r), { error: true, ms: 5000 }); return false; }
   snap.access[item] = { all: mode === 'all', ids: mode === 'some' ? ids : [] };
   if (item === 'status') {
-    if (mode === 'none') {
+    const on = mode !== 'none' || groupShare(snap, 'status'); // группе показываю — статус продолжает уходить
+    if (!on) {
       // сервер стёр статус сам: никому не показываю — и хранить незачем
       const last = readSync(C.sub); last.status = ''; last.statusAt = 0; writeSync(last); snap.myStatus = null;
     }
-    if (privacyOf().status !== (mode !== 'none')) await saveProfile({ privacy: { ...privacyOf(), status: mode !== 'none' } });
+    if (privacyOf().status !== on) await saveProfile({ privacy: { ...privacyOf(), status: on } });
   }
   scheduleSync(0);
   hooks.rerender();

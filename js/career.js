@@ -61,11 +61,12 @@ export function tenure(fromKey, toKey) {
   if (addMonths(fromKey, months) > toKey) months -= 1;
   return { y: Math.floor(months / 12), m: months % 12, d: daysBetween(addMonths(fromKey, months), toKey) };
 }
-export function tenureText(t) {
+// short — «5 лет 1 мес.» (для карточки профиля, 2.22)
+export function tenureText(t, { short = false } = {}) {
   if (!t) return '';
   const parts = [];
   if (t.y) parts.push(`${t.y} ${plural(t.y, 'год', 'года', 'лет')}`);
-  if (t.m) parts.push(`${t.m} ${plural(t.m, 'месяц', 'месяца', 'месяцев')}`);
+  if (t.m) parts.push(short ? `${t.m} мес.` : `${t.m} ${plural(t.m, 'месяц', 'месяца', 'месяцев')}`);
   if (!t.y && !t.m) parts.push(`${t.d} ${plural(t.d, 'день', 'дня', 'дней')}`);
   return parts.join(' ');
 }

@@ -42,8 +42,9 @@ test('профиль: ✎ у имени вместо большой кнопки
   assert.ok(pen.x > name.x + name.width - 1 && Math.abs((pen.y + pen.height / 2) - (name.y + name.height / 2)) < 6, 'значок — справа от имени, на одной строке');
   assert.deepEqual(await page.locator('#pr-edit').evaluate((b) => [b.offsetWidth, b.offsetHeight]), [38, 38], 'на значок легко попасть');
   // порядок: карточка → награды → «Найти коллегу» → «Мои коллеги»; рекордов в профиле нет
-  assert.match(await text(page, '.screen'), /Иван Тестовый[\s\S]*Награды[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги/i);
-  assert.equal((await text(page, '#col-find')).trim(), 'Найти', 'с 2.19.3 — просто «Найти»');
+  // 2.22 (пример Никиты): карточка → «Коллеги» → «Награды»
+  assert.match(await text(page, ".screen"), /Иван Тестовый[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Награды/i);
+  assert.equal((await text(page, '#col-find')).trim(), 'Найти коллегу', 'с 2.22 — снова «Найти коллегу» (пример Никиты)');
   assert.equal(await page.locator('#pr-records').count(), 0);
   assert.ok((await box(page, '#col-find')).y < (await box(page, '#col-entry')).y);
   assert.doesNotMatch(await text(page, '#col-find'), /нов/i, 'без слова «новых»');
@@ -55,7 +56,7 @@ test('профиль: ✎ у имени вместо большой кнопки
     const n2 = await box(page, '.profile-name > span');
     const p2 = await box(page, '#pr-edit');
     assert.ok(p2.x + p2.width <= 320 - 16, `значок не вылезает, ${theme}`);
-    assert.ok(Math.abs((n2.x + n2.width / 2) - 160) < 4, `имя по центру, ${theme}`);
+    assert.ok(n2.x > 100, `имя справа от персонажа (2.22), ${theme}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
   // ✎ открывает «Редактировать профиль»

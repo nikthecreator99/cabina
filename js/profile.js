@@ -2,7 +2,7 @@
 // Экран «Профиль» — просмотр и «Коллеги»; изменить персонажа, имя, должность и депо — «Редактировать профиль».
 // «Приватность» с 2.16 — в Настройках аккаунта (colleagues.js): там же и кому из коллег что видно.
 // С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
-import { I, esc, small, pageHead, toast, confirmDialog, whenShort, dayMonth } from './ui.js';
+import { I, esc, small, pageHead, toast, confirmDialog, infoDialog, whenShort, dayMonth } from './ui.js';
 import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf, legAt, legEnds, legRoute } from './store.js';
 import { dateKeyOf, parseLocal, hasLegs } from './calc.js';
 import { ROLES, OVERREST_MAX } from './pay.js';
@@ -35,7 +35,7 @@ export function avatarHtml(p = S.profile, size = 96) {
     : initials(p.name) ? `<span class="ava-txt">${esc(initials(p.name))}</span>` : I.user;
 }
 
-const subLine = (p) => [ROLES[p.role] ? ROLES[p.role] + (p.role === 'driver' && p.klass ? `, ${p.klass} класс` : '') : '', p.depot ? `депо ${p.depot}` : ''].filter(Boolean).join(' · ');
+const roleLine = (p) => (ROLES[p.role] ? ROLES[p.role] + (p.role === 'driver' && p.klass ? `, ${p.klass} класс` : '') : '');
 
 // Статус: в пути → на отвлечении → на выходном → на отдыхе в пункте оборота / жду явку → между поездками.
 // statusFacts — что происходит (без текста); из этого строится строка в профиле и то, что увидят коллеги (colleagues.js).
@@ -75,7 +75,8 @@ export function profileStatus(now = nowLocal()) {
   const st = (label, sub = '') => ({ kind: f.kind, label, sub, tripId: f.tripId || null });
   switch (f.kind) {
     case 'soon': return st('Скоро явка', [whenShort(f.start, now), path(f.trip)].filter(Boolean).join(' · '));
-    case 'trip': return st('В пути', [f.leg ? legPath(f.leg) : path(f.trip), `с\u00a0${when(f.start, now)}`].filter(Boolean).join(' · '));
+    // «В пути с 07:30» и ниже — откуда и куда (2.22, по примеру Никиты)
+    case 'trip': return st(`В пути с\u00a0${when(f.start, now)}`, f.leg ? legPath(f.leg) : path(f.trip));
     case 'abs': return st('На отвлечении', `до ${dayMonth(parseLocal(`${f.end}T00:00`))} включительно`);
     case 'dayoff': return st('На выходном', `до ${when(f.until, now)}`);
     case 'rest': return st('На отдыхе', [f.house, `до ${when(f.until, now)}`].filter(Boolean).join(' · '));
@@ -94,21 +95,33 @@ function statusHtml(st) {
 // colleagues — раздел «Коллеги» (colleagues.js собирает его в app.js: так модули не зависят друг от друга по кругу)
 // colleagues — строка «Коллеги» (colleagues.js), передаётся из app.js без круговых импортов.
 // Свои часы и поездки здесь не показываем (просьба Никиты, 2.19.1): они на главной и в статистике.
-export function renderProfile(colleagues = '') {
+// 2.22 (пример Никиты): персонаж слева, справа имя с ✎, должность, депо и стаж, телефон; статус — во всю ширину карточки.
+// Ниже — «Коллеги», «Награды» и строка «Приватность профиля».
+// privacyRow — строка «Приватность профиля» (с аккаунтом ведёт в «Приватность», без — объясняет, где хранится профиль)
+export function renderProfile(colleagues = '', privacyRow = '') {
   const p = S.profile;
   const st = profileStatus();
+  const t = totalTenure(careerOf(p));
+  const line2 = [p.depot ? `депо ${p.depot}` : '', t ? `Стаж ${tenureText(t, { short: true }).replace(/ /g, '\u00a0')}` : ''].filter(Boolean).join(' · ');
+  const subs = [roleLine(p) && `<div class="profile-sub">${esc(roleLine(p))}</div>`, line2 && `<div class="profile-sub">${esc(line2)}</div>`,
+    p.phone && `<div class="profile-sub pr-phone">${small(I.call, 16)} <span class="nw">${esc(p.phone)}</span></div>`].filter(Boolean).join('');
   return `${pageHead('Профиль', { right: `<button class="icon-btn" data-act="go" data-page="settings" aria-label="Настройки">${I.gear}</button>` })}
-    <section class="profile-card">
-      <button class="avatar view big" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}</button>
-      <div class="profile-name with-edit">${p.name ? `<span>${esc(p.name)}</span>` : '<span class="ph">Имя не указано</span>'}<button class="pr-edit" id="pr-edit" data-act="go" data-page="profile-edit" aria-label="Редактировать профиль">${small(I.edit, 18)}</button></div>
-      <div class="profile-sub">${esc(subLine(p))}</div>
-      ${p.phone ? `<div class="profile-sub">${small(I.call, 14)} <span class="nw">${esc(p.phone)}</span></div>` : ''}
-      ${(() => { const t = totalTenure(careerOf(p)); return t ? `<div class="profile-sub">${small(I.briefcase, 14)} Стаж ${tenureText(t)}</div>` : ''; })()}
+    <div class="pr-page">
+    <section class="profile-card pr-card">
+      <div class="pr-top">
+        <button class="avatar view big" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}</button>
+        <div class="pr-info">
+          <div class="profile-name with-edit">${p.name ? `<span>${esc(p.name)}</span>` : '<span class="ph">Имя не указано</span>'}<button class="pr-edit" id="pr-edit" data-act="go" data-page="profile-edit" aria-label="Редактировать профиль">${small(I.edit, 18)}</button></div>
+          ${subs}
+        </div>
+      </div>
       ${st ? statusHtml(st) : ''}
     </section>
-    ${awardsStripHtml()}
     ${colleagues}
-    <div class="notice ok">${I.shield}<div><b>Профиль хранится в этом телефоне.</b> Коллеги видят только то, что вы сами включили в «Приватности». Профиль попадает в резервную копию — не пересылайте её другим людям.</div></div>`;
+    ${awardsStripHtml()}
+    ${privacyRow || `<div class="panel"><button class="row" data-act="pr-privacy-info" id="pr-privacy"><span class="ico" style="--c:var(--ok)">${I.shield}</span>
+      <div class="grow"><div class="t1">Приватность профиля</div><div class="t2">Профиль хранится только в этом телефоне</div></div>${small(I.right, 18)}</button></div>`}
+    </div>`;
 }
 
 // 2.19: депо пишут по-разному («тд64», «тд 64», «Тд-64»). Код депо (буквы + номер) приводим к виду «ТД-64»;
@@ -155,6 +168,10 @@ export async function profileClick(act, b) {
   if (act === 'pr-priv') {
     const pv = privacyOf();
     await saveProfile({ privacy: { ...pv, [b.dataset.k]: !pv[b.dataset.k] } });
+    return true;
+  }
+  if (act === 'pr-privacy-info') {
+    infoDialog({ title: 'Приватность профиля', text: 'Профиль хранится в этом телефоне. Коллеги видят только то, что вы сами включили в «Приватности» (для этого нужен аккаунт). Профиль попадает в резервную копию — не пересылайте её другим людям.' });
     return true;
   }
   if (act === 'photo-del') {

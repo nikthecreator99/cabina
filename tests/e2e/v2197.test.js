@@ -65,7 +65,7 @@ test('в пути: «Добавить локомотив» — время «се
   assert.deepEqual(await row.locator('.chip.loco').allInnerTexts(), ['2ЭС5К №355', 'ВЛ80С №1234']);
   // профиль: в пути — по маршруту второго локомотива
   await page.locator('.tab[data-tab=profile]').click();
-  assert.match(await text(page, '#pr-status'), /В пути\s*Ольховка → Сосновка · с\s05:00/);
+  assert.match(await text(page, "#pr-status"), /В пути с\s05:00\s*Ольховка → Сосновка/);
   // вернулись: окончание поездки — следование пассажиром заканчивается вместе с ней
   await page.locator('.tab[data-tab=home]').click();
   await page.locator('.trip[data-id=v]').click();

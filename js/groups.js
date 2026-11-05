@@ -1,0 +1,426 @@
+// Группы коллег (2.22, решения Никиты 31.10 и 05.11.2026): бригада, колонна, депо — список людей с названием.
+// Создать может любой, у кого есть аккаунт и «Коллеги»; создатель — администратор: переименовать, пригласить коллегу,
+// показать или сменить код группы (QR), исключить, передать права, удалить группу. Вступить — только по приглашению
+// администратора или по коду группы. Переписки и описания нет. Не больше 10 групп у человека и 200 участников в группе.
+// Участники видят имена (и то, что человек разрешил в «Приватности») друг друга. Статус — только если человек сам
+// включил «Показывать моей группе» именно в этой группе. Всё с сервера — непроверенное: текст только через esc().
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, layerCount } from './ui.js';
+import { privacyOf } from './profile.js';
+import { S, saveProfile } from './store.js';
+import { rpc, errorText } from './auth.js';
+import { legalReady } from './legal.js';
+import { qrSvg } from './share.js';
+import {
+  colSnap, colSub, colMine, colSync, colRerender, colGo, colBack, colMarkStatusCleared, loadColleagues, ensureConsent, ensureCard, snapOrSay,
+  notReady, OFFLINE, needAccount, cardAvatar, cardSub, pill, avaBox, colleagueLine, updatedText, teamGroup, TEAM_GROUPS, cleanText, groupShare,
+} from './colleagues.js';
+
+export const GROUPS_MAX = 10;
+export const GROUP_NAME_MAX = 30;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const G = { id: null, busy: false };
+const SERVER_OFF = 'Группы на сервере ещё не включены. Попробуйте позже.';
+
+// Код группы: 10 знаков, буквы и цифры; в ссылке — после «#» (сервер сайта его не видит)
+export const normGroupCode = (s) => String(s || '').toUpperCase().replace(/[\s-]/g, '');
+export const groupCodeOk = (c) => /^[0-9A-Z]{10}$/.test(c);
+export function groupFromHash(hash) {
+  const m = /^#?group=([0-9A-Za-z-]{6,40})$/.exec(String(hash || ''));
+  const c = m ? normGroupCode(m[1]) : '';
+  return groupCodeOk(c) ? c : null;
+}
+export const groupUrl = (code, loc = globalThis.location) => `${loc.origin}${loc.pathname}#group=${code}`;
+
+export function groupError(r) {
+  if (!r) return OFFLINE;
+  if (notReady(r)) return SERVER_OFF;
+  const m = String(r.data?.message || '');
+  if (/groups limit/.test(m)) return `Вы уже в ${GROUPS_MAX} группах — это наибольшее число. Выйдите из ненужной, чтобы вступить в новую.`;
+  if (/group full/.test(m)) return 'В группе уже 200 человек — больше нельзя.';
+  if (/banned/.test(m)) return 'Администратор исключил вас из этой группы. Вернуться можно только по его приглашению.';
+  if (/cabina: limit/.test(m)) return 'На сегодня слишком много попыток. Попробуйте завтра.';
+  if (/name required/.test(m)) return 'Сначала укажите имя в профиле.';
+  if (/consent required/.test(m)) return 'Сначала примите новую редакцию согласия.';
+  if (/forbidden/.test(m)) return 'Это может только администратор группы.';
+  if (/not found/.test(m)) return 'Группа или человек не найдены. Обновите экран.';
+  return errorText(r);
+}
+const fail = (r) => toast(groupError(r), { error: true, ms: 6000 });
+const members = (n) => `${n} ${plural(n, 'участник', 'участника', 'участников')}`;
+const groupOf = (id) => colSnap()?.groups.find((g) => g.id === id) || null;
+const reload = () => loadColleagues({ force: true });
+
+// ---------------------------------------------------------------- профиль: строка «Группы»
+
+export function groupsRowHtml() {
+  if (!legalReady() || !colMine()) return '';
+  const snap = colSnap();
+  if (snap && (!snap.groupsOn || !snap.consent.main)) return '';
+  const n = snap?.groups.length || 0;
+  const k = snap?.groupInvites.length || 0;
+  const sub = !snap ? 'Загружаем…' : n ? `${n} ${plural(n, 'группа', 'группы', 'групп')}${k ? ` · приглашений: ${k}` : ''}` : k ? 'Вас пригласили в группу' : 'Бригада, колонна или депо — списком';
+  return `<button class="row" data-act="go" data-page="groups" id="grp-entry"><span class="ico" style="--c:var(--night)">${I.grid}</span>
+    <div class="grow"><div class="t1">Группы</div><div class="t2">${esc(sub)}</div></div>${k ? `<span class="col-badge" aria-label="Приглашений в группы: ${k}">${k}</span>` : ''}${small(I.right, 18)}</button>`;
+}
+
+// ---------------------------------------------------------------- экран «Группы»
+
+function inviteRow(i) {
+  return `<div class="col-offer">
+    <div class="col-who"><span class="col-ava grp-ava" aria-hidden="true">${I.grid}</span><div class="grow"><div class="t1">${esc(i.name)}</div>
+      <div class="t2">${i.from ? `Приглашает ${esc(i.from.name)}` : 'Вас пригласили в группу'}</div></div></div>
+    <div class="col-btns"><button class="btn btn-plain btn-sm" data-act="grp-decline" data-id="${esc(i.id)}">Отказаться</button><button class="btn btn-primary btn-sm" data-act="grp-accept" data-id="${esc(i.id)}">Вступить</button></div>
+  </div>`;
+}
+function groupRow(g) {
+  const sharing = g.me.status && privacyOf().status;
+  return `<button class="row col-row" data-act="grp-open" data-id="${esc(g.id)}"><span class="col-ava grp-ava" aria-hidden="true">${I.grid}</span>
+    <div class="grow"><div class="t1">${esc(g.name)}</div><div class="t2">${esc([members(g.members.length), g.admin ? 'вы администратор' : '', sharing ? 'видят ваш статус' : ''].filter(Boolean).join(' · '))}</div></div>${small(I.right, 18)}</button>`;
+}
+
+const needAccountHtml = (head) => `${head}<div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Группы работают через аккаунт. Без него CABINA работает как раньше: записи остаются в этом телефоне.</div></div>
+  <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
+
+export function renderGroups() {
+  const head = pageHead('Группы', { back: true });
+  if (!legalReady() || !colMine()) return needAccountHtml(head);
+  const snap = colSnap();
+  if (!snap) { if (!layerCount()) loadColleagues(); return `${head}<div class="hint" id="grp-sec">Загружаем…</div>`; }
+  if (!snap.groupsOn) return `${head}<div class="notice">${I.info}<div>${SERVER_OFF}</div></div>`;
+  if (!snap.consent.main) {
+    return `${head}<div id="grp-sec"><div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились группы коллег. Чтобы создать группу или вступить в неё, прочитайте и примите согласие.</div></div>
+      <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
+  }
+  const full = snap.groups.length >= GROUPS_MAX;
+  return `${head}<div id="grp-sec">
+    <p class="hint">Бригада, колонна, депо — все ваши люди одним списком. Переписки нет: только кто где — у тех, кто сам показывает статус группе.</p>
+    ${snap.groupInvites.length ? `<div class="group-title">Приглашают в группу</div><div class="panel col-offers" id="grp-invites">${snap.groupInvites.map(inviteRow).join('')}</div>` : ''}
+    ${snap.groups.length ? `<div class="group-title">Мои группы <span class="hint">${snap.groups.length} из ${GROUPS_MAX}</span></div><div class="panel" id="grp-list">${snap.groups.map(groupRow).join('')}</div>`
+      : '<div class="hint grp-empty">Вы пока не в группе. Создайте свою или вступите по коду, который даст администратор группы.</div>'}
+    <div class="grp-btns">
+      <button class="btn btn-primary" data-act="grp-new" id="grp-new"${full ? ' disabled' : ''}>${I.plus} Создать группу</button>
+      <button class="btn btn-plain" data-act="grp-code-enter" id="grp-join"${full ? ' disabled' : ''}>${small(I.qr, 18)} Вступить по коду</button>
+    </div>
+    ${full ? `<div class="hint">Групп уже ${GROUPS_MAX} — больше нельзя. Выйдите из ненужной, чтобы вступить в новую.</div>` : ''}
+    <div class="notice ok">${I.shield}<div>Участники группы видят имена друг друга (и депо с персонажем — если вы разрешили в «Приватности»). Ваш статус группа видит, только если вы сами включите это в группе.</div></div>
+  </div>`;
+}
+
+// ---------------------------------------------------------------- экран одной группы
+
+function memberRow(m, g) {
+  const line = m.status ? colleagueLine(m.status) : null;
+  const me = m.id === colSub();
+  // своя карточка могла ещё не прийти с сервера — своё имя берём из профиля
+  if (me && m.card.name === 'Без имени' && cleanText(S.profile.name)) m = { ...m, card: { ...m.card, name: cleanText(S.profile.name) } };
+  const tag = [m.admin ? '<span class="col-tag ok">администратор</span>' : '', me ? '<span class="col-tag">вы</span>' : ''].join('');
+  const body = `${avaBox(m.card)}<div class="grow"><div class="t1">${esc(m.card.name)} ${tag}</div>
+    ${line ? `<div class="t2">${pill(line)}</div><div class="col-upd">${esc(updatedText(m.status.at))}</div>` : `<div class="t2">${esc(me ? (g.me.status && privacyOf().status ? 'Группа видит ваш статус' : 'Группа не видит ваш статус') : cardSub(m.card) || 'Статус не показан')}</div>`}</div>`;
+  return me ? `<div class="row col-row">${body}</div>` : `<button class="row col-row" data-act="grp-member" data-id="${esc(m.id)}">${body}${small(I.right, 18)}</button>`;
+}
+function membersHtml(g) {
+  const now = Date.now();
+  const groups = TEAM_GROUPS.map(() => []);
+  for (const m of g.members) groups[m.id === colSub() ? 3 : teamGroup(m.status, now)].push(m);
+  const titled = groups.filter((x) => x.length).length > 1;
+  return groups.map((x, i) => (x.length ? `${titled ? `<div class="group-title col-gt">${TEAM_GROUPS[i]} <span class="hint">${x.length}</span></div>` : ''}<div class="panel">${x.map((m) => memberRow(m, g)).join('')}</div>` : '')).join('');
+}
+function shareRows(g) {
+  const st = g.me.status && privacyOf().status;
+  const row = (item, title, sub, on, off = false) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
+    <button class="switch" role="switch" data-act="grp-share" data-item="${item}" aria-checked="${on}" aria-label="${title}" ${off ? 'disabled' : ''}></button></div>`;
+  return row('status', 'Показывать мой статус группе', 'В пути, на отдыхе, между поездками — без станций', st)
+    + row('place', 'Где я', st ? 'Станции и дом отдыха' : 'Сначала включите статус', st && g.me.place, !st);
+}
+
+export function renderGroup() {
+  const g = groupOf(G.id);
+  if (!g) {
+    return `${pageHead('Группа', { back: true })}<div class="empty"><div class="em-ico">${I.grid}</div><b>Группы больше нет</b><p>Вас исключили, вы вышли или группу удалили.</p></div>`;
+  }
+  return `${pageHead(g.name, { back: true, right: g.admin ? `<button class="icon-btn" data-act="grp-rename" aria-label="Переименовать группу">${I.edit}</button>` : '' })}
+    <div id="grp-page" data-id="${esc(g.id)}">
+    <p class="hint grp-sub">${esc(members(g.members.length))}${g.admin ? ' · вы администратор' : ''}</p>
+    ${g.admin ? `<div class="grp-btns"><button class="btn btn-primary" data-act="grp-invite" id="grp-invite">${I.plus} Пригласить коллегу</button>
+      <button class="btn btn-plain" data-act="grp-code" id="grp-code">${small(I.qr, 18)} Код и QR-код группы</button></div>` : ''}
+    <div class="group-title">Мой статус в этой группе</div>
+    <div class="panel" id="grp-share">${shareRows(g)}</div>
+    <div class="hint">По умолчанию группа ваш статус не видит. Номер поезда и локомотива, точное время явки и причину отвлечения CABINA не показывает никому.</div>
+    <div class="group-title">Участники</div>
+    <div id="grp-members">${membersHtml(g)}</div>
+    ${g.admin && g.pending.length ? `<div class="group-title">Ждут ответа</div><div class="panel" id="grp-pending">${g.pending.map((p) => `<div class="row col-row">${avaBox(p.card)}<div class="grow"><div class="t1">${esc(p.card.name)}</div><div class="t2">Приглашён в группу</div></div>
+      <button class="btn btn-plain btn-sm" data-act="grp-uninvite" data-id="${esc(p.id)}" aria-label="Отменить приглашение: ${esc(p.card.name)}">Отменить</button></div>`).join('')}</div>` : ''}
+    <div class="grp-foot">
+      <button class="link-btn col-leave" data-act="grp-leave" id="grp-leave">Выйти из группы</button>
+      ${g.admin ? '<button class="link-btn col-leave" data-act="grp-delete" id="grp-delete">Удалить группу</button>' : ''}
+    </div></div>`;
+}
+export const openGroupPage = (id) => { G.id = id; colGo('group'); };
+
+// ---------------------------------------------------------------- окна
+
+// Название группы: создать или переименовать
+function nameSheet({ title, value = '', ok }) {
+  return new Promise((resolve) => {
+    let result = null;
+    const el = openLayer(sheet({ title, body: `<div class="pay-field"><label for="grp-name">Название группы</label>
+        <input class="input" id="grp-name" maxlength="${GROUP_NAME_MAX}" autocomplete="off" enterkeyhint="done" placeholder="Например, Колонна 3" value="${esc(value)}">
+        <div class="hint">До ${GROUP_NAME_MAX} знаков. Не пишите в названии служебную информацию.</div></div>
+      <div id="grp-name-err" class="acc-err" role="alert" aria-live="assertive"></div>`,
+    foot: `<button class="btn btn-primary" data-act="grp-name-ok">${esc(ok)}</button>` }), { onClose: () => resolve(result) });
+    const input = el.querySelector('#grp-name');
+    const done = () => {
+      const v = cleanText(input.value, GROUP_NAME_MAX);
+      if (!v) { el.querySelector('#grp-name-err').innerHTML = `<div class="error-box">${I.alert}<span>Введите название.</span></div>`; input.focus(); return; }
+      result = v; closeLayer(el);
+    };
+    el.querySelector('[data-act="grp-name-ok"]').addEventListener('click', done);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } });
+    setTimeout(() => input.focus(), 60);
+  });
+}
+
+async function ready() {
+  if (!colMine()) { needAccount(); return null; }
+  const snap = await snapOrSay();
+  if (!snap) return null;
+  if (!snap.groupsOn) { toast(SERVER_OFF, { error: true, ms: 5000 }); return null; }
+  if (!(await ensureConsent())) return null;
+  return snap;
+}
+
+async function createGroup() {
+  if (!(await ready()) || !(await ensureCard())) return;
+  const name = await nameSheet({ title: 'Новая группа', ok: 'Создать' });
+  if (!name) return;
+  const r = await rpc('create_group', { p_name: name });
+  if (!r?.ok) { fail(r); return; }
+  await reload();
+  toast('Группа создана. Пригласите коллег — или покажите им код группы');
+  if (UUID.test(String(r.data))) openGroupPage(String(r.data).toLowerCase());
+}
+
+// Код группы: показать (или сменить) QR-код и ссылку
+async function showCode(g, fresh = false) {
+  const r = await rpc('group_code', { p_group: g.id, p_new: fresh });
+  const code = r?.ok ? normGroupCode(r.data) : '';
+  if (!groupCodeOk(code)) { fail(r); return; }
+  const url = groupUrl(code);
+  const nice = code.replace(/(.{5})(?=.)/g, '$1 ');
+  const canShare = typeof navigator.share === 'function';
+  const text = `Вступайте в группу «${g.name}» в CABINA: ${url}\nЕсли ссылка не откроется: CABINA → Профиль → «Группы» → «Вступить по коду», код: ${code}`;
+  const el = openLayer(sheet({ title: 'Код группы', tall: true, body: `<div class="share-box">
+      <div class="qr-wrap" id="grp-qr"><div class="hint">Готовим QR-код…</div></div>
+      <p class="share-how">Покажите QR-код коллеге — он наведёт камеру телефона. Или отправьте ссылку.</p>
+      <div class="acc-code num" aria-label="Код группы" id="grp-code-text">${esc(nice)}</div>
+      <div class="notice">${I.shield}<div>Вступить по коду может любой, у кого он есть. Отправляйте только своим. Если код попал не туда — смените его: старый сразу перестанет работать.</div></div>
+      <button class="link-btn" data-act="grp-code-new" id="grp-code-new">Сменить код</button></div>`,
+  foot: `${canShare ? `<button class="btn btn-primary" data-act="grp-code-share">${small(I.share, 18)} Отправить</button>` : ''}<button class="btn ${canShare ? 'btn-plain' : 'btn-primary'}" data-act="grp-code-copy">Скопировать</button>` }));
+  el.querySelector('[data-act="grp-code-share"]')?.addEventListener('click', async () => {
+    try { await navigator.share({ title: `Группа «${g.name}» в CABINA`, text }); } catch (err) { if (err?.name !== 'AbortError') toast('Не удалось открыть «Поделиться»', { error: true }); }
+  });
+  el.querySelector('[data-act="grp-code-copy"]').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(text); toast('Ссылка скопирована'); } catch { toast('Не удалось скопировать. Перепишите код вручную', { error: true, ms: 5000 }); }
+  });
+  el.querySelector('[data-act="grp-code-new"]').addEventListener('click', async () => {
+    const ok = await confirmDialog({ title: 'Сменить код?', ok: 'Сменить', danger: false, text: 'Старый код и ссылка сразу перестанут работать. Те, кто уже в группе, в ней останутся.' });
+    if (!ok) return;
+    closeLayer(el);
+    await showCode(g, true);
+    toast('Код сменён');
+  });
+  const svg = await qrSvg(url, 'QR-код группы').catch(() => '');
+  const box = el.querySelector('#grp-qr');
+  if (box) box.innerHTML = svg || '<div class="hint">Не удалось нарисовать QR-код — отправьте ссылку.</div>';
+}
+
+// Вступить по коду: сначала показываем, что за группа, и что увидят её участники
+export async function joinByCode(raw) {
+  const snap = await ready();
+  if (!snap) return;
+  const code = normGroupCode(raw);
+  if (!groupCodeOk(code)) { toast('Код группы — 10 букв и цифр. Проверьте его.', { error: true, ms: 5000 }); return; }
+  const r = await rpc('peek_group', { p_code: code });
+  if (!r?.ok) { fail(r); return; }
+  const x = r.data && typeof r.data === 'object' ? r.data : null;
+  if (!x || !UUID.test(String(x.id))) { toast('Группа с таким кодом не найдена. Возможно, администратор сменил код.', { error: true, ms: 6000 }); return; }
+  const id = String(x.id).toLowerCase();
+  const name = cleanText(typeof x.name === 'string' ? x.name : '', GROUP_NAME_MAX) || 'Группа';
+  if (x.member === true) { await reload(); openGroupPage(id); return; }
+  const pv = privacyOf();
+  const shown = ['имя', 'должность', pv.depot ? 'депо' : '', pv.avatar ? 'персонажа' : ''].filter(Boolean).join(', ');
+  const n = Number.isInteger(x.members) && x.members > 0 ? x.members : 0;
+  const ok = await confirmDialog({ title: `Вступить в «${name}»?`, ok: 'Вступить', danger: false,
+    text: `${n ? `В группе ${members(n)}. ` : ''}Участники увидят ваше ${shown}. Свой статус группе вы показываете, только если сами включите.` });
+  if (!ok || !(await ensureCard())) return;
+  const j = await rpc('join_group', { p_code: code });
+  if (!j?.ok) { fail(j); return; }
+  if (!UUID.test(String(j.data))) { toast('Группа с таким кодом не найдена. Возможно, администратор сменил код.', { error: true, ms: 6000 }); return; }
+  await reload();
+  toast(`Вы в группе «${name}»`);
+  openGroupPage(id);
+}
+
+function enterCode() {
+  const el = openLayer(sheet({ title: 'Вступить по коду', body: `<div class="pay-field"><label for="grp-code-in">Код группы</label>
+      <input class="input num" id="grp-code-in" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="10 букв и цифр"></div>
+    <div class="hint">Код даёт администратор группы. Если у вас QR-код — наведите на него обычную камеру телефона, откроется CABINA.</div>`,
+  foot: '<button class="btn btn-primary" data-act="grp-code-go">Дальше</button>' }));
+  const input = el.querySelector('#grp-code-in');
+  const go = () => { const v = input.value; closeLayer(el); joinByCode(v); };
+  el.querySelector('[data-act="grp-code-go"]').addEventListener('click', go);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  setTimeout(() => input.focus(), 60);
+}
+
+// Пригласить коллег (администратор): только те, кто уже ваш коллега и ещё не в группе
+function inviteSheet(g) {
+  const snap = colSnap();
+  const pool = (snap?.colleagues || []).filter((c) => !g.members.some((m) => m.id === c.id) && !g.pending.some((p) => p.id === c.id));
+  const picked = new Set();
+  const el = openLayer(sheet({ title: 'Пригласить в группу', tall: true, body: pool.length
+    ? `<p class="hint">Пригласить можно своих коллег. Каждый получит приглашение и сам решит, вступать ли. Остальным покажите код группы.</p>
+      <div class="acc-who" id="grp-pick">${pool.map((c) => `<button type="button" class="pick-row" role="checkbox" aria-checked="false" data-id="${esc(c.id)}"><span class="box">${I.check}</span>${avaBox(c.card)}<span class="t1">${esc(c.card.name)}</span></button>`).join('')}</div>
+      <div id="grp-pick-err" class="acc-err" role="alert" aria-live="assertive"></div>`
+    : `<p class="hint">Все ваши коллеги уже в группе или приглашены. Новых людей пригласите кодом группы.</p>`,
+  foot: pool.length ? '<button class="btn btn-primary" data-act="grp-invite-ok">Пригласить</button>' : '<button class="btn btn-primary" data-act="grp-invite-code">Код и QR-код группы</button>' }));
+  el.addEventListener('click', async (e) => {
+    const p = e.target.closest('.pick-row');
+    if (p) { const id = p.dataset.id; if (picked.has(id)) picked.delete(id); else picked.add(id); p.setAttribute('aria-checked', String(picked.has(id))); return; }
+    if (e.target.closest('[data-act="grp-invite-code"]')) { closeLayer(el); showCode(g); return; }
+    if (!e.target.closest('[data-act="grp-invite-ok"]') || G.busy) return;
+    if (!picked.size) { el.querySelector('#grp-pick-err').innerHTML = `<div class="error-box">${I.alert}<span>Отметьте, кого пригласить.</span></div>`; return; }
+    G.busy = true;
+    try {
+      let sent = 0;
+      for (const id of picked) {
+        const r = await rpc('invite_to_group', { p_group: g.id, p_user: id });
+        if (!r?.ok) { fail(r); break; }
+        sent++;
+      }
+      if (sent) { closeLayer(el); toast(sent === 1 ? 'Приглашение отправлено' : `Отправлено приглашений: ${sent}`); }
+      await reload();
+    } finally { G.busy = false; }
+  });
+}
+
+// Участник: статус (если он показывает его группе); администратору — «Сделать администратором» и «Исключить»
+function memberSheet(g, id) {
+  const m = g.members.find((x) => x.id === id);
+  if (!m) return;
+  const line = m.status ? colleagueLine(m.status) : null;
+  const el = openLayer(sheet({ title: 'Участник группы', body: `
+    <section class="profile-card col-card">
+      <span class="avatar view big">${cardAvatar(m.card, 132)}</span>
+      <div class="profile-name">${esc(m.card.name)}</div>
+      ${cardSub(m.card) ? `<div class="profile-sub">${esc(cardSub(m.card))}</div>` : ''}
+      ${m.admin ? '<div class="profile-sub">Администратор группы</div>' : ''}
+      ${line ? `${pill(line, 'pr-status')}<div class="hint">${esc(updatedText(m.status.at))}</div>` : '<div class="hint">Статус этой группе не показывает.</div>'}
+    </section>`,
+  foot: g.admin && !m.admin ? `<button class="btn btn-plain" data-act="grp-make-admin">Сделать администратором</button><button class="btn btn-danger" data-act="grp-remove">${small(I.trash, 18)} Исключить из группы</button>` : '' }));
+  el.querySelector('[data-act="grp-make-admin"]')?.addEventListener('click', async () => {
+    const ok = await confirmDialog({ title: 'Передать права?', ok: 'Передать', danger: false,
+      text: `Администратором станет ${m.card.name}. Вы останетесь в группе обычным участником. Администратор в группе один.` });
+    if (!ok) return;
+    const r = await rpc('make_group_admin', { p_group: g.id, p_user: m.id });
+    if (!r?.ok) { fail(r); return; }
+    closeLayer(el); toast('Права администратора переданы'); await reload();
+  });
+  el.querySelector('[data-act="grp-remove"]')?.addEventListener('click', async () => {
+    const ok = await confirmDialog({ title: 'Исключить из группы?', ok: 'Исключить',
+      text: `${m.card.name} перестанет видеть группу и её участников. По коду вернуться не сможет 30 дней — только по вашему приглашению.` });
+    if (!ok) return;
+    const r = await rpc('remove_from_group', { p_group: g.id, p_user: m.id });
+    if (!r?.ok) { fail(r); return; }
+    closeLayer(el); toast('Исключён из группы'); await reload();
+  });
+}
+
+// Показывать ли этой группе мой статус и где я. Включить — с согласием; включение статуса включает и общий выключатель.
+async function setShare(g, item) {
+  const pv = privacyOf();
+  const curSt = g.me.status && pv.status;
+  let st = curSt; let pl = curSt && g.me.place;
+  if (item === 'status') { st = !curSt; if (!st) pl = false; } else { if (!curSt) return; pl = !pl; }
+  if ((st || pl) && !(await ensureConsent())) return;
+  const r = await rpc('set_group_share', { p_group: g.id, p_status: st, p_place: pl });
+  if (!r?.ok) { fail(r); return; }
+  g.me = { status: st, place: pl };
+  const snap = colSnap();
+  if (st && !pv.status) await saveProfile({ privacy: { ...privacyOf(), status: true } });
+  if (!st && snap && !groupShare(snap, 'status') && !snap.colleagues.length) colMarkStatusCleared();
+  toast(item === 'status' ? (st ? 'Группа видит ваш статус' : 'Группа больше не видит ваш статус') : (pl ? 'Группа видит, где вы' : 'Группа больше не видит, где вы'));
+  colSync();
+  await reload();
+}
+
+// ---------------------------------------------------------------- действия
+
+export async function groupsClick(act, b) {
+  if (!act.startsWith('grp-')) return false;
+  if (act === 'grp-open') { if (UUID.test(String(b.dataset.id))) openGroupPage(String(b.dataset.id).toLowerCase()); return true; }
+  const g = groupOf(G.id);
+  if (act === 'grp-member') { if (g) memberSheet(g, String(b.dataset.id || '').toLowerCase()); return true; }
+  if (act === 'grp-code-enter') { if (await ready()) enterCode(); return true; }
+  if (G.busy) return true;
+  G.busy = true;
+  try {
+    switch (act) {
+      case 'grp-new': await createGroup(); break;
+      case 'grp-accept': case 'grp-decline': {
+        const id = String(b.dataset.id || '').toLowerCase();
+        if (!UUID.test(id)) break;
+        const accept = act === 'grp-accept';
+        if (accept && (!(await ready()) || !(await ensureCard()))) break;
+        const r = await rpc('answer_group_invite', { p_group: id, p_accept: accept });
+        if (!r?.ok) { fail(r); break; }
+        await reload();
+        if (accept) { toast('Вы в группе. Свой статус группе вы показываете, только если сами включите'); openGroupPage(id); } else toast('Приглашение отклонено');
+        break;
+      }
+      case 'grp-share': if (g && !b.disabled) await setShare(g, b.dataset.item === 'place' ? 'place' : 'status'); break;
+      case 'grp-invite': if (g?.admin) inviteSheet(g); break;
+      case 'grp-code': if (g?.admin) await showCode(g); break;
+      case 'grp-rename': {
+        if (!g?.admin) break;
+        const name = await nameSheet({ title: 'Переименовать группу', value: g.name, ok: 'Сохранить' });
+        if (!name || name === g.name) break;
+        const r = await rpc('rename_group', { p_group: g.id, p_name: name });
+        if (!r?.ok) { fail(r); break; }
+        toast('Название изменено'); await reload();
+        break;
+      }
+      case 'grp-uninvite': {
+        if (!g?.admin) break;
+        const r = await rpc('cancel_group_invite', { p_group: g.id, p_user: String(b.dataset.id || '').toLowerCase() });
+        if (!r?.ok) { fail(r); break; }
+        toast('Приглашение отменено'); await reload();
+        break;
+      }
+      case 'grp-leave': {
+        if (!g) break;
+        const next = g.admin ? [...g.members].filter((m) => m.id !== colSub()).sort((a, c) => (a.joined ?? 0) - (c.joined ?? 0))[0] : null;
+        const ok = await confirmDialog({ title: `Выйти из «${g.name}»?`, ok: 'Выйти',
+          text: g.admin ? (next ? `Администратором станет ${next.card.name}. Вернуться можно по коду группы или приглашению.` : 'Вы последний участник — группа удалится.') : 'Вы перестанете видеть группу, а участники — вас. Вернуться можно по коду группы или приглашению.' });
+        if (!ok) break;
+        const r = await rpc('leave_group', { p_group: g.id });
+        if (!r?.ok) { fail(r); break; }
+        toast('Вы вышли из группы'); await reload(); colBack();
+        break;
+      }
+      case 'grp-delete': {
+        if (!g?.admin) break;
+        const ok = await confirmDialog({ title: `Удалить «${g.name}»?`, ok: 'Удалить группу',
+          text: 'Группа удалится у всех участников, код перестанет работать. Это нельзя отменить.' });
+        if (!ok) break;
+        const r = await rpc('delete_group', { p_group: g.id });
+        if (!r?.ok) { fail(r); break; }
+        toast('Группа удалена'); await reload(); colBack();
+        break;
+      }
+      default: return false;
+    }
+  } finally { G.busy = false; }
+  colRerender();
+  return true;
+}

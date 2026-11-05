@@ -209,7 +209,9 @@ export function inviteRowHtml() {
   if (!legalReady() || !session()) return '';
   const n = Math.max(N.data?.counted || 0, countOf('invited').n);
   const next = REWARD_TIERS.find((t) => n < t.n);
-  const sub = next ? `Засчитано: ${n} · до «${next.title}» — ${leftText(next.n - n)}` : `Засчитано: ${n} · все вещи открыты`;
+  // 2.22 (пример Никиты): коротко — «До «Напарник» — 1 приглашение»
+  const left = next ? next.n - n : 0;
+  const sub = next ? `До «${next.title}» — ${left} ${plural(left, 'приглашение', 'приглашения', 'приглашений')}` : `Засчитано: ${n} · все вещи открыты`;
   return `<button class="row" data-act="go" data-page="invites" id="inv-entry"><span class="ico" style="--c:var(--warn)">${I.gift}</span>
     <div class="grow"><div class="t1">Пригласить коллег</div><div class="t2">${esc(sub)}</div></div>${small(I.right, 18)}</button>`;
 }

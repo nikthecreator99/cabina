@@ -187,10 +187,14 @@ test('профиль: имя, должность, класс, старое фо�
   await page.reload();
   await page.waitForSelector('.screen');
   await tab(page, 'profile');
-  assert.match(await text(page, '.profile-card'), /Иван[\s\S]*Машинист, 2 класс · депо Тестовое/);
+  // 2.22: должность и депо — отдельными строками (по примеру Никиты)
+  assert.match(await text(page, '.profile-card'), /Иван[\s\S]*Машинист, 2 класс\s+депо Тестовое/);
   const src = await page.locator('.avatar.view img').getAttribute('src');
   assert.match(src, /^data:image\/jpeg;base64,/);
-  assert.match(await text(page, '.notice.ok'), /Профиль хранится в этом телефоне[\s\S]*только то, что вы сами включили/);
+  // 2.22: вместо длинной плашки — строка «Приватность профиля» с тем же объяснением
+  await page.locator('#pr-privacy').click();
+  assert.match(await text(page, '.dialog'), /Профиль хранится в этом телефоне[\s\S]*только то, что вы сами включили/);
+  await page.locator('.dialog [data-act=yes]').click();
   // 2.6: набор ставок один, без выбора должности; машинисту видна надбавка за класс
   await workPage(page, 'tariffs');
   assert.equal(await page.locator('[data-act=pay-role]').count(), 0);
