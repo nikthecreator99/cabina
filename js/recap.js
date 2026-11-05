@@ -3,22 +3,22 @@
 import { I, small, toast, openLayer, closeLayer, sheet, saveToDevice } from './ui.js';
 
 const W = 1080; const H = 1350;
-const DISPLAY = "'Unbounded', 'Arial Black', sans-serif";
-const BODY = "'Onest', 'Segoe UI', Roboto, Arial, sans-serif";
+export const DISPLAY = "'Unbounded', 'Arial Black', sans-serif";
+export const BODY = "'Onest', 'Segoe UI', Roboto, Arial, sans-serif";
 
-function roundRect(ctx, x, y, w, h, r) {
+export function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 // подогнать размер шрифта под ширину
-function fit(ctx, text, size, weight, fam, maxW) {
+export function fit(ctx, text, size, weight, fam, maxW) {
   let s = size;
   do { ctx.font = `${weight} ${s}px ${fam}`; s -= 2; } while (ctx.measureText(text).width > maxW && s > 12);
 }
 
-// небо как на иконке: ночь сверху, закат у горизонта, лес и рельсы
-function drawSky(ctx) {
+// небо как на иконке: ночь сверху, закат у горизонта, лес и рельсы (H — высота картинки)
+export function drawSky(ctx, H = 1350) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#070a16'); g.addColorStop(0.45, '#151b3d'); g.addColorStop(0.72, '#4a2f5e'); g.addColorStop(0.86, '#c9665a'); g.addColorStop(1, '#f2a46b');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -48,7 +48,7 @@ function drawSky(ctx) {
 }
 
 function drawRecap(ctx, d) {
-  drawSky(ctx);
+  drawSky(ctx, H);
   const L = 80;
   ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
   // шапка
@@ -74,8 +74,11 @@ function drawRecap(ctx, d) {
   ctx.fillText('Личный учёт поездок для локомотивных бригад', L, H - 200);
 }
 
-export async function recapBlob(d) {
+export async function loadFonts() {
   try { await Promise.all(['500 10px Onest', '600 10px Onest', '800 10px Onest', '800 10px Unbounded'].map((f) => document.fonts.load(f))); } catch {}
+}
+export async function recapBlob(d) {
+  await loadFonts();
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   drawRecap(cv.getContext('2d'), d);

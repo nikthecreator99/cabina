@@ -117,8 +117,11 @@ svg { flex: none; }
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); color: #fff; font-size: calc(13px * var(--fs)); font-weight: 600;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.home-head { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; gap: 8px; min-height: 48px; }
-.home-head .month-switch { justify-self: center; }
+.home-head { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 8px; min-height: 48px; }
+.home-head .month-switch { justify-self: center; max-width: 100%; min-width: 0; }
+.home-head .month-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* очень крупный текст на узком экране: месяц не толкает кнопку поиска за край */
+@media (max-width: 360px) { :root[data-text="xl"] .home-head .month-title { font-size: calc(15px * 1.15); } :root[data-text="xl"] .home-head .month-switch button { width: 34px; } }
 .month-title.back-today { display: flex; flex-direction: column; align-items: center; justify-content: center; width: auto; height: 40px; border-radius: 12px; padding: 0 4px; line-height: 1.1; }
 .month-title.back-today small { font-family: var(--font-body); font-size: calc(10px * var(--fs)); font-weight: 600; letter-spacing: 0; opacity: .8; }
 .found-list .row { align-items: flex-start; text-align: left; }
@@ -1484,3 +1487,7 @@ button.pr-status svg { color: var(--text-2); }
 #rm-alarm { margin-top: 10px; }
 .vac-head { display: inline-flex; align-items: center; gap: 2px; }
 .vac-head .info-btn { width: 32px; height: 32px; }
+/* «Мой год в CABINA» (2.21.10): картинки-истории листаются вбок */
+.year-strip { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 2px 8px; margin: 0 -4px; -webkit-overflow-scrolling: touch; }
+.year-card { flex: 0 0 72%; max-width: 260px; scroll-snap-align: center; margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.year-img { display: block; width: 100%; height: auto; border-radius: 16px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }

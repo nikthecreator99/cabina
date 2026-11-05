@@ -63,6 +63,11 @@ export function awardArt(id, size = 64, tier = 1) {
   return `<svg class="aw-art" viewBox="0 0 64 64" width="${size}" height="${size}" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="${fill}" stroke="${rim}" stroke-width="3"/>
     <circle cx="32" cy="32" r="25.5" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.2"/><image href="${awardImg(a, i)}" x="9" y="9" width="46" height="46"/></svg>`;
 }
+// цвета медали [заливка, кольцо] на ступени tier (1…3) — для картинок «Мой год»
+export function awardColors(a, tier = 1) {
+  const i = Math.max(0, Math.min(a.goals.length, tier) - 1);
+  return TIER[a.goals.length > 1 ? TIER_KEYS[i] : a.color];
+}
 const goalText = (a, g) => (a.kind === 'km' ? kmText(g) : a.kind === 'dur' ? hText(g)
   : a.repeat ? `${g} ${plural(g, 'раз', 'раза', 'раз')}` : `${g.toLocaleString('ru-RU')} ${a.unit(g)}`);
 const tierName = (a, tier) => (a.goals.length > 1 && tier > 0 ? TIER_NAMES[tier - 1] : '');

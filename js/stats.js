@@ -11,6 +11,7 @@ import { exportSlip } from './slip.js';
 import { openDay } from './day.js';
 import { eyeBtn } from './money.js';
 import { openRecap } from './recap.js';
+import { openYear, yearTripCount } from './year.js';
 
 const MONTHS_DAT = ['январю', 'февралю', 'марту', 'апрелю', 'маю', 'июню', 'июлю', 'августу', 'сентябрю', 'октябрю', 'ноябрю', 'декабрю'];
 const ROMAN = ['I', 'II', 'III', 'IV'];
@@ -370,6 +371,7 @@ function tripsView(R) {
       ${barChart(items, { fmt: (v) => `${v} ${plural(v, 'явка', 'явки', 'явок')}`, id: 'ch-calls' })}`);
   }
   if (R.count) html += `<button class="btn btn-ghost" data-act="st-recap">${I.share} Итоги картинкой</button>`;
+  if (ST.period === 'year' && yearTripCount(ST.y)) html += `<button class="btn btn-ghost" data-act="st-year" id="st-year">${I.medal} Мой ${ST.y} год в CABINA</button>`;
   return html;
 }
 const p2h = (h) => `${String(h % 24).padStart(2, '0')}:00`;
@@ -497,6 +499,7 @@ export function statsClick(act, b, ctx) {
     case 'st-series': { const k = b.dataset.k; if (openSeries.has(k)) openSeries.delete(k); else openSeries.add(k); ctx.rerender(); return true; }
     case 'st-loco': openLoco(b.dataset.k); return true;
     case 'st-recap': openRecap(recapData()); return true;
+    case 'st-year': openYear(ST.y); return true;
     case 'st-month': ST.period = 'month'; ST.y = +b.dataset.y; ST.m = +b.dataset.m; ctx.rerender(); window.scrollTo(0, 0); return true;
     default: return false;
   }

@@ -243,7 +243,7 @@ const itemRoute = (it) => {
 
 // ---- QR-код: SVG из модулей (рисует библиотека qrcode-generator, своя только разметка) ----
 let qrLib = null;
-async function qrMatrix(text) {
+export async function qrMatrix(text) {
   qrLib = qrLib || (await import('./vendor/qrcode.js')).default;
   for (const level of ['M', 'L']) {
     try {
