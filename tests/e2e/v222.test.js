@@ -1,6 +1,7 @@
 // Браузерные проверки CABINA 2.22: группы коллег (создать, код и QR, вступить по ссылке, приглашение, статус только
 // по выбору человека, права администратора, выйти и удалить) и новый вид профиля (по примеру Никиты).
 // Сервер подменён (mock-colleagues.js), люди, станции и группы выдуманные.
+import { GROUPS_LIVE } from '../../js/legal.js';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
@@ -36,6 +37,9 @@ const readQr = (page) => page.evaluate(async () => {
   return jsQR(cx.getImageData(0, 0, 600, 600).data, 600, 600)?.data || null;
 });
 
+// Группы ждут сервера (GROUPS_LIVE в legal.js): пока выключены, их сценарии не запускаем
+const gtest = (name, fn) => test(name, { skip: !GROUPS_LIVE && 'группы выключены до шага на сервере' }, fn);
+
 test('профиль по примеру Никиты: персонаж слева, сведения справа, «В пути с …», Коллеги → Награды → «Приватность профиля»; 320 px, обе темы', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, { ...NEW, links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }] });
@@ -54,7 +58,10 @@ test('профиль по примеру Никиты: персонаж слев
   const card = await box(page.locator('.pr-card'));
   assert.ok(stBox.width > card.width - 40, 'статус — во всю ширину карточки');
   assert.equal((await text(page, '#col-find')).trim(), 'Найти коллегу');
-  assert.match(await text(page, '.screen'), /Профиль[\s\S]*Коллеги[\s\S]*Найти коллегу[\s\S]*Мои коллеги[\s\S]*Группы[\s\S]*Пригласить коллег[\s\S]*Награды[\s\S]*Все \d+ из 39[\s\S]*Приватность профиля/);
+  const order = GROUPS_LIVE
+    ? /Профиль[\s\S]*Коллеги[\s\S]*Найти коллегу[\s\S]*Мои коллеги[\s\S]*Группы[\s\S]*Пригласить коллег[\s\S]*Награды[\s\S]*Все \d+ из 39[\s\S]*Приватность профиля/
+    : /Профиль[\s\S]*Коллеги[\s\S]*Найти коллегу[\s\S]*Мои коллеги[\s\S]*Пригласить коллег[\s\S]*Награды[\s\S]*Все \d+ из 39[\s\S]*Приватность профиля/;
+  assert.match(await text(page, '.screen'), order);
   assert.equal(await page.locator('#pr-awards .aw-mini.locked').count(), 0, 'в полоске — только полученные награды');
   assert.equal(await page.locator('.screen .notice').count(), 0, 'длинной зелёной плашки внизу больше нет');
   for (const theme of ['dark', 'light']) {
@@ -89,7 +96,7 @@ test('профиль без аккаунта: «Приватность проф�
   await context.close();
 });
 
-test('создать группу: согласие новой редакции, название до 30 знаков, код и QR-код со ссылкой, сменить код', async () => {
+gtest('создать группу: согласие новой редакции, название до 30 знаков, код и QR-код со ссылкой, сменить код', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, { consents: [{ document: 'privacy-3', withdrawn_at: null }] });
   await tab(page, 'profile');
@@ -143,7 +150,7 @@ test('создать группу: согласие новой редакции,
   await context.close();
 });
 
-test('в группе: статус участника виден, только если он сам показывает его группе; мой статус — по переключателю', async () => {
+gtest('в группе: статус участника виден, только если он сам показывает его группе; мой статус — по переключателю', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, NEW, (db) => {
     db.groups = [{ id: G1, name: 'Бригада 7' }];
@@ -186,7 +193,7 @@ test('в группе: статус участника виден, только 
   await context.close();
 });
 
-test('вступить по ссылке группы: код убирается из адреса, видно название и что увидят участники', async () => {
+gtest('вступить по ссылке группы: код убирается из адреса, видно название и что увидят участники', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, NEW, (db) => {
     db.groups = [{ id: G1, name: 'Депо Сосновка' }];
@@ -214,7 +221,7 @@ test('вступить по ссылке группы: код убирается
   await context.close();
 });
 
-test('приглашение в группу: принять или отказаться; администратор приглашает только своих коллег', async () => {
+gtest('приглашение в группу: принять или отказаться; администратор приглашает только своих коллег', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, { ...NEW, links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }, { from_id: ME, to_id: OLEG, state: 'accepted' }] }, (db) => {
     db.groups = [{ id: G1, name: 'Бригада 7' }];
@@ -250,7 +257,7 @@ test('приглашение в группу: принять или отказа
   await context.close();
 });
 
-test('администратор: переименовать, исключить, передать права, выйти; удалить группу', async () => {
+gtest('администратор: переименовать, исключить, передать права, выйти; удалить группу', async () => {
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, NEW, (db) => {
     db.groups = [{ id: G1, name: 'Бригада 7' }];
@@ -299,6 +306,25 @@ test('старый сервер без групп: «Коллеги» работ
   await tab(page, 'profile');
   await page.locator('#col-entry').getByText('1 коллега').waitFor();
   assert.equal(await page.locator('#grp-entry').count(), 0);
+  assert.deepEqual(realErrors(errors), []);
+  await context.close();
+});
+
+test('пока группы выключены: строки «Группы» нет, приложение их даже не запрашивает, ссылка группы только убирается из адреса', { skip: GROUPS_LIVE && 'группы включены' }, async () => {
+  const { context, page, errors } = await openApp(env);
+  const asked = [];
+  page.on('request', (r) => { if (/\/(groups|group_members|group_invites)\?/.test(r.url())) asked.push(r.url()); });
+  await ready(context, page, { ...NEW, links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }] }, (db) => {
+    db.groups = [{ id: G1, name: 'Депо Сосновка' }];
+    db.members = [member(G1, ME, { role: 'admin' }), member(G1, ANNA)];
+  });
+  await tab(page, 'profile');
+  await page.locator('#col-entry').getByText('1 коллега').waitFor();
+  assert.equal(await page.locator('#grp-entry').count(), 0);
+  await page.evaluate(() => { location.hash = 'group=abcde-12345'; });
+  await page.waitForFunction(() => !location.hash);
+  assert.equal(await page.locator('.screen[data-page=groups]').count(), 0);
+  assert.deepEqual(asked, []);
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });

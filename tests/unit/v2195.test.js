@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { GROUPS_LIVE } from '../../js/legal.js';
 import { HELP, helpCount, helpListHtml, renderHelp } from '../../js/help.js';
 
 const src = (f) => readFileSync(new URL(`../../js/${f}`, import.meta.url), 'utf8');
@@ -46,7 +47,7 @@ test('без поиска — все группы; аккаунт: нет раз
 
   const noAcc = helpListHtml('', new Set(), { account: false, signed: false });
   assert.doesNotMatch(noAcc, /Аккаунт и коллеги|data-page="account"|data-page="privacy"/);
-  assert.equal(ids(noAcc).length, helpCount() - HELP.find((g) => g.need === 'account').items.length);
+  assert.equal(ids(noAcc).length, helpCount() - HELP.find((g) => g.need === 'account').items.filter((it) => it.need !== 'groups' || GROUPS_LIVE).length);
 
   const out = helpListHtml('', new Set(), { account: true, signed: false });
   assert.match(out, /Аккаунт и коллеги/);

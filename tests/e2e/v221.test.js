@@ -188,7 +188,7 @@ test('Настройки: разделы спрятаны по строкам, �
   assert.match(await text(page, '.screen'), /Создать резервную копию[\s\S]*Восстановить из копии/);
   await page.locator('.screen .page-head [data-act=back]').click();
   await page.locator('#set-about-row').click();
-  assert.match(await text(page, '.screen'), /Помощь[\s\S]*Что нового[\s\S]*Подсказки[\s\S]*CABINA 2\.22/);
+  assert.match(await text(page, '.screen'), /Помощь[\s\S]*Что нового[\s\S]*Подсказки[\s\S]*CABINA 2\.\d+\.\d+/);
   for (const w of [320, 390]) { await page.setViewportSize({ width: w, height: 760 }); assert.equal(await fits(page), true); }
   assert.deepEqual(errors, []);
   await context.close();

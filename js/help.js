@@ -2,6 +2,7 @@
 // Замена убранным подсказкам: кто хочет разобраться, читает сам, когда удобно.
 // Только справка: ничего не хранит и никуда не отправляет. Ответы — наш статичный текст (в нём допустим <b>),
 // данных пользователя в нём нет. Если меняется поведение приложения — поправить ответ здесь же.
+import { GROUPS_LIVE } from './legal.js';
 import { I, esc, small, pageHead, highlight, searchWords, normSearch } from './ui.js';
 
 // open: [надпись, экран, элемент на экране для прокрутки?]. need у группы: 'account' — только когда раздел аккаунта есть;
@@ -100,10 +101,10 @@ export const HELP = [
       open: ['Приватность', 'privacy'], need: 'signed' },
     { id: 'grp-how', q: 'Как создать группу или вступить в неё?', k: 'группа группы бригада колонна депо вступить код qr администратор',
       a: 'Профиль → <b>«Группы»</b> → «Создать группу»: вы станете администратором. Пригласить можно своих коллег или показать код группы (QR-код) — по нему вступает любой, кому вы его дали; код можно сменить. Вступить в чужую группу — по приглашению или «Вступить по коду». В группе до 200 человек, у человека — до 10 групп. Переписки нет.',
-      open: ['Группы', 'groups'], need: 'signed' },
+      open: ['Группы', 'groups'], need: 'groups' },
     { id: 'grp-see', q: 'Что видят участники группы?', k: 'группа статус видно приватность участники',
       a: 'Имя, должность и то, что вы разрешили в «Приватности» (депо, персонаж). Ваш статус группа видит, только если вы сами включили <b>«Показывать мой статус группе»</b> в этой группе, — в каждой группе отдельно. Выйти из группы можно в любой момент.',
-      open: ['Группы', 'groups'], need: 'signed' },
+      open: ['Группы', 'groups'], need: 'groups' },
     { id: 'acc-delete', q: 'Как удалить аккаунт?', k: 'удалить аккаунт выйти',
       a: 'Настройки → «Настройки аккаунта» → <b>«Удалить аккаунт»</b>. Данные на сервере удаляются, а записи в телефоне остаются.',
       open: ['Настройки аккаунта', 'account'], need: 'signed' },
@@ -127,7 +128,7 @@ export const HELP = [
   ] },
 ];
 
-export const helpCount = () => HELP.reduce((n, g) => n + g.items.length, 0);
+export const helpCount = () => HELP.reduce((n, g) => n + g.items.filter((it) => it.need !== 'groups' || GROUPS_LIVE).length, 0);
 
 const plain = (html) => html.replace(/<[^>]+>/g, '');
 // все слова запроса должны найтись в вопросе, ответе или ключевых словах
@@ -135,7 +136,7 @@ const matches = (it, words) => {
   const hay = normSearch(`${it.q} ${plain(it.a)} ${it.k || ''}`);
   return words.every((w) => hay.includes(w));
 };
-const allowed = (need, ctx) => !need || (need === 'account' ? ctx.account : need === 'signed' ? ctx.account && ctx.signed : true);
+const allowed = (need, ctx) => need === 'groups' ? GROUPS_LIVE && ctx.account && ctx.signed : !need || (need === 'account' ? ctx.account : need === 'signed' ? ctx.account && ctx.signed : true);
 
 // auto — открыт только из-за поиска: app.js не запоминает его как открытый человеком
 function itemHtml(it, words, open, auto, ctx) {
@@ -150,7 +151,7 @@ function itemHtml(it, words, open, auto, ctx) {
 export function helpListHtml(q, opened, ctx) {
   const words = searchWords(q);
   const groups = HELP.filter((g) => allowed(g.need, ctx))
-    .map((g) => ({ g: g.g, items: g.items.filter((it) => !words.length || matches(it, words)) }))
+    .map((g) => ({ g: g.g, items: g.items.filter((it) => (it.need !== 'groups' || allowed('groups', ctx)) && (!words.length || matches(it, words))) }))
     .filter((g) => g.items.length);
   const found = groups.reduce((n, g) => n + g.items.length, 0);
   if (!found) return `<p class="hint faq-none">Ничего не нашлось. Попробуйте другое слово, например «отдых», «ставка» или «копия».</p>`;

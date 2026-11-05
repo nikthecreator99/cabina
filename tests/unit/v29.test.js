@@ -1,5 +1,6 @@
 // 2.9: аккаунт CABINA — что и как уходит на сервер, вход в телефоне, ссылки из писем, тексты согласия.
 // Сервер подменён: настоящие запросы не отправляются. Все данные — выдуманные.
+import { GROUPS_LIVE } from '../../js/legal.js';
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -38,7 +39,8 @@ test('ключ в приложении — только публичный (anon
 test('редакция согласия совпадает с той, которую требует сервер', () => {
   // последняя миграция, где задана редакция, побеждает
   const dir = new URL('../../server/migrations/', import.meta.url);
-  const sql = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(new URL(f, dir), 'utf8')).join('\n');
+  // пока группы выключены (GROUPS_LIVE), приложение живёт на сервере без миграции 0007
+  const sql = readdirSync(dir).filter((f) => f.endsWith('.sql') && (GROUPS_LIVE || !f.startsWith('0007'))).sort().map((f) => readFileSync(new URL(f, dir), 'utf8')).join('\n');
   const last = (key) => [...sql.matchAll(new RegExp(`\\('${key}', '([\\w-]+)'\\)|set value = '([\\w-]+)' where key = '${key}'`, 'g'))].map((m) => m[1] || m[2]).at(-1);
   assert.equal(last('consent_version'), CONSENT_VERSION);
   assert.equal(last('publish_version'), PUBLISH_VERSION, 'согласие на распространение (поиск коллег)');

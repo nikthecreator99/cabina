@@ -29,7 +29,7 @@ import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite } f
 import { initColleagues, colleaguesHtml, profilePrivacyRowHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
-import { legalReady, policyHtml, APP_URL } from './legal.js';
+import { legalReady, policyHtml, APP_URL, GROUPS_LIVE } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 import { renderHelp, helpListHtml } from './help.js';
@@ -37,7 +37,7 @@ import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, j
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.22.0';
+export const VERSION = '2.21.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -984,6 +984,7 @@ function checkGroupHash() {
   const code = groupFromHash(location.hash);
   if (!code) return false;
   history.replaceState(history.state, '', location.pathname + location.search);
+  if (!GROUPS_LIVE) return true; // группы пока выключены (ждут сервера)
   if (!legalReady()) return true;
   V.tab = 'profile'; V.pages = [];
   if (!session()) { toast('Чтобы вступить в группу, войдите в аккаунт и откройте ссылку ещё раз', { ms: 6000 }); go('account'); return true; }

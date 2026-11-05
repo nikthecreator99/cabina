@@ -10,7 +10,7 @@ import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDi
 import { S, saveProfile, nowLocal, onChange, legEnds } from './store.js';
 import { DAY } from './calc.js';
 import { session, rpc, restGet, errorText } from './auth.js';
-import { CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, consentHtml, policyHtml, publishConsentHtml, legalReady } from './legal.js';
+import { GROUPS_LIVE, CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, consentHtml, policyHtml, publishConsentHtml, legalReady } from './legal.js';
 import { statusFacts, privacyOf, normDepot } from './profile.js';
 import { routeEnds } from './rest.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
@@ -339,7 +339,7 @@ export function loadColleagues({ force = false } = {}) {
       restGet('access?select=user_id,item,viewer_id'),
     ]);
     // группы (2.22) — отдельно: старый сервер без них не должен ломать «Коллег»
-    const gs = await Promise.all([
+    const gs = !GROUPS_LIVE ? [{ ok: false, status: 404 }] : await Promise.all([
       restGet('groups?select=id,name'),
       restGet('group_members?select=group_id,user_id,role,show_status,show_place,joined_at'),
       restGet('group_invites?select=group_id,user_id,invited_by'),
