@@ -17,8 +17,12 @@ export async function toggleMoney(flip = false) {
   }
 }
 
-// На iPhone датчик доступен только после разрешения, поэтому там переворот включается вручную в Настройках
-const needsPermission = () => typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
+// На iPhone датчик доступен только после разрешения, поэтому там переворот включается вручную в Настройках.
+// Одного наличия requestPermission мало: с Chrome 153 оно есть и в Chrome (там сразу отвечает «granted»), поэтому
+// iPhone и iPad узнаём по самому устройству (iPad с iPadOS 13+ называет себя «Macintosh», но у него сенсорный экран).
+const hasRequest = () => typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
+const isApple = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const needsPermission = () => hasRequest() && isApple();
 export const flipOn = () => S.settings.flipHide ?? !needsPermission();
 
 const DOWN_MS = 300; // столько телефон должен лежать экраном вниз, чтобы это не было случайным поворотом
@@ -42,22 +46,22 @@ function listen() {
   window.addEventListener('deviceorientation', onOrient);
 }
 async function permit() {
-  if (!needsPermission()) return true;
-  try { return (await DeviceOrientationEvent.requestPermission()) === 'granted'; } catch { return false; }
+  if (!hasRequest()) return true;
+  try { return (await DeviceOrientationEvent.requestPermission()) === 'granted'; } catch { return !isApple(); } // не iPhone — просьба без нажатия может не пройти, датчик и так работает
 }
 
 // При запуске. На iPhone разрешение просим только у тех, кто сам включил переворот, — при первом нажатии
 export function initMoney() {
   applyMoney();
   if (!flipOn()) return;
-  if (!needsPermission()) { listen(); return; }
+  if (!needsPermission()) { listen(); if (hasRequest()) permit(); return; } // Chrome отвечает «granted» сразу, без окна
   const once = async () => { document.removeEventListener('click', once, true); if (await permit()) listen(); };
   document.addEventListener('click', once, true);
 }
 
 // Переключатель в Настройках (нажатие — нужно iPhone для разрешения)
 export async function setFlip(on) {
-  if (on && !(await permit())) { toast('Нет доступа к положению телефона. Разрешите «Движение и ориентация» в настройках Safari'); return false; }
+  if (on && !(await permit())) { toast(isApple() ? 'Нет доступа к положению телефона. Разрешите «Движение и ориентация» в настройках Safari' : 'Нет доступа к положению телефона. Разрешите датчики движения для сайта в настройках браузера'); return false; }
   await saveSettings({ flipHide: on });
   if (on) listen();
   return true;
