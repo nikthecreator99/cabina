@@ -1,5 +1,5 @@
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
-import { I, esc, openLayer, closeLayer, sheet, confirmDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe } from './ui.js';
+import { I, esc, openLayer, closeLayer, sheet, confirmDialog, infoDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe } from './ui.js';
 import {
   S, statsOf, nowLocal, routeText, routeOf, knownTypes, notesFor, locoKey, locoLabel, normNum, isLive, isPending, myPay, onChange, offChange,
   saveTrip, deleteTrip, saveAbsence, deleteAbsence, saveRoute, deleteRoute, saveNote, deleteNote, timeNorms, legEnds, stationsOf, locosOf, usesRoute,
@@ -10,7 +10,7 @@ import {
 } from './calc.js';
 import { dayInfo } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restEndOf } from './rest.js';
-import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
+import { tripPay, overRestIntervals, hasRate, fmtRub, vacationPay, VAC_MIN_MONTHS } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
 import { openRemind } from './remind.js';
@@ -26,6 +26,7 @@ const addDays = (key, n) => fmtLocal(parseLocal(`${key}T00:00`) + n * DAY).slice
 // Отвлечения, на которые поездка попадать не должна (медкомиссия — с 2.21.7: Никита — «в день медкомиссии поездки быть не может»)
 const ABS_CLASH = { sick: 'больничный', vacation: 'отпуск', study: 'учёбу', medical: 'медкомиссию' };
 const timesKey = (t) => JSON.stringify([t?.start || '', t?.end || '', (t?.passenger || []).map((p) => [p.start, p.end]), (t?.waiting || []).map((p) => [p.start, p.end])]);
+const daysIn = (a, b) => Math.round((Date.parse(`${b}T00:00Z`) - Date.parse(`${a}T00:00Z`)) / DAY) + 1;
 const monthName = (mk) => `${MONTHS[+mk.slice(5, 7) - 1]} ${mk.slice(0, 4)}`;
 
 export let navigateToMonth = () => {};
@@ -950,6 +951,7 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
           <button type="button" class="switch" role="switch" id="af-auto" aria-label="Автоматический расчёт"></button></div>
         <div id="af-hours"></div>
       </div>
+      <div class="field" id="af-vac" hidden></div>
       <div class="field" id="af-med" hidden></div>
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="save-abs">${I.check} Сохранить</button>`,
@@ -963,9 +965,28 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
     box.hidden = A.type !== 'medical';
     box.innerHTML = A.type === 'medical' ? medFormHtml(A.end && A.end >= A.start ? A.end : null) : '';
   }
+  // отпускные ориентировочно (2.21.9): только для отпуска и только по месяцам с поездками
+  function renderVac() {
+    const box = $(el, '#af-vac');
+    const ok = A.type === 'vacation' && A.start && A.end && A.end >= A.start;
+    box.hidden = !ok;
+    if (!ok) { box.innerHTML = ''; return; }
+    const cfg = myPay();
+    if (!hasRate(cfg)) { box.innerHTML = '<div class="hint">Укажите ставку в ☰ «Настройки работы» — посчитаем отпускные ориентировочно.</div>'; return; }
+    const v = vacationPay(A.start, A.end, S.trips, S.absences, cfg, statsOf, { overRest: overRestIntervals(S.trips, statsOf) });
+    if (!v) { box.innerHTML = ''; return; }
+    if (!v.enough) { box.innerHTML = `<div class="hint">Отпускные посчитаем, когда в CABINA будут поездки хотя бы за ${VAC_MIN_MONTHS} месяцев из 12 до отпуска${v.months ? ` (сейчас — ${v.months})` : ''}.</div>`; return; }
+    box.innerHTML = `<div class="calc money-area" id="af-vac-calc">
+      <div class="calc-row main tight"><span class="vac-head">Отпускные на руки<button type="button" class="info-btn" data-act="vac-info" aria-label="Как считаются отпускные">${I.excl}</button></span><b class="money">≈ ${fmtRub(v.net)}</b></div>
+      <div class="calc-row"><span>До НДФЛ</span><b class="money">${fmtRub(v.gross)}</b></div>
+      <div class="calc-row"><span>Дней отпуска${v.days !== daysIn(A.start, A.end) ? ' (без праздников)' : ''}</span><b>${v.days}</b></div>
+      <div class="calc-row"><span>Средний за день</span><b class="money">${fmtRub(v.perDay)}</b></div>
+      <div class="calc-note">Ориентировочно, по поездкам за ${v.months} ${v.months === 1 ? 'месяц' : v.months < 5 ? 'месяца' : 'месяцев'}. Итог — по расчёту бухгалтерии.</div></div>`;
+  }
   function render() {
     el.querySelectorAll('[data-type]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.type === A.type)));
     renderMed();
+    renderVac();
     $(el, '#af-auto').setAttribute('aria-checked', String(A.auto !== false));
     const box = $(el, '#af-hours');
     if (!A.start || !A.end || A.end < A.start) { box.innerHTML = '<div class="hint">Укажите корректный период — расчёт появится здесь.</div>'; return; }
@@ -1012,6 +1033,7 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
     if (b.dataset.type) { A.type = b.dataset.type; render(); return; }
     if (b.dataset.act === 'med-toggle') { await medClick('med-toggle', b); renderMed(); return; }
     if (b.dataset.act === 'remind') { openRemind({ what: 'med', date: b.dataset.date }); return; }
+    if (b.dataset.act === 'vac-info') { infoDialog({ title: 'Как считаются отпускные', text: 'По статье 139 ТК РФ: заработок за 12 месяцев до месяца отпуска делится на 29,3 дня за каждый полный месяц (неполные месяцы — по отработанным дням), получается средний за день. Он умножается на дни отпуска; праздничные дни в отпуск не входят. Дни и деньги за больничный, учёбу, медкомиссию и прошлые отпуска не учитываются. Считаем по поездкам в CABINA и вашим ставкам — итог по расчёту бухгалтерии.' }); return; }
     if (b.id === 'af-auto') {
       if (A.auto !== false) {
         A.auto = false;

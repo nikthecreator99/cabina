@@ -1482,3 +1482,5 @@ button.pr-status svg { color: var(--text-2); }
 .remind-when b { display: block; font-size: calc(17px * var(--fs)); }
 .remind-when small { display: block; font-size: calc(14px * var(--fs)); color: var(--text-2); margin-top: 2px; }
 #rm-alarm { margin-top: 10px; }
+.vac-head { display: inline-flex; align-items: center; gap: 2px; }
+.vac-head .info-btn { width: 32px; height: 32px; }

@@ -1,9 +1,9 @@
 // Service worker CABINA: приложение работает без интернета после первого открытия.
 // Пользовательские данные (IndexedDB) service worker не трогает.
-const VERSION = 'cabina-v2.21.8';
+const VERSION = 'cabina-v2.21.9';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/boot.js', 'js/app.js', 'js/ui.js', 'js/store.js', 'js/db.js', 'js/calc.js', 'js/checks.js', 'js/remind.js', 'js/calendar.js', 'js/forms.js', 'js/docs.js', 'js/backup.js', 'js/sun.js', 'js/tour.js', 'js/tours.js',
+  'js/boot.js', 'js/app.js', 'js/ui.js', 'js/store.js', 'js/db.js', 'js/calc.js', 'js/checks.js', 'js/remind.js', 'js/depot.js', 'js/table.js', 'js/calendar.js', 'js/forms.js', 'js/docs.js', 'js/backup.js', 'js/sun.js', 'js/tour.js', 'js/tours.js',
   'js/pay.js', 'js/rest.js', 'js/work.js', 'js/profile.js', 'js/stats.js', 'js/fix.js', 'js/career.js', 'js/med.js', 'js/slip.js', 'js/search.js', 'js/phones.js', 'js/day.js', 'js/account.js', 'js/auth.js', 'js/legal.js', 'js/money.js', 'js/lock.js', 'js/recap.js', 'js/avatar.js', 'js/avatar-edit.js', 'js/colleagues.js', 'js/pull.js', 'js/awards.js', 'js/share.js', 'js/help.js', 'js/invites.js', 'js/groups.js', 'js/ideas.js', 'js/vendor/qrcode.js', 'js/vendor/jsqr.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-192.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png',
   'icons/awards/first.webp', 'icons/awards/s50.webp', 'icons/awards/s300.webp', 'icons/awards/s1000.webp', 'icons/awards/iron.webp', 'icons/awards/rocket.webp', 'icons/awards/heavy.webp', 'icons/awards/loco.webp', 'icons/awards/k10.webp', 'icons/awards/earth.webp', 'icons/awards/k100.webp', 'icons/awards/moon.webp', 'icons/awards/hours.webp', 'icons/awards/owl.webp', 'icons/awards/lark.webp', 'icons/awards/cabin.webp', 'icons/awards/wait.webp', 'icons/awards/pass.webp', 'icons/awards/newyear.webp', 'icons/awards/holiday.webp', 'icons/awards/account.webp', 'icons/awards/mentor.webp', 'icons/awards/idea.webp',

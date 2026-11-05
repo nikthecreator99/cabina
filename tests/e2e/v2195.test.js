@@ -55,11 +55,13 @@ test('«Ещё» → «Помощь»: вопросы по группам, от�
   await context.close();
 });
 
-test('поиск: «копия» — два ответа и сразу открыты; лишнее слово — «Ничего не нашлось»; крестик очищает', async () => {
+test('поиск: «копия» — три ответа и сразу открыты; лишнее слово — «Ничего не нашлось»; крестик очищает', async () => {
   const { context, page, errors } = await openApp(env);
   await openHelpFromExtra(page);
   await page.locator('#help-q').fill('копия');
-  await page.waitForFunction(() => document.querySelectorAll('details.faq').length === 2);
+  // с 2.21.9 ещё «Выгрузить в Excel» — он в разделе «Данные и резервная копия»
+  await page.waitForFunction(() => document.querySelectorAll('details.faq').length === 3);
+  assert.equal(await isOpen(page, 'table-excel'), true);
   assert.equal(await isOpen(page, 'data-lost'), true);
   assert.equal(await isOpen(page, 'data-move'), true);
   assert.ok(await page.locator('details.faq mark').count() > 0 || await page.locator('#help-list').innerText().then((t) => /копи/i.test(t)));

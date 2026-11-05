@@ -5,6 +5,8 @@ import { fmtDur, fmtLocal, legsOf } from './calc.js';
 import { openRouteForm } from './forms.js';
 import { restHouses, dayOffMin } from './rest.js';
 import { PAY_FIELDS, ROLES, payCfg, paySet, currentRate, hasRate, fmtRub } from './pay.js';
+import { openDepotShare, openDepotReceive } from './depot.js';
+
 
 export const fmtKm = (v) => `${String(Math.round(v * 10) / 10).replace('.', ',')} км`;
 const todayKey = () => fmtLocal(nowLocal()).slice(0, 10);
@@ -35,7 +37,10 @@ export function renderWork() {
         ${wkOpen.has('dayoff') ? `<div id="wk-dayoff"><div class="row"><div class="grow"><div class="t2"><label for="day-off">Часы выходного.</label> После поездки нажмите «Пойти на выходной» — на главном экране будет видно, когда он закончится.</div></div></div>
         <div class="row"><div class="input-unit grow"><input class="input" id="day-off" inputmode="decimal" autocomplete="off" value="${esc(numText(Math.round(dayOffMin() / 60 * 100) / 100))}" placeholder="Например, 60"><span>ч</span></div></div></div>` : ''}
       </div>
-    </div>`;
+      <button class="row" data-act="depot-share" id="depot-share"><span class="ico" style="--c:var(--accent)">${I.qr}</span><div class="grow"><div class="t1">Поделиться настройками депо</div><div class="t2">Маршруты, нормы и дома отдыха — коллеге одним QR-кодом</div></div>${small(I.right, 18)}</button>
+      <button class="row" data-act="depot-receive" id="depot-receive"><span class="ico" style="--c:var(--ok)">${I.camera}</span><div class="grow"><div class="t1">Получить настройки депо</div><div class="t2">Отсканируйте QR-код коллеги — выберете, что добавить</div></div>${small(I.right, 18)}</button>
+    </div>
+    <div class="hint">Настройками депо можно поделиться с коллегой: ставки, оклад и поездки не передаются.</div>`;
 }
 
 // ---------------------------------------------------------------- маршруты (компактные карточки)
@@ -243,6 +248,8 @@ export async function workClick(act, b, ctx) {
     case 'rest-plus': if (S.settings.minRest < 24 * 60) await saveSettings({ minRest: S.settings.minRest + 30 }); return true;
     case 'wk-toggle': { const k = b.dataset.k; if (wkOpen.has(k)) wkOpen.delete(k); else wkOpen.add(k); ctx.rerender(); if (wkOpen.has(k)) document.getElementById(k === 'dayoff' ? 'day-off' : 'min-shift')?.closest('.wk-sec')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return true; }
     case 'house': openHouse(b.dataset.key); return true;
+    case 'depot-share': openDepotShare(); return true;
+    case 'depot-receive': openDepotReceive(); return true;
     case 'add-route': openRouteForm(); return true;
     case 'route': openRouteForm(b.dataset.id); return true;
     case 'route-del': {

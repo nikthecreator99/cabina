@@ -363,3 +363,47 @@ export function fmtH(hours) {
   return `${String(v).replace('.', ',')} ч`;
 }
 export const parseDateKey = (k) => parseLocal(`${k}T00:00`);
+
+// ---- Отпускные ориентировочно (2.21.9, просьба Никиты; ст. 139 и 120 ТК РФ) ----
+// Расчётный период — 12 календарных месяцев до месяца начала отпуска. Средний за день = заработок за период /
+// (29,3 × полные месяцы + 29,3 / дней в месяце × отработанные календарные дни неполных месяцев). Из периода
+// исключаются дни больничного, отпуска, учёбы и медкомиссии и деньги за них (больничный, учёба). Отпускные =
+// средний за день × дни отпуска; нерабочие праздничные дни внутри отпуска в дни отпуска не входят (ст. 120).
+// Учитываем только месяцы, где есть поездки (до CABINA записей нет); считаем, если таких месяцев хотя бы 6.
+export const VAC_MIN_MONTHS = 6;
+const EXCLUDED = ['sick', 'vacation', 'study', 'medical'];
+export function vacationDays(startKey, endKey) {
+  let n = 0;
+  for (let t = Date.parse(`${startKey}T00:00Z`), e = Date.parse(`${endKey}T00:00Z`), g = 0; t <= e && g < 400; t += 86400000, g++) {
+    if (dayInfo(new Date(t).toISOString().slice(0, 10)).kind !== 'holiday') n++;
+  }
+  return n;
+}
+export function vacationPay(startKey, endKey, trips, absences, cfg, statsOf, { overRest } = {}) {
+  if (!hasRate(cfg) || !startKey || !endKey || endKey < startKey) return null;
+  const y0 = +startKey.slice(0, 4); const m0 = +startKey.slice(5, 7);
+  const tripMonths = new Set();
+  for (const t of trips) { const st = statsOf(t); if (!st.live) for (const mk of Object.keys(st.byMonth || {})) tripMonths.add(mk); }
+  let sum = 0; let weight = 0; let months = 0;
+  const others = (absences || []).filter((a) => !(a.start === startKey && a.end === endKey && a.type === 'vacation'));
+  for (let i = 12; i >= 1; i--) {
+    const d = new Date(Date.UTC(y0, m0 - 1 - i, 1));
+    const y = d.getUTCFullYear(); const m = d.getUTCMonth() + 1;
+    const mk = `${y}-${String(m).padStart(2, '0')}`;
+    if (!tripMonths.has(mk)) continue;
+    const r = payMonth(y, m, trips, others, cfg, statsOf, { overRest });
+    const paid = (r.lines.find((l) => l.key === 'sick')?.amount || 0) + (r.lines.find((l) => l.key === 'study')?.amount || 0);
+    const cal = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const off = Math.min(cal, EXCLUDED.reduce((s, type) => s + absDaysInMonth(others, y, m, type), 0));
+    if (off >= cal) continue;
+    sum += Math.max(0, r.gross - paid);
+    weight += 29.3 / cal * (cal - off);
+    months++;
+  }
+  if (months < VAC_MIN_MONTHS || weight <= 0) return { months, enough: false };
+  const days = vacationDays(startKey, endKey);
+  const perDay = sum / weight;
+  const gross = round2(perDay * days);
+  const ndfl = Math.round(gross * NDFL / 100);
+  return { enough: true, months, days, perDay: round2(perDay), gross, ndfl, net: round2(gross - ndfl) };
+}

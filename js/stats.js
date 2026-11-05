@@ -364,7 +364,7 @@ function tripsView(R) {
   }
   if (R.count) html += homeDaysHtml(homeDays(ST));
   if (R.series.length) html += block('Локомотивы', locosHtml(R.series));
-  if (R.count >= 3 && R.callTop) {
+  if (R.count >= 1 && R.callTop) { // с первой поездки (Никита, 05.11.2026; до 2.21.9 — от 3)
     const items = R.calls.map((v, i) => ({ v, label: i % 2 ? '' : String(i * 2), full: callRange(i * 2) }));
     html += block('Время явки', `<div class="kv-grid">${kv('Чаще всего вызывают', callRange(R.callTop.from, true), `${R.callTop.n} из ${R.count} ${plural(R.count, 'явки', 'явок', 'явок')}`)}</div>
       ${barChart(items, { fmt: (v) => `${v} ${plural(v, 'явка', 'явки', 'явок')}`, id: 'ch-calls' })}`);
@@ -416,7 +416,7 @@ function recapData() {
   if (R.night > 0) tiles.push(['Ночью', fmtDur(R.night, { short: true }), `${Math.round((R.night / Math.max(1, R.work)) * 100)}% времени`]);
   if (R.km > 0) tiles.push(['Пройдено', `${Math.round(R.km).toLocaleString('ru-RU')} км`]);
   if (R.longest) tiles.push(['Самая длинная', fmtDur(statsOf(R.longest).work, { short: true })]);
-  if (R.count >= 3 && R.callTop) tiles.push(['Чаще вызывают', callRange(R.callTop.from)]);
+  if (R.count >= 1 && R.callTop) tiles.push(['Чаще вызывают', callRange(R.callTop.from)]);
   const ser = R.series.find((x) => !x.unknown);
   if (ser) tiles.push(['Чаще всего на', ser.label, times(ser.n)]);
   if (R.overtime > 0) tiles.push(['Переработка', fmtDur(R.overtime, { short: true })]);

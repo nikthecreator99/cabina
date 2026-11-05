@@ -23,9 +23,9 @@ const KINDS = { passenger: 'p', reserve: 'r', shunt: 's' };
 const KIND_BACK = { p: 'passenger', r: 'reserve', s: 'shunt' };
 
 // ---- упаковка ----
-const b64u = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
-const unb64u = (s) => { const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
-async function pipe(bytes, stream, max) {
+export const b64u = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+export const unb64u = (s) => { const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
+export async function pipe(bytes, stream, max) {
   const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader();
   const parts = []; let n = 0;
   for (;;) {
@@ -39,7 +39,7 @@ async function pipe(bytes, stream, max) {
   for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
 }
-const canZip = () => typeof CompressionStream === 'function' && typeof DecompressionStream === 'function';
+export const canZip = () => typeof CompressionStream === 'function' && typeof DecompressionStream === 'function';
 
 const mins = (s) => Math.round(parseLocal(s) / MIN);
 const iv = (list, s0) => (list || []).map((p) => [mins(p.start) - s0, mins(p.end) - mins(p.start)]).filter(([o, d]) => Number.isFinite(o) && d > 0);
@@ -279,7 +279,7 @@ async function readQr(imageData) {
   const r = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
   return r?.data || null;
 }
-async function readQrFile(file) {
+export async function readQrFile(file) {
   const bmp = await createImageBitmap(file);
   try {
     for (const side of [1400, 800, 2000]) {
@@ -329,18 +329,20 @@ export async function openShareSheet(trips, { onDone } = {}) {
 }
 
 // ---- окно «Получить от напарника» ----
-export function openReceive() {
+// opts (2.21.9, настройки депо): title, intro, placeholder, handle(text) — разбирает код и открывает своё окно;
+// бросает Error с понятным текстом или возвращает false, если это не тот код.
+export function openReceive(opts = {}) {
   let stream = null; let timer = 0; let busy = false;
   const stop = () => { clearInterval(timer); timer = 0; stream?.getTracks().forEach((t) => t.stop()); stream = null; };
   const el = openLayer(sheet({
-    title: 'Получить от напарника', tall: true,
-    body: `<p class="t2">Напарник выбирает поездки (удержать палец на поездке) → «Поделиться» и показывает QR-код.</p>
+    title: opts.title || 'Получить от напарника', tall: true,
+    body: `<p class="t2">${opts.intro || 'Напарник выбирает поездки (удержать палец на поездке) → «Поделиться» и показывает QR-код.'}</p>
       <div class="cam-wrap" id="rc-cam" hidden><video id="rc-video" playsinline muted></video><div class="cam-frame"></div></div>
       <button class="btn btn-primary" data-act="rc-cam" id="rc-cam-btn">${I.camera} Сканировать камерой</button>
       <label class="btn btn-primary file-btn" id="rc-shot-btn" hidden>${I.camera} Сфотографировать<input type="file" accept="image/*" capture="environment" id="rc-shot" hidden></label>
       <label class="btn btn-ghost file-btn" id="rc-photo-btn">${I.image} Выбрать картинку<input type="file" accept="image/*" id="rc-photo" hidden></label>
       <div class="pay-field"><label for="rc-link">Или вставьте ссылку</label>
-        <div class="input-row"><input class="input" id="rc-link" autocomplete="off" inputmode="url" placeholder="https://cabina-app.ru/#t=…"><button class="btn btn-ghost btn-sm" data-act="rc-open">Открыть</button></div></div>
+        <div class="input-row"><input class="input" id="rc-link" autocomplete="off" inputmode="url" placeholder="${opts.placeholder || 'https://cabina-app.ru/#t=…'}"><button class="btn btn-ghost btn-sm" data-act="rc-open">Открыть</button></div></div>
       <div data-error></div>`,
   }), { onClose: stop });
   const err = (text) => { el.querySelector('[data-error]').innerHTML = text ? `<div class="error-box">${I.alert}<div>${esc(text)}</div></div>` : ''; };
@@ -358,6 +360,14 @@ export function openReceive() {
   if (camOff) noLive();
   const got = async (text) => {
     if (busy) return;
+    if (opts.handle) {
+      busy = true;
+      try {
+        const ok = await opts.handle(text, () => { stop(); closeLayer(el); });
+        if (ok === false) err(opts.notCode || 'Это не код CABINA.');
+      } catch (ex) { err(ex.message); } finally { busy = false; }
+      return;
+    }
     const code = codeFrom(text);
     if (!code) { err('Это не код CABINA с поездками.'); return; }
     busy = true; stop();
@@ -413,7 +423,7 @@ export function openReceive() {
 
 // ---- предпросмотр: что добавить ----
 const isIosBrowser = () => /iPhone|iPad|iPod/.test(navigator.userAgent) && !matchMedia('(display-mode: standalone)').matches && !navigator.standalone;
-export function openImportPreview({ items, skipped }, { link } = {}) {
+export function openImportPreview({ items, skipped }, { link, title = 'Поездки от напарника', notice } = {}) {
   const pick = new Set(items.map((it, i) => (it.dup ? null : i)).filter((i) => i != null));
   const row = (it, i) => {
     const t = it.trip;
@@ -425,13 +435,13 @@ export function openImportPreview({ items, skipped }, { link } = {}) {
       <span class="t2">${esc(route)} · ${esc(fmtDur((e - s) / MIN, { short: true }))}${loco ? ` · ${esc(loco)}` : ''}</span>
       ${it.dup ? `<span class="t2 warn-line">У вас уже есть поездка в это время</span>` : ''}</span></button>`;
   };
-  const body = items.length ? `<div class="notice warn">${I.alert}<div><b>Проверьте цифры сами:</b> человек мог ошибиться. Добавленные поездки можно изменить или удалить как обычные. Заработок по ним посчитается по вашим ставкам.</div></div>
+  const body = items.length ? `<div class="notice warn">${I.alert}<div>${notice || '<b>Проверьте цифры сами:</b> человек мог ошибиться. Добавленные поездки можно изменить или удалить как обычные. Заработок по ним посчитается по вашим ставкам.'}</div></div>
       ${isIosBrowser() && link ? `<div class="notice">${I.info}<div>Если CABINA у вас на экране «Домой», добавляйте там: Safari и значок хранят записи отдельно. <button class="link-btn" data-act="imp-copy">Скопировать ссылку</button>, откройте CABINA → «Добавить поездку» → «Получить поездки от напарника» и вставьте её.</div></div>` : ''}
       <div class="list imp-list">${items.map(row).join('')}</div>
       ${skipped ? `<p class="t2">${skipped} ${plural(skipped, 'поездку', 'поездки', 'поездок')} не показали: в них ошибка или они ещё не закончились.</p>` : ''}`
-    : `<div class="empty">В коде нет поездок, которые можно добавить.</div>`;
+    : `<div class="empty">Нет поездок, которые можно добавить.</div>`;
   const el = openLayer(sheet({
-    title: 'Поездки от напарника', tall: true, body,
+    title, tall: true, body,
     foot: items.length ? `<button class="btn btn-primary" data-act="imp-add" id="imp-add">${I.check} <span></span></button>` : '',
   }));
   const label = () => {

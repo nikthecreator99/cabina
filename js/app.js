@@ -33,12 +33,14 @@ import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL, GROUPS_LIVE } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
+import { checkDepotHash } from './depot.js';
+import { openTableExport, importTableFile } from './table.js';
 import { renderHelp, helpListHtml } from './help.js';
 import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, joinByCode } from './groups.js';
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.21.8';
+export const VERSION = '2.21.9';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -512,6 +514,11 @@ function renderSetData() {
         <button class="switch" role="switch" id="bk-docs" aria-checked="${V.bkDocs !== false}" aria-label="Сохранять рабочие документы в копию" data-act="bk-docs"></button></div>
       <button class="row" data-act="export"><span class="ico" style="--c:var(--accent)">${I.download}</span><div class="grow"><div class="t1">Создать резервную копию</div><div class="t2">${S.backup.lastAt ? `Последняя: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Ещё не сохранялась'}</div></div>${small(I.right, 18)}</button>
       <label class="row" style="cursor:pointer"><span class="ico" style="--c:var(--night)">${I.upload}</span><div class="grow"><div class="t1">Восстановить из копии</div><div class="t2">Текущие данные заменятся</div></div>${small(I.right, 18)}<input type="file" id="bk-import" accept=".json,application/json" hidden></label>
+    </div>
+    <div class="group-title">Таблица</div>
+    <div class="panel" id="table-panel">
+      <button class="row" data-act="table-export" id="table-export"><span class="ico" style="--c:var(--ok)">${I.download}</span><div class="grow"><div class="t1">Выгрузить в Excel</div><div class="t2">Поездки и часы таблицей</div></div>${small(I.right, 18)}</button>
+      <label class="row" style="cursor:pointer" id="table-import-row"><span class="ico" style="--c:var(--warn)">${I.upload}</span><div class="grow"><div class="t1">Загрузить из таблицы</div><div class="t2">Файл CSV — например, из Excel</div></div>${small(I.right, 18)}<input type="file" id="tbl-import" accept=".csv,text/csv,.txt,text/plain" hidden></label>
     </div>`;
 }
 function renderSetTime() {
@@ -852,6 +859,7 @@ app.addEventListener('click', async (e) => {
     case 'pull-style': openPullStyles(); break;
     case 'bk-docs': V.bkDocs = V.bkDocs === false; rerender(); break;
     case 'export': await doExport(); break;
+    case 'table-export': openTableExport(); break;
     case 'install': {
       if (deferredInstall) { deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => {}); deferredInstall = null; rerender(); }
       break;
@@ -921,6 +929,7 @@ app.addEventListener('change', async (e) => {
   if (avatarChange(e)) return;
   if (await careerChange(e)) return;
   if (t.id === 'doc-upload' && t.files?.length) { await uploadFiles(t.files); t.value = ''; }
+  else if (t.id === 'tbl-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; await importTableFile(f); }
   else if (t.id === 'bk-import' && t.files?.[0]) { const f = t.files[0]; t.value = ''; if (await importBackup(f)) { applyTheme(); applyMoney(); } }
 });
 
@@ -1026,11 +1035,12 @@ async function start() {
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
   // ссылка с поездками от напарника (данные после «#» — сервер их не видел)
   checkShareHash();
+  checkDepotHash();
   // ссылка-приглашение от коллеги: форма «Создать аккаунт» с кодом (код тоже после «#», сервер сайта его не видит)
   checkInviteHash();
   // ссылка группы (код после «#»)
   checkGroupHash();
-  window.addEventListener('hashchange', () => { checkShareHash(); checkInviteHash(); checkGroupHash(); });
+  window.addEventListener('hashchange', () => { checkShareHash(); checkDepotHash(); checkInviteHash(); checkGroupHash(); });
   // аккаунт: отметка «заходил сегодня» для статистики (раз в день; без аккаунта ничего не отправляется)
   touch(VERSION).catch(() => {});
   // премиум-персонаж: права с сервера (своя отметка у каждого адреса сайта); изменились — перерисовать персонажа
