@@ -157,6 +157,66 @@ function collect(p) {
   return R;
 }
 
+// Дни дома (2.21.3, просьба Никиты): свободный день — целые сутки без поездки (с ожиданием и следованием)
+// и без отдыха в доме отдыха после поездки с отдыхом в пункте оборота (перерыв ≤ 48 ч). Дни отвлечений
+// свободными не считаются и прерывают серию. Отмеченный в календаре «Выходной» — свободный.
+// Серия без выходного — подряд идущие дни с поездкой или отдыхом в доме отдыха. Считаются только прошедшие
+// сутки (сегодня ещё не закончилось) и только внутри периода. Всё считается в телефоне.
+export function homeDays(p = ST) {
+  const months = periodMonths(p);
+  const [y0, m0] = months[0];
+  const [y1, m1] = months[months.length - 1];
+  const all = S.trips.filter((t) => !isPending(t)).sort((a, b) => statsOf(a).start - statsOf(b).start);
+  let from = Date.UTC(y0, m0 - 1, 1);
+  if (p.period === 'all') {
+    const first = all.find((t) => Number.isFinite(statsOf(t).start));
+    if (!first) return null;
+    from = Math.max(from, Math.floor(statsOf(first).start / DAY) * DAY);
+  }
+  const to = Math.min(Date.UTC(y1, m1, 1), Math.floor(nowLocal() / DAY) * DAY); // не включая сегодня
+  if (to <= from) return null;
+  const busy = new Set();
+  const mark = (s, e) => {
+    for (let d = Math.max(from, Math.floor(s / DAY) * DAY); d < Math.min(e, to); d += DAY) busy.add(d);
+  };
+  all.forEach((t, i) => {
+    const st = statsOf(t);
+    for (const [s, e] of st.intervals || []) mark(s, e);
+    const gap = gapAfter(all, i);
+    if (t.restType === 'turnaround' && gap != null && gap > 0 && gap <= HOUSE_GAP_MAX) mark(st.end, st.end + gap);
+  });
+  const abs = new Set();
+  for (const a of S.absences) {
+    const s = parseLocal(`${a.start}T00:00`); const e = parseLocal(`${a.end}T00:00`);
+    if (!Number.isFinite(s) || !Number.isFinite(e)) continue;
+    for (let d = Math.max(s, from); d <= e && d < to; d += DAY) abs.add(d);
+  }
+  const marked = new Set(S.daysOff);
+  let free = 0; let days = 0; let run = 0; let best = { n: 0, from: 0, to: 0 }; let runFrom = 0;
+  for (let d = from; d < to; d += DAY) {
+    days++;
+    const isAbs = abs.has(d);
+    const isFree = !isAbs && (marked.has(dateKeyOf(d)) || !busy.has(d));
+    if (isFree) free++;
+    if (!isFree && !isAbs) {
+      if (!run) runFrom = d;
+      run++;
+      if (run > best.n) best = { n: run, from: runFrom, to: d };
+    } else run = 0;
+  }
+  return { days, free, best };
+}
+const dayMonth = (ms) => `${new Date(ms).getUTCDate()} ${MONTHS_SHORT[new Date(ms).getUTCMonth()]}`;
+function homeDaysHtml(H) {
+  if (!H || !H.days) return '';
+  const sameMonth = new Date(H.best.from).getUTCMonth() === new Date(H.best.to).getUTCMonth();
+  const range = H.best.n > 1 ? (sameMonth ? `${new Date(H.best.from).getUTCDate()}–${dayMonth(H.best.to)}` : `${dayMonth(H.best.from)} – ${dayMonth(H.best.to)}`) : '';
+  return block('Дни дома', `<div class="kv-grid">
+    ${kv('Свободных дней', H.free, `из ${H.days} ${plural(H.days, 'прошедшего дня', 'прошедших дней', 'прошедших дней')}`)}
+    ${H.best.n > 1 ? kv('Дольше всего без выходного', `${H.best.n} ${plural(H.best.n, 'день', 'дня', 'дней')}`, range) : ''}
+  </div><div class="hint">Свободный день — целые сутки без поездки и без отдыха в доме отдыха. Дни отвлечений сюда не входят.</div>`, 'st-home');
+}
+
 // Локомотивы периода по сериям: серия → номера → поездки. «Раз» — число поездок.
 // Поездка без номера идёт в серию строкой «Без номера», без серии — в «Серия не указана».
 // Поездка со сменой локомотива считается у каждого своего локомотива (на одном и том же — один раз).
@@ -302,6 +362,7 @@ function tripsView(R) {
     if (R.home.n) b += `<div class="kv-grid">${kv('Домашний отдых', fmtDur(R.home.total, { short: true }), `${R.home.n} ${plural(R.home.n, 'раз', 'раза', 'раз')}`)}${kv('В среднем', fmtDur(R.home.total / R.home.n, { short: true }))}</div>`;
     html += block('Отдых', `${b}<div class="hint">От окончания поездки до начала следующей.${R.overN ? ' Переотдых — сверх привезённого рабочего времени.' : ''}</div>`);
   }
+  if (R.count) html += homeDaysHtml(homeDays(ST));
   if (R.series.length) html += block('Локомотивы', locosHtml(R.series));
   if (R.count >= 3 && R.callTop) {
     const items = R.calls.map((v, i) => ({ v, label: i % 2 ? '' : String(i * 2), full: callRange(i * 2) }));
