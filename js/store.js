@@ -2,6 +2,7 @@
 import * as db from './db.js';
 import { tripStats, parseLocal, MIN, legsOf, hasLegs } from './calc.js';
 import { payCfg, overRestIntervals } from './pay.js';
+import { emptyLearn, normalizeLearn } from './learn-state.js';
 
 // minRest — общий минимальный отдых в пункте оборота, minShiftRest — минимальный междусменный отдых (мин).
 // houses — свой минимум для домов отдыха: { [ключ станции]: { name, minRest } }.
@@ -18,6 +19,7 @@ export const S = {
   daysOff: [], // дни, отмеченные в календаре как «Выходной» ('YYYY-MM-DD'): только отметка, на норму и заработок не влияет
   contacts: [], // записная книжка «Телефоны»: [{ id, group, name, who, phones: [], note, createdAt, updatedAt }], только в этом телефоне
   contactGroups: [], // названия групп «Телефонов», запоминаются для следующих номеров
+  learn: emptyLearn(), // «Обучение» (2.21.11): прогресс курсов, серия, заморозки — только в этом телефоне (learn-state.js)
   onboarded: false,
 };
 
@@ -44,6 +46,7 @@ export async function loadAll() {
   S.daysOff = Array.isArray(m.daysOff?.list) ? m.daysOff.list.filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)) : [];
   S.contacts = Array.isArray(m.contacts?.list) ? m.contacts.list.filter((c) => c && typeof c === 'object' && c.id) : [];
   S.contactGroups = Array.isArray(m.contacts?.groups) ? m.contacts.groups.filter((g) => typeof g === 'string' && g.trim()).map((g) => g.trim().slice(0, 60)).slice(0, 50) : [];
+  S.learn = normalizeLearn(m.learn);
   S.onboarded = !!m.onboarded;
   S.trips.forEach(normalizeTrip);
   S.trips.forEach((t) => { t._stats = null; statsOf(t); });
@@ -193,15 +196,24 @@ export const notesFor = (type, num) => {
 
 // ---- Сохранение ----
 // «Ещё»: порядок строк (2.21, settings.extraOrder). Сохранённое — сначала, новые пункты — в конец; неизвестное отбрасываем.
-export const EXTRA_KEYS = ['notes', 'docs', 'phones', 'fix', 'help', 'ideas'];
+// EXTRA_TOP — новые пункты, которые встают первыми, пока человек сам не поставит их на своё место («Обучение», 2.21.11).
+export const EXTRA_KEYS = ['learn', 'notes', 'docs', 'phones', 'fix', 'help', 'ideas'];
+const EXTRA_TOP = ['learn'];
 export function extraOrder(saved = S.settings.extraOrder) {
   const mine = Array.isArray(saved) ? saved.filter((k, i) => EXTRA_KEYS.includes(k) && saved.indexOf(k) === i) : [];
-  return [...mine, ...EXTRA_KEYS.filter((k) => !mine.includes(k))];
+  const top = EXTRA_TOP.filter((k) => !mine.includes(k));
+  return [...top, ...mine, ...EXTRA_KEYS.filter((k) => !mine.includes(k) && !top.includes(k))];
 }
 
 // Размер текста (2.21.6): 'm' обычный, 'l' крупный, 'xl' очень крупный
 export const TEXT_SIZES = [{ id: 'm', name: 'Обычный' }, { id: 'l', name: 'Крупный' }, { id: 'xl', name: 'Очень крупный' }];
 export const textSize = (v = S.settings?.textSize) => (TEXT_SIZES.some((x) => x.id === v) ? v : 'm');
+
+// «Обучение»: прогресс целиком (уже проверенный learn-state.js), запись meta 'learn'
+export async function saveLearn(next) {
+  S.learn = next;
+  await db.put('meta', { ...next, id: 'learn' });
+}
 
 export async function saveSettings(patch) {
   S.settings = { ...S.settings, ...patch };

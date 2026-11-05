@@ -169,6 +169,8 @@ if (useHistory) {
   window.addEventListener('popstate', () => {
     if (suppressPop > 0) { suppressPop--; if (stack.length && !suppressPop) history.pushState({ cabina: 1 }, ''); return; }
     if (stack.length) {
+      // слой может сам решить, закрываться ли по «Назад» (урок спрашивает «Выйти из урока?»)
+      if (stack[stack.length - 1].onBack?.() === false) { history.pushState({ cabina: 1 }, ''); return; }
       removeTop();
       if (stack.length) history.pushState({ cabina: 1 }, '');
     }
@@ -184,15 +186,18 @@ function removeTop() {
   top.onClose?.();
 }
 
-export function openLayer(html, { kind = 'sheet', onClose } = {}) {
+// kind: 'sheet' — лист снизу, 'dialog' — окно по центру, 'full' — на весь экран (урок «Обучения»).
+// onBack — вызывается на системное «Назад»; вернула false — слой остаётся открытым.
+export function openLayer(html, { kind = 'sheet', onClose, onBack } = {}) {
   const el = document.createElement('div');
-  el.className = `layer ${kind === 'dialog' ? 'dialog-layer' : ''}`;
+  el.className = `layer ${kind === 'dialog' ? 'dialog-layer' : kind === 'full' ? 'full-layer' : ''}`;
   el.innerHTML = `<div class="scrim" data-close></div>${html}`;
   layersEl().appendChild(el);
   if (!stack.length && useHistory && !suppressPop) history.pushState({ cabina: 1 }, '');
-  stack.push({ el, onClose });
+  stack.push({ el, onClose, onBack });
   document.body.style.overflow = 'hidden';
-  el.querySelector('.scrim').addEventListener('click', () => closeLayer(el));
+  // нажатие мимо окна — как «Назад»: урок на весь экран сначала спрашивает «Выйти из урока?»
+  el.querySelector('.scrim').addEventListener('click', () => { if (onBack?.() === false) return; closeLayer(el); });
   el.addEventListener('click', (e) => { if (e.target.closest('button[data-close]')) closeLayer(el); });
   return el;
 }

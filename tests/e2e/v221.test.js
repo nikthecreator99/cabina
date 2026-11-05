@@ -149,19 +149,19 @@ test('«Ещё»: все пункты одним списком, порядок 
   const { context, page, errors } = await openApp(env);
   const cdp = await context.newCDPSession(page);
   await tab(page, 'extra');
-  assert.deepEqual(await extraKeys(page), ['notes', 'docs', 'phones', 'fix', 'help', 'ideas']);
+  assert.deepEqual(await extraKeys(page), ['learn', 'notes', 'docs', 'phones', 'fix', 'help', 'ideas']);
   assert.equal(await page.locator('.screen .panel').count(), 1, 'один общий список');
-  // «Помощь» — наверх
+  // «Помощь» — на четыре строки выше (сразу под «Обучением»)
   const help = page.locator('#extra-list > .row[data-key=help]');
   const h = (await help.boundingBox()).height;
   await hold(page, cdp, help, -h * 4.2);
-  assert.deepEqual(await extraKeys(page), ['help', 'notes', 'docs', 'phones', 'fix', 'ideas']);
+  assert.deepEqual(await extraKeys(page), ['learn', 'help', 'notes', 'docs', 'phones', 'fix', 'ideas']);
   assert.equal(await page.locator('.screen[data-page]').count(), 0, 'отпустили — экран «Помощь» не открылся');
-  assert.deepEqual((await settingsOf(page)).extraOrder, ['help', 'notes', 'docs', 'phones', 'fix', 'ideas']);
+  assert.deepEqual((await settingsOf(page)).extraOrder, ['learn', 'help', 'notes', 'docs', 'phones', 'fix', 'ideas']);
   // после перезапуска — тот же порядок; обычное нажатие по-прежнему открывает пункт
   await page.reload(); await page.waitForSelector('.screen');
   await tab(page, 'extra');
-  assert.deepEqual(await extraKeys(page), ['help', 'notes', 'docs', 'phones', 'fix', 'ideas']);
+  assert.deepEqual(await extraKeys(page), ['learn', 'help', 'notes', 'docs', 'phones', 'fix', 'ideas']);
   await page.locator('#extra-list > .row[data-key=phones]').click();
   await page.waitForFunction(() => /Телефоны/.test(document.querySelector('.screen').innerText));
   assert.deepEqual(errors, []);
