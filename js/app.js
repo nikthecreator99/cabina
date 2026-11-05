@@ -26,7 +26,7 @@ import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml 
 import { medReminder, medBannerHtml, medClick } from './med.js';
 import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml, startSignup } from './account.js';
 import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite } from './auth.js';
-import { initColleagues, colleaguesHtml, profilePrivacyRowHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
+import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL, GROUPS_LIVE } from './legal.js';
@@ -37,7 +37,7 @@ import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, j
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.21.1';
+export const VERSION = '2.21.2';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -159,6 +159,9 @@ function tripRow(t, mk, payCtx) {
   </button></div>`;
 }
 
+// Выходной и полный отдых (2.21.2) на главной: нажатием правится окончание
+const editableRest = (r) => r && ['dayOff', 'full', 'fullOff'].includes(r.kind);
+
 // Нормативное время маршрута на главном: начало приёмки и отправление (только справка)
 function normsLine(t) {
   const n = timeNorms(t);
@@ -248,7 +251,7 @@ function renderHome() {
   const phase = skyPhase(Date.now(), S.settings.tz);
   const restText = rest ? (rest.kind === 'queue' ? `${rest.label} · вызов не раньше ${whenShort(rest.until, now)}` : `${rest.label} · до ${whenShort(rest.until, now)}`) : '';
   app.innerHTML = `<div class="sky" data-phase="${phase}" style="${sceneVars(phase)}">${skyFor(phase)}</div>
-  <div class="screen">
+  <div class="screen home-screen">
     <div class="home-top ${phase !== 'night' ? 'on-sky' : ''}">
       <div class="home-head">
         <button class="round-btn" data-act="go" data-page="work" aria-label="Меню: настройки работы">${I.menu}</button>
@@ -275,7 +278,7 @@ function renderHome() {
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${pend ? `<button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${departBanner(lt && !pend ? lt : null, now)}
-    ${rest ? `<button class="rest-banner" data-act="${rest.kind === 'dayOff' ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${rest.kind === 'dayOff' ? ' aria-label="Выходной — изменить время окончания"' : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
+    ${rest ? `<button class="rest-banner" data-act="${editableRest(rest) ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${editableRest(rest) ? ` aria-label="${rest.kind === 'dayOff' ? 'Выходной' : 'Полный отдых'} — изменить время окончания"` : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() : ''}
     ${backupNag(now) || (isCurrent && !OLD_SITE ? signupNagHtml() : '')}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
@@ -566,7 +569,7 @@ function render({ still = false } = {}) {
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
-  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()) || signupTeaserHtml(), profilePrivacyRowHtml())}</div>`;
+  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()) || signupTeaserHtml())}</div>`;
   renderTabbar();
   scheduleTours();
   checkAccountAward();

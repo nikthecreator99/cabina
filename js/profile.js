@@ -60,7 +60,9 @@ export function statusFacts(now = nowLocal()) {
     if (r && now - statsOf(last).end <= OVERREST_MAX) return { kind: 'wait', house: r.house || '' };
   }
   const rest = currentRest(now);
-  return { kind: 'between', rest: rest ? { kind: rest.kind, label: rest.label, until: rest.until } : null };
+  // полный отдых (2.21.2) — как выходной: нажатием можно поправить окончание
+  const fullId = rest && (rest.kind === 'full' || rest.kind === 'fullOff') ? rest.trip.id : null;
+  return { kind: 'between', rest: rest ? { kind: rest.kind, label: rest.label, until: rest.until } : null, ...(fullId ? { tripId: fullId } : {}) };
 }
 
 // Станцию пишем как есть, без склонения («На отдыхе · Сумский Посад»): склонять названия станций надёжно нельзя.
@@ -88,7 +90,7 @@ export function profileStatus(now = nowLocal()) {
 // Выходной (2.21): нажатием можно поправить, когда он заканчивается
 function statusHtml(st) {
   const inner = `<span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}`;
-  if (st.kind === 'dayoff' && st.tripId) return `<button class="pr-status st-dayoff" id="pr-status" data-act="dayoff-edit" data-id="${esc(st.tripId)}" aria-label="${esc(`${st.label} ${st.sub}`)}. Изменить окончание выходного">${inner}${small(I.edit, 14)}</button>`;
+  if ((st.kind === 'dayoff' || st.kind === 'between') && st.tripId) return `<button class="pr-status st-${st.kind}" id="pr-status" data-act="dayoff-edit" data-id="${esc(st.tripId)}" aria-label="${esc(`${st.label} ${st.sub}`)}. Изменить окончание ${st.kind === 'dayoff' ? 'выходного' : 'отдыха'}">${inner}${small(I.edit, 14)}</button>`;
   return `<div class="pr-status st-${st.kind}" id="pr-status">${inner}</div>`;
 }
 
@@ -96,9 +98,8 @@ function statusHtml(st) {
 // colleagues — строка «Коллеги» (colleagues.js), передаётся из app.js без круговых импортов.
 // Свои часы и поездки здесь не показываем (просьба Никиты, 2.19.1): они на главной и в статистике.
 // 2.22 (пример Никиты): персонаж слева, справа имя с ✎, должность, депо и стаж, телефон; статус — во всю ширину карточки.
-// Ниже — «Коллеги», «Награды» и строка «Приватность профиля».
-// privacyRow — строка «Приватность профиля» (с аккаунтом ведёт в «Приватность», без — объясняет, где хранится профиль)
-export function renderProfile(colleagues = '', privacyRow = '') {
+// Ниже — «Коллеги» и «Награды». Строки «Приватность профиля» с 2.21.2 нет (просьба Никиты: она есть в Настройках).
+export function renderProfile(colleagues = '') {
   const p = S.profile;
   const st = profileStatus();
   const t = totalTenure(careerOf(p));
@@ -119,8 +120,6 @@ export function renderProfile(colleagues = '', privacyRow = '') {
     </section>
     ${colleagues}
     ${awardsStripHtml()}
-    ${privacyRow || `<div class="panel"><button class="row" data-act="pr-privacy-info" id="pr-privacy"><span class="ico" style="--c:var(--ok)">${I.shield}</span>
-      <div class="grow"><div class="t1">Приватность профиля</div><div class="t2">Профиль хранится только в этом телефоне</div></div>${small(I.right, 18)}</button></div>`}
     </div>`;
 }
 
@@ -168,10 +167,6 @@ export async function profileClick(act, b) {
   if (act === 'pr-priv') {
     const pv = privacyOf();
     await saveProfile({ privacy: { ...pv, [b.dataset.k]: !pv[b.dataset.k] } });
-    return true;
-  }
-  if (act === 'pr-privacy-info') {
-    infoDialog({ title: 'Приватность профиля', text: 'Профиль хранится в этом телефоне. Коллеги видят только то, что вы сами включили в «Приватности» (для этого нужен аккаунт). Профиль попадает в резервную копию — не пересылайте её другим людям.' });
     return true;
   }
   if (act === 'photo-del') {

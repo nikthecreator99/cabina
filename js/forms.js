@@ -9,7 +9,7 @@ import {
   autoAbsenceHours, absenceBreakdown, absenceMonths, validateAbsence, monthSummary, DAY, MIN, LEGS_MAX, LEG_NAMES, legsOf,
 } from './calc.js';
 import { dayInfo } from './calendar.js';
-import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil } from './rest.js';
+import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restEndOf } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
@@ -183,7 +183,7 @@ export function openTripForm(tripId) {
       locoType: l.locoType || '', locoNumber: l.locoNumber || '',
       weight: l.weight ? String(l.weight) : '', axles: l.axles ? String(l.axles) : '', length: l.length ? String(l.length) : '', trainOpen: !!hasTrain(l),
     })),
-    passenger: (base.passenger || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: (p.end || p.start).slice(0, 10), et: (p.end || '').slice(11, 16) })),
+    passenger: (base.passenger || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: (p.end || p.start).slice(0, 10), et: (p.end || '').slice(11, 16), train: trainNo(p.train) })),
     waiting: (base.waiting || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     note: linkedNote?.text || '',
     noteOpen: !!linkedNote?.text,
@@ -212,7 +212,9 @@ export function openTripForm(tripId) {
       passenger: F.passenger.map((p) => {
         const start = at(p.sd, p.st);
         const pe = at(p.ed, p.et) || (start && end && start < end ? end : '');
-        return { id: p.id, start, end: pe };
+        const x = { id: p.id, start, end: pe };
+        if (trainNo(p.train)) x.train = trainNo(p.train); // номер поезда, которым ехали пассажиром (2.21.2)
+        return x;
       }),
       legs: F.legs.map((l) => ({
         id: l.id, start: at(l.sd, l.st),
@@ -228,6 +230,8 @@ export function openTripForm(tripId) {
       restType: F.restType, homeRest, homeChoice,
     };
     if (!d.legs.length) delete d.legs;
+    // своё окончание полного отдыха (2.21.2) живёт, пока выбор отдыха и поездки для расчёта те же
+    if (homeChoice !== base.homeChoice || !['full', 'fullOff'].includes(homeChoice) || JSON.stringify(homeRest?.ids || []) !== JSON.stringify(base.homeRest?.ids || [])) delete d.restEndMin;
     return d;
   };
   // Ошибка черновика: обычная проверка + поездка «в пути» может быть только одна
@@ -491,7 +495,19 @@ export function openTripForm(tripId) {
     else setHTML(box, '');
   }
   // интервал «пассажиром» (kind = 'pass') или «ожидание следования пассажиром» (kind = 'wait')
-  const intervalHtml = (p, i, kind) => `
+  // 2.21.2 (Никита): заполненное (есть начало и окончание) — компактная строка, нажатие разворачивает
+  const done = (p) => !!(p.sd && p.st && p.ed && p.et);
+  const shortHtml = (p, i, kind) => {
+    const a = `${p.sd}T${p.st}`, b = `${p.ed}T${p.et}`;
+    const day = (x) => (x.slice(0, 10) !== (F.sd || x.slice(0, 10)) ? `${dayMonth(parseLocal(x))}, ` : '');
+    const dur = Math.max(0, (parseLocal(b) - parseLocal(a)) / MIN);
+    const what = kind === 'wait' ? `${I.clock} Ожидание${F.waiting.length > 1 ? ` №${i + 1}` : ''}` : `${I.passenger} Пассажиром${F.passenger.length > 1 ? ` №${i + 1}` : ''}`;
+    return `<button type="button" class="interval short${kind === 'wait' ? ' wait' : ''}" data-act="pass-open" data-pid="${esc(p.id)}" data-iv="${kind}" aria-label="${kind === 'wait' ? 'Ожидание' : 'Следование пассажиром'}: развернуть">
+        <span class="iv-what">${what}</span>
+        <span class="iv-when"><b>${day(a)}${esc(p.st)} – ${day(b)}${esc(p.et)}</b><small>${fmtDur(dur, { short: true })}${kind === 'pass' && trainNo(p.train) ? ` · поезд ${esc(trainNo(p.train))}` : ''}</small></span>
+        <span class="chev">${I.down}</span></button>`;
+  };
+  const intervalHtml = (p, i, kind) => done(p) && !p.open ? shortHtml(p, i, kind) : `
       <div class="interval${kind === 'wait' ? ' wait' : ''}" data-pid="${esc(p.id)}" data-kind="${kind}">
         <div class="interval-head"><span>${kind === 'wait' ? `${I.clock} Ожидание №${i + 1}` : `${I.passenger} Пассажиром №${i + 1}`}</span>
           <button type="button" class="icon-btn danger" data-act="del-pass" data-pid="${esc(p.id)}" aria-label="Удалить интервал">${I.trash}</button></div>
@@ -499,7 +515,10 @@ export function openTripForm(tripId) {
         <div class="dt"><input type="date" class="input" data-pf="sd" value="${p.sd}" aria-label="Дата начала"><input type="time" class="input" data-pf="st" value="${p.st}" aria-label="Время начала"></div>
         <div class="mini-label">Окончание</div>
         <div class="dt"><input type="date" class="input" data-pf="ed" value="${p.ed}" aria-label="Дата окончания"><input type="time" class="input" data-pf="et" value="${p.et}" aria-label="Время окончания"></div>
-        ${kind === 'pass' ? `<div class="hint" data-open-hint${p.et ? ' hidden' : ''}>Едете пассажиром сейчас? Окончание можно не указывать: следование закончится вместе с поездкой.</div>` : ''}
+        ${kind === 'pass' ? `<div class="hint" data-open-hint${p.et ? ' hidden' : ''}>Едете пассажиром сейчас? Окончание можно не указывать: следование закончится вместе с поездкой.</div>
+        <label class="mini-label" for="pf-train-${esc(p.id)}">Номер поезда <small>(не локомотива), если нужно</small></label>
+        <input class="input" id="pf-train-${esc(p.id)}" data-pf="train" value="${esc(p.train || '')}" maxlength="8" autocomplete="off" autocapitalize="characters" inputmode="text" placeholder="Например, 6501">` : ''}
+        ${done(p) ? `<button type="button" class="link-btn iv-fold" data-act="pass-fold" data-pid="${esc(p.id)}">${I.up} Свернуть</button>` : ''}
       </div>`;
   function renderPass() {
     $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => intervalHtml(p, i, 'pass')).join('');
@@ -577,7 +596,7 @@ export function openTripForm(tripId) {
     let html = `<div class="calc">
       <div class="calc-row main"><span>${live ? '<span class="live-dot"></span> В пути' : 'Рабочее время'}</span><b>${fmtDur(st.work)}</b></div>
       <div class="calc-row"><span>${ico(I.moon, 17)} Ночные (22:00–06:00)</span><b>${fmtDur(st.night)}</b></div>
-      <div class="calc-row"><span>${ico(I.calStar, 17)} Праздничные</span><b>${fmtDur(st.holiday)}</b></div>
+      ${st.holiday > 0 ? `<div class="calc-row"><span>${ico(I.calStar, 17)} Праздничные</span><b>${fmtDur(st.holiday)}</b></div>` : ''}
       ${st.wait > 0 ? `<div class="calc-row"><span>${ico(I.clock, 17)} В том числе ожидание следования</span><b>${fmtDur(st.wait)}</b></div>` : ''}
       ${pay ? `<div class="calc-row"><span>${ico(I.wallet, 17)} ${live ? 'Заработано на руки' : 'Заработок на руки'}</span><b class="money">≈ ${fmtRub(pay.net)}</b></div>` : ''}`;
     const norms = live ? startNormsHtml(d, st.start, nowMs, calcRow) : endNormsHtml(d, calcRow);
@@ -648,6 +667,8 @@ export function openTripForm(tripId) {
             ${choiceBtn('full', 'Пойти на полный отдых', `до ${whenShort(r.fullUntil, nowMs)}`)}
             ${choiceBtn('fullOff', 'Пойти на полный отдых (с выходным)', `до ${whenShort(r.withDayOffUntil, nowMs)}`)}
           </div>`;
+          const own = restEndOf(d) && Number.isFinite(st.end) ? st.end + restEndOf(d) * MIN : null;
+          if (own) h += `<div class="hint" id="tf-rest-own">Вы поправили окончание отдыха: до ${esc(whenShort(own, nowMs))}. Поменять его можно нажатием на отдых на главном экране или в профиле.</div>`;
         }
       } else h += '<div class="hint">Отметьте хотя бы одну поездку.</div>';
       setTimeout(() => homeRestPickTour(el), 300);
@@ -682,7 +703,7 @@ export function openTripForm(tripId) {
     if (!key && t.dataset.pf) { const pid = t.closest('[data-pid]')?.dataset.pid; obj = [...F.passenger, ...F.waiting].find((x) => x.id === pid); key = t.dataset.pf; }
     if (!key || !obj || obj[key] === t.value) return; // значение не изменилось — ничего не перерисовываем
     obj[key] = t.value;
-    if (key === 'note' || key === 'routeNo' || t.dataset.tf) return;
+    if (key === 'note' || key === 'routeNo' || key === 'train' || t.dataset.tf) return;
     if (obj === F && key === 'ed') F.endTouched = true;
     if (obj === F && (key === 'sd' || key === 'st' || key === 'et')) autoEnd();
     if (t.dataset.pf === 'et') { const h = t.closest('.interval')?.querySelector('[data-open-hint]'); if (h) h.hidden = !!t.value; }
@@ -691,6 +712,20 @@ export function openTripForm(tripId) {
   };
   el.addEventListener('input', onTripField);
   el.addEventListener('change', onTripField);
+  // заполнили начало и окончание и ушли из карточки следования / ожидания — она сворачивается в строку (2.21.2)
+  el.addEventListener('focusout', (e) => {
+    const box = e.target.closest?.('#tf-pass div.interval[data-pid], #tf-wait div.interval[data-pid]');
+    if (!box || (e.relatedTarget && box.contains(e.relatedTarget))) return;
+    setTimeout(() => {
+      if (!box.isConnected || box.contains(document.activeElement)) return;
+      const list = box.dataset.kind === 'wait' ? F.waiting : F.passenger;
+      const i = list.findIndex((x) => x.id === box.dataset.pid);
+      const p = list[i];
+      if (!p || !done(p)) return;
+      p.open = false;
+      box.outerHTML = intervalHtml(p, i, box.dataset.kind);
+    }, 0);
+  });
 
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
@@ -753,6 +788,14 @@ export function openTripForm(tripId) {
       F.waiting.push({ id: uid(), sd: day, st: '', ed: day, et: ref?.st || '' });
       renderPass(); refreshAll();
       const last = el.querySelectorAll('.interval.wait'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (act === 'pass-open' || act === 'pass-fold') {
+      const p = [...F.passenger, ...F.waiting].find((x) => x.id === b.dataset.pid);
+      if (!p) return;
+      p.open = act === 'pass-open';
+      renderPass();
+      const box = el.querySelector(`#tf-pass [data-pid="${CSS.escape(p.id)}"], #tf-wait [data-pid="${CSS.escape(p.id)}"]`);
+      if (act === 'pass-open') box?.querySelector('input[data-pf=st]')?.focus({ preventScroll: true });
+      else box?.focus({ preventScroll: true });
     } else if (act === 'del-pass') {
       F.passenger = F.passenger.filter((p) => p.id !== b.dataset.pid);
       F.waiting = F.waiting.filter((p) => p.id !== b.dataset.pid);
@@ -1012,6 +1055,8 @@ async function offerStudyPay() {
 // =====================================================================
 // нормативное время маршрута: минуты, пусто — не показывается
 const TN_KEYS = ['accept', 'depart', 'walk'];
+// номер поезда у следования пассажиром (2.21.2): только цифры и буквы, до 8 знаков («6501», «012А»)
+export const trainNo = (v) => String(v || '').toUpperCase().replace(/[^0-9A-ZА-ЯЁ]/g, '').slice(0, 8);
 const mins = (m) => (m < 60 ? `${Math.round(m)}\u00a0мин` : fmtDur(m));
 const tnInput = (k, label, ph) => `<div><label for="rf-${k}" class="mini-label">${label}</label><div class="input-unit"><input class="input" id="rf-${k}" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="${ph}"><span>мин</span></div></div>`;
 
@@ -1216,28 +1261,41 @@ export function dayOffEditError(endMs, untilMs) {
 }
 export function openDayOffEdit(tripId) {
   const trip = S.trips.find((t) => t.id === tripId);
-  if (!trip || trip.restType !== 'home' || trip.homeChoice !== 'dayOff' || isLive(trip)) return null;
+  if (!trip || trip.restType !== 'home' || isLive(trip)) return null;
+  // выходной — длительность dayOffMin; полный отдых (2.21.2) — своё окончание restEndMin, минут после поездки
+  const full = trip.homeChoice === 'full' || trip.homeChoice === 'fullOff';
+  if (!full && trip.homeChoice !== 'dayOff') return null;
   const end = tripStats(trip).end;
-  const until = dayOffUntil(end, trip);
+  let until, calc = null;
+  if (full) {
+    const r = computeHomeRest(trip, trip.homeRest?.ids, S.trips);
+    if (r && !r.missing && r.valid) calc = trip.homeChoice === 'full' ? r.fullUntil : r.withDayOffUntil;
+    until = restEndOf(trip) ? end + restEndOf(trip) * MIN : calc;
+    if (!Number.isFinite(until)) return null;
+  } else until = dayOffUntil(end, trip);
   const v = fmtLocal(until);
   const def = dayOffMin();
+  const what = full ? 'полный отдых' : 'выходной';
+  const reset = full
+    ? (restEndOf(trip) && Number.isFinite(calc) ? `<button type="button" class="link-btn" data-act="do-reset">Как по расчёту: до ${esc(whenShort(calc, nowLocal()))}</button>` : '')
+    : (trip.dayOffMin && trip.dayOffMin !== def ? `<button type="button" class="link-btn" data-act="do-reset">Как в настройках: ${esc(fmtDur(def, { short: true }))}</button>` : '');
   const el = openLayer(sheet({
-    title: 'Окончание выходного',
-    body: `<p class="hint">Поездка закончилась ${esc(whenShort(end, nowLocal()))}. Если выходной дали другой длины — поправьте, когда он заканчивается.</p>
+    title: full ? 'Окончание полного отдыха' : 'Окончание выходного',
+    body: `<p class="hint">Поездка закончилась ${esc(whenShort(end, nowLocal()))}. Если ${what} дали другой длины — поправьте, когда он заканчивается.</p>
       <div class="field">
-        <label for="do-d">Выходной до</label>
-        <div class="dt"><input type="date" id="do-d" class="input" aria-label="Дата окончания выходного" value="${v.slice(0, 10)}"><input type="time" id="do-t" class="input" aria-label="Время окончания выходного" value="${v.slice(11, 16)}"></div>
+        <label for="do-d">${full ? 'Отдых до' : 'Выходной до'}</label>
+        <div class="dt"><input type="date" id="do-d" class="input" aria-label="Дата окончания" value="${v.slice(0, 10)}"><input type="time" id="do-t" class="input" aria-label="Время окончания" value="${v.slice(11, 16)}"></div>
         <div class="hint" id="do-len"></div>
       </div>
-      ${trip.dayOffMin && trip.dayOffMin !== def ? `<button type="button" class="link-btn" data-act="do-reset">Как в настройках: ${esc(fmtDur(def, { short: true }))}</button>` : ''}
+      ${reset}
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="do-save">${I.check} Сохранить</button>`,
   }));
   const read = () => { const d = $(el, '#do-d').value, t = $(el, '#do-t').value; return d && t ? parseLocal(`${d}T${t}`) : NaN; };
+  const err = (u) => { const e = dayOffEditError(end, u); return full && e ? e.replace('Выходной', 'Отдых').replace('выходного', 'отдыха') : e; };
   const show = () => {
     const u = read();
-    const err = dayOffEditError(end, u);
-    $(el, '#do-len').textContent = err ? '' : `Выходной — ${fmtDur((u - end) / MIN, { short: true })}`;
+    $(el, '#do-len').textContent = err(u) ? '' : `${full ? 'Отдых' : 'Выходной'} — ${fmtDur((u - end) / MIN, { short: true })}`;
   };
   el.addEventListener('input', show);
   el.addEventListener('change', show);
@@ -1247,22 +1305,25 @@ export function openDayOffEdit(tripId) {
     if (!b || !el.contains(b)) return;
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
     if (b.dataset.act === 'do-reset') {
-      const x = fmtLocal(end + def * MIN);
+      const x = fmtLocal(full ? calc : end + def * MIN);
       $(el, '#do-d').value = x.slice(0, 10); $(el, '#do-t').value = x.slice(11, 16); show();
       return;
     }
     if (b.dataset.act !== 'do-save') return;
     const u = read();
-    const err = dayOffEditError(end, u);
-    if (err) { showError(el, err); return; }
+    const bad = err(u);
+    if (bad) { showError(el, bad); return; }
     const min = Math.round((u - end) / MIN);
     const fresh = S.trips.find((t) => t.id === tripId);
     if (!fresh) { closeLayer(el); return; }
-    const d = { ...JSON.parse(JSON.stringify({ ...fresh, _stats: undefined, _statsAt: undefined })), dayOffMin: min, updatedAt: Date.now() };
+    const d = { ...JSON.parse(JSON.stringify({ ...fresh, _stats: undefined, _statsAt: undefined })), updatedAt: Date.now() };
     delete d._stats; delete d._statsAt;
+    if (!full) d.dayOffMin = min;
+    else if (Number.isFinite(calc) && Math.abs(u - calc) < MIN) delete d.restEndMin; // совпало с расчётом — считаем по расчёту
+    else d.restEndMin = min;
     try { await saveTrip(d, null); } catch { showError(el, 'Не удалось сохранить. Возможно, на устройстве закончилась память.'); return; }
     closeLayer(el);
-    toast(`Выходной до ${whenShort(u, nowLocal())}`);
+    toast(`${full ? 'Отдых' : 'Выходной'} до ${whenShort(u, nowLocal())}`);
   });
   return el;
 }

@@ -22,7 +22,7 @@ export function tripHaystack(t) {
   const d = Number.isFinite(st.start) ? dateParts(st.start) : { text: '', alt: '' };
   const note = S.notes.find((n) => n.tripId === t.id)?.text || '';
   const locos = locosOf(t).flatMap((l) => [locoLabel(l.type, l.number), l.type, l.number]);
-  return normSearch([routeOf(t), ...locos, t.routeNo ? `маршрут ${t.routeNo}` : '',
+  return normSearch([routeOf(t), ...locos, t.routeNo ? `маршрут ${t.routeNo}` : '', ...(t.passenger || []).map((p) => (p?.train ? `поезд ${String(p.train).slice(0, 8)}` : '')),
     TRIP_KINDS[kindOf(t)].label, d.text, d.alt, note].join(' '));
 }
 

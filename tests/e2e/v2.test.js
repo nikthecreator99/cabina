@@ -191,10 +191,8 @@ test('профиль: имя, должность, класс, старое фо�
   assert.match(await text(page, '.profile-card'), /Иван[\s\S]*Машинист, 2 класс\s+депо Тестовое/);
   const src = await page.locator('.avatar.view img').getAttribute('src');
   assert.match(src, /^data:image\/jpeg;base64,/);
-  // 2.22: вместо длинной плашки — строка «Приватность профиля» с тем же объяснением
-  await page.locator('#pr-privacy').click();
-  assert.match(await text(page, '.dialog'), /Профиль хранится в этом телефоне[\s\S]*только то, что вы сами включили/);
-  await page.locator('.dialog [data-act=yes]').click();
+  // 2.21.2: строки «Приватность профиля» в профиле нет (она в Настройках)
+  assert.equal(await page.locator('#pr-privacy').count(), 0);
   // 2.6: набор ставок один, без выбора должности; машинисту видна надбавка за класс
   await workPage(page, 'tariffs');
   assert.equal(await page.locator('[data-act=pay-role]').count(), 0);

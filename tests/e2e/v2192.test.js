@@ -44,7 +44,7 @@ test('профиль: ✎ у имени вместо большой кнопки
   // порядок: карточка → награды → «Найти коллегу» → «Мои коллеги»; рекордов в профиле нет
   // 2.22 (пример Никиты): карточка → «Коллеги» → «Награды»
   assert.match(await text(page, ".screen"), /Иван Тестовый[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Награды/i);
-  assert.equal((await text(page, '#col-find')).trim(), 'Найти коллегу', 'с 2.22 — снова «Найти коллегу» (пример Никиты)');
+  assert.equal((await text(page, '#col-find')).trim(), 'Найти', 'с 2.21.2 — снова просто «Найти» (просьба Никиты)');
   assert.equal(await page.locator('#pr-records').count(), 0);
   assert.ok((await box(page, '#col-find')).y < (await box(page, '#col-entry')).y);
   assert.doesNotMatch(await text(page, '#col-find'), /нов/i, 'без слова «новых»');

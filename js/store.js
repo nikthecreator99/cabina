@@ -109,7 +109,19 @@ export function timeNorms(trip) {
   const first = route(trip);
   const last = hasLegs(trip) ? route(trip.legs[trip.legs.length - 1]) : first;
   const n = { accept: first?.acceptMin || 0, depart: first?.departMin || 0, walk: last?.walkMin || 0 };
+  // 2.21.2 (Никита): поездка началась следованием пассажиром — локомотив сейчас не принимаем,
+  // приёмка и отправление по нормативу не нужны (остаётся только «от окончания сдачи»)
+  if ((n.accept || n.depart) && startsAsPassenger(trip, Math.max(n.accept, n.depart))) n.accept = n.depart = 0;
   return n.accept > 0 || n.depart > 0 || n.walk > 0 ? n : null;
+}
+// Следование пассажиром начинается не позже отправления по нормативу (от явки + norm минут)
+export function startsAsPassenger(trip, norm = 0) {
+  const s = parseLocal(trip?.start || '');
+  if (!Number.isFinite(s)) return false;
+  return (trip.passenger || []).some((p) => {
+    const ps = parseLocal(p?.start || '');
+    return Number.isFinite(ps) && ps >= s && ps <= s + Math.max(norm, 0) * MIN;
+  });
 }
 export const routeText = (r) => (r ? `${r.from} → ${r.to}` : '');
 export const stationKey = (name) => String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');

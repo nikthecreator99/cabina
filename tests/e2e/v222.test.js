@@ -40,7 +40,7 @@ const readQr = (page) => page.evaluate(async () => {
 // Группы ждут сервера (GROUPS_LIVE в legal.js): пока выключены, их сценарии не запускаем
 const gtest = (name, fn) => test(name, { skip: !GROUPS_LIVE && 'группы выключены до шага на сервере' }, fn);
 
-test('профиль по примеру Никиты: персонаж слева, сведения справа, «В пути с …», Коллеги → Награды → «Приватность профиля»; 320 px, обе темы', async () => {
+test('профиль по примеру Никиты: персонаж слева, сведения справа, «В пути с …», Коллеги → Награды; 320 px, обе темы', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, { ...NEW, links: [{ from_id: ME, to_id: ANNA, state: 'accepted' }] });
   await seed(page, { routes: [{ id: 'r1', from: 'Малошуйка', to: 'Сумский Посад', distanceKm: 120 }],
@@ -57,10 +57,10 @@ test('профиль по примеру Никиты: персонаж слев
   const stBox = await box(page.locator('#pr-status'));
   const card = await box(page.locator('.pr-card'));
   assert.ok(stBox.width > card.width - 40, 'статус — во всю ширину карточки');
-  assert.equal((await text(page, '#col-find')).trim(), 'Найти коллегу');
+  assert.equal((await text(page, '#col-find')).trim(), 'Найти'); // 2.21.2
   const order = GROUPS_LIVE
-    ? /Профиль[\s\S]*Коллеги[\s\S]*Найти коллегу[\s\S]*Мои коллеги[\s\S]*Группы[\s\S]*Пригласить коллег[\s\S]*Награды[\s\S]*Все \d+ из 39[\s\S]*Приватность профиля/
-    : /Профиль[\s\S]*Коллеги[\s\S]*Найти коллегу[\s\S]*Мои коллеги[\s\S]*Пригласить коллег[\s\S]*Награды[\s\S]*Все \d+ из 39[\s\S]*Приватность профиля/;
+    ? /Профиль[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Группы[\s\S]*Пригласить коллег[\s\S]*Награды[\s\S]*Все \d+ из 39/
+    : /Профиль[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Пригласить коллег[\s\S]*Награды[\s\S]*Все \d+ из 39/;
   assert.match(await text(page, '.screen'), order);
   assert.equal(await page.locator('#pr-awards .aw-mini.locked').count(), 0, 'в полоске — только полученные награды');
   assert.equal(await page.locator('.screen .notice').count(), 0, 'длинной зелёной плашки внизу больше нет');
@@ -79,18 +79,17 @@ test('профиль по примеру Никиты: персонаж слев
   await page.locator('#pr-awards-all').click();
   await page.waitForSelector('.screen[data-page=awards]');
   await page.locator('.screen [data-act=back]').click();
-  await page.locator('#pr-privacy').click();
-  await page.waitForSelector('.screen[data-page=privacy] #pv-access');
+  assert.equal(await page.locator('#pr-privacy').count(), 0, '2.21.2: «Приватность профиля» — только в Настройках');
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });
 
-test('профиль без аккаунта: «Приватность профиля» объясняет, где хранится профиль', async () => {
+test('профиль без аккаунта: без групп и без строки «Приватность профиля»', async () => {
   const { context, page, errors } = await openApp(env);
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveProfile({ name: 'Пётр Пробный' }); });
   await tab(page, 'profile');
-  await page.locator('#pr-privacy').click();
-  assert.match(await text(page, '.dialog'), /Профиль хранится в этом телефоне/);
+  await page.locator('.pr-card').waitFor();
+  assert.equal(await page.locator('#pr-privacy').count(), 0);
   assert.equal(await page.locator('#grp-entry').count(), 0, 'групп без аккаунта нет');
   assert.deepEqual(realErrors(errors), []);
   await context.close();

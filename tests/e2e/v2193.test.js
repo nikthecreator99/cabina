@@ -156,7 +156,7 @@ test('настройки аккаунта после входа: вместо д
   await page.waitForSelector('[data-act=acc-export]');
   const screen = await text(page, '.screen');
   assert.doesNotMatch(screen, /На сервере о вас только/, 'длинной плашки нет');
-  assert.match(screen, /ivan@example\.com[\s\S]*Мои данные на сервере\s+Поездок и заработка там нет[\s\S]*Документы[\s\S]*Согласие[\s\S]*Политика/i);
+  assert.match(screen, /ivan@example\.com[\s\S]*Документы[\s\S]*Мои данные на сервере\s+Поездок и заработка там нет[\s\S]*Согласие[\s\S]*Политика/i);
   await page.locator('[data-act=acc-export]').click();
   const s = top(page);
   await s.getByText('Что сервер знает о вас').waitFor();

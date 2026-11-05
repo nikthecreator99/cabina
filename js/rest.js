@@ -70,6 +70,9 @@ export const dayOffMin = () => S.settings.dayOffMin ?? DAY_OFF_DEFAULT;
 // trip — поездка, после которой выбран выходной: у неё своя длительность (как была на момент выбора)
 export const dayOffUntil = (endMs, trip) => endMs + (trip?.dayOffMin || dayOffMin()) * MIN;
 
+// Полный отдых, окончание которого поправили вручную: минут после окончания поездки (целое > 0) или 0
+export const restEndOf = (trip) => (Number.isInteger(trip?.restEndMin) && trip.restEndMin > 0 && trip.restEndMin <= 14 * 24 * 60 ? trip.restEndMin : 0);
+
 export const HOME_CHOICES = {
   queue: 'На очереди',
   dayOff: 'На выходном',
@@ -85,6 +88,9 @@ export function chosenRest(trip, pool = S.trips) {
     if (trip.homeChoice === 'queue') return { kind: 'queue', label: HOME_CHOICES.queue, until: queueUntil(st.end) };
     if (trip.homeChoice === 'dayOff') return { kind: 'dayOff', label: HOME_CHOICES.dayOff, until: dayOffUntil(st.end, trip) };
     if (trip.homeChoice === 'full' || trip.homeChoice === 'fullOff') {
+      // окончание поправили вручную (2.21.2, как у выходного): restEndMin — минут после окончания поездки
+      const own = restEndOf(trip);
+      if (own) return { kind: trip.homeChoice, label: HOME_CHOICES[trip.homeChoice], until: st.end + own * MIN, own: true };
       const r = computeHomeRest(trip, trip.homeRest?.ids, pool);
       if (!r || r.missing || !r.valid) return null;
       return trip.homeChoice === 'full'

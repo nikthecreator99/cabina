@@ -651,16 +651,9 @@ export function colleaguesHtml(extra = '') {
     if (k) badge = `<span class="col-badge" aria-label="Новых предложений: ${k}">${k}</span>`;
   }
   return `<div class="group" id="col-entry-sec"><div class="group-title">Коллеги</div>
-    <button class="col-search" data-act="go" data-page="colleagues" id="col-find" aria-label="Найти коллегу">${small(I.search, 20)}<span>Найти коллегу</span></button>
+    <button class="col-search" data-act="go" data-page="colleagues" id="col-find" aria-label="Найти коллегу">${small(I.search, 20)}<span>Найти</span></button>
     <div class="panel"><button class="row" data-act="go" data-page="team" id="col-entry"><span class="ico" style="--c:var(--ok)">${I.users}</span>
       <div class="grow"><div class="t1">Мои коллеги</div><div class="t2">${esc(sub)}</div></div>${badge}${small(I.right, 18)}</button>${extra}</div></div>`;
-}
-
-// Строка «Приватность профиля» внизу профиля (2.22): с аккаунтом — экран «Приватность»
-export function profilePrivacyRowHtml() {
-  if (!legalReady() || !mine()) return '';
-  return `<div class="panel"><button class="row" data-act="go" data-page="privacy" id="pr-privacy"><span class="ico" style="--c:var(--ok)">${I.shield}</span>
-    <div class="grow"><div class="t1">Приватность профиля</div><div class="t2">Вы выбираете, что видят коллеги</div></div>${small(I.right, 18)}</button></div>`;
 }
 
 export function teamReset() { C.teamQ = ''; }

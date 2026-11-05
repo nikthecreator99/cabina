@@ -53,13 +53,13 @@ test('«Пригласить коллег»: строка в профиле, с�
   const srv = await ready(context, page, OLD);
   await tab(page, 'profile');
   await page.locator('#inv-entry').waitFor();
-  assert.match(await text(page, '#inv-entry'), /Пригласить коллег[\s\S]*До «Напарник» — 1 приглашение/);
+  assert.equal((await text(page, '#inv-entry')).trim(), 'Пригласить коллег', '2.21.2: без подписи');
   await page.locator('#inv-entry').click();
   await page.waitForSelector('.screen[data-page=invites] #inv-new:not([disabled])');
   const scr = await text(page, '.screen');
   assert.match(scr, /подтвердит почту и зайдёт в CABINA в 3 разных дня/);
   assert.match(scr, /Напарник · 1 приглашение[\s\S]*Бригада · 5 приглашений[\s\S]*Машинист-инструктор · 10 приглашений/);
-  assert.match(scr, /Кто именно пришёл, не видно никому/);
+  assert.match(scr, /Кто именно пришёл, не видно — только сколько/);
   // согласие прежней редакции: сначала новая (в ней приглашения и идеи)
   await page.locator('#inv-new').click();
   const c = top(page);
@@ -121,7 +121,7 @@ test('засчитанные приглашения: число запомина
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.invited?.n === 1);
   assert.deepEqual((await profileOf(page)).invited, { n: 1, days: ['2026-10-20'] });
   await tab(page, 'profile');
-  assert.match(await text(page, '#inv-entry'), /До «Сменщик» — 2 приглашения/);
+  assert.equal((await text(page, '#inv-entry')).trim(), 'Пригласить коллег');
   await page.locator('#inv-entry').click();
   await page.waitForSelector('#inv-tiers');
   assert.match(await text(page, '#inv-sum'), /Засчитано[\s\S]*1[\s\S]*Ещё не засчитаны[\s\S]*1/);

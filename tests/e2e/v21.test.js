@@ -94,6 +94,8 @@ test('ожидание следования пассажиром: кнопка �
   // удалить ожидание
   await tab(page, 'home');
   await page.locator('.trip').first().click();
+  // 2.21.2: заполненное ожидание свёрнуто в строку — сначала развернуть
+  await sheet(page).locator('.interval.wait.short').click();
   await sheet(page).locator('.interval.wait [data-act=del-pass]').click();
   assert.equal(await sheet(page).locator('.interval.wait').count(), 0);
   assert.equal(await sheet(page).locator('#tf-pass .interval').count(), 1, 'следование пассажиром осталось');

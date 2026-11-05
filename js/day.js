@@ -41,6 +41,8 @@ function tripCard(t, key, ctx) {
   const loco = legs.length > 1 ? '' : locoLabel(t.locoType, t.locoNumber);
   const train = legs.length > 1 ? '' : trainOf(t);
   const pay = ctx ? tripPay(t, st, ctx.cfg, { overRestMin: ctx.or.get(t.id) || 0 }) : null;
+  // номера поездов, которыми ехали пассажиром (2.21.2)
+  const trainsOf = (x) => [...new Set((x.passenger || []).map((p) => String(p?.train || '').slice(0, 8)).filter(Boolean))].join(', ');
   const kv = (label, value) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
   return `<section class="day-trip">
     <div class="day-trip-head">${small(I.route, 16)}<b>${route ? esc(route) : 'Маршрут не указан'}</b><span class="chip">${esc(kind.label)}</span></div>
@@ -53,6 +55,7 @@ function tripCard(t, key, ctx) {
       ${pass ? kv(`${small(I.passenger, 14)} Пассажиром`, fmtDur(pass)) : ''}
       ${loco ? kv(`${small(I.train, 14)} Локомотив`, esc(loco)) : ''}
       ${t.routeNo ? kv('Номер маршрута', esc(t.routeNo)) : ''}
+      ${trainsOf(t) ? kv(`${small(I.passenger, 14)} Поезд (пассажиром)`, esc(trainsOf(t))) : ''}
       ${pay && pay.net > 0 ? kv(`${small(I.wallet, 14)} Заработок`, `<span class="money">≈ ${fmtRub(pay.net)}</span>`) : ''}
     </div>
     ${legs.length > 1 ? `<div class="day-legs">${legs.map(legRow).join('')}</div>` : ''}

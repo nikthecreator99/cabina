@@ -17,6 +17,8 @@ export const I = {
   plus: sv('<path d="M12 5v14M5 12h14"/>'),
   left: sv('<path d="m15 5-7 7 7 7"/>'),
   right: sv('<path d="m9 5 7 7-7 7"/>'),
+  down: sv('<path d="m5 9 7 7 7-7"/>'),
+  up: sv('<path d="m5 15 7-7 7 7"/>'),
   x: sv('<path d="M6 6l12 12M18 6 6 18"/>'),
   trash: sv('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6"/>'),
   edit: sv('<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'),

@@ -115,21 +115,19 @@ export function renderInvites() {
   const need = d?.needDays || 3;
   const full = d && d.open.length >= d.limit;
   const status = !d ? `<div class="hint" id="inv-load">${N.err ? esc(N.err === 'server' ? SERVER_OFF : N.err === 'offline' ? OFFLINE : 'Не удалось загрузить приглашения. Попробуйте позже.') : 'Загружаем…'}</div>` : '';
+  // 2.21.2 (Никита): «Создать приглашение» — в самом верху, лишнего текста нет
   return `${head}
-    <p class="hint">Отправьте коллеге ссылку-приглашение. Приглашение засчитается, когда коллега создаст аккаунт, подтвердит почту и зайдёт в CABINA в ${need} ${plural(need, 'разный день', 'разных дня', 'разных дней')}.</p>
-    <div class="panel inv-sum" id="inv-sum">
-      <div class="row"><span class="ico" style="--c:var(--ok)">${I.users}</span><div class="grow"><div class="t1">Засчитано</div><div class="t2">Вещи для персонажа открываются навсегда</div></div><b class="num inv-n">${counted}</b></div>
-      ${d && d.joined > d.counted ? `<div class="row"><div class="grow"><div class="t1">Ещё не засчитаны</div><div class="t2">Создали аккаунт, но пока не подтвердили почту или были в CABINA меньше ${need} дней</div></div><b class="num">${d.joined - d.counted}</b></div>` : ''}
-    </div>
-    ${status}
-    <div class="group-title">Вещи для персонажа</div>
-    <div class="panel inv-tiers" id="inv-tiers">${REWARD_TIERS.map((t) => tierHtml(t, counted)).join('')}</div>
-    <div class="hint">Открытую вещь можно надеть без Премиума: Профиль → персонаж → «Мой персонаж». Примерить — можно сразу.</div>
     <button class="btn btn-primary" data-act="inv-new" id="inv-new"${full || !d ? ' disabled' : ''}>${I.plus} Создать приглашение</button>
     ${full ? `<div class="hint">Неиспользованных приглашений — ${d.limit}, больше нельзя. Отмените ненужное или подождите, пока им воспользуются.</div>` : ''}
-    ${d && d.open.length ? `<div class="group-title">Ждут коллегу <span class="hint">${d.open.length}</span></div><div class="panel" id="inv-open">${d.open.map(openRow).join('')}</div>
-      <div class="hint">Код виден только при создании. Потеряли — отмените приглашение и создайте новое.</div>` : ''}
-    <div class="notice ok">${I.shield}<div><b>Кто именно пришёл, не видно никому</b> — только сколько. Коллега не видит ваших данных, вы — его.</div></div>`;
+    <p class="hint" id="inv-how">Засчитается, когда коллега подтвердит почту и зайдёт в CABINA в ${need} ${plural(need, 'разный день', 'разных дня', 'разных дней')}. Кто именно пришёл, не видно — только сколько.</p>
+    ${status}
+    ${d && d.open.length ? `<div class="group-title">Ждут коллегу <span class="hint">${d.open.length}</span></div><div class="panel" id="inv-open">${d.open.map(openRow).join('')}</div>` : ''}
+    <div class="panel inv-sum" id="inv-sum">
+      <div class="row"><span class="ico" style="--c:var(--ok)">${I.users}</span><div class="grow"><div class="t1">Засчитано</div></div><b class="num inv-n">${counted}</b></div>
+      ${d && d.joined > d.counted ? `<div class="row"><div class="grow"><div class="t1">Ещё не засчитаны</div><div class="t2">Ждём подтверждения почты и ${need} ${plural(need, 'дня', 'дня', 'дней')} в CABINA</div></div><b class="num">${d.joined - d.counted}</b></div>` : ''}
+    </div>
+    <div class="group-title">Вещи для персонажа</div>
+    <div class="panel inv-tiers" id="inv-tiers">${REWARD_TIERS.map((t) => tierHtml(t, counted)).join('')}</div>`;
 }
 
 // Приглашение готово: QR-код со ссылкой, код для ручного ввода, «Отправить» и «Скопировать». Показывается один раз.
@@ -207,13 +205,9 @@ export async function invitesClick(act, b) {
 // Строка «Пригласить коллег» в профиле (группа «Коллеги»), когда есть вход
 export function inviteRowHtml() {
   if (!legalReady() || !session()) return '';
-  const n = Math.max(N.data?.counted || 0, countOf('invited').n);
-  const next = REWARD_TIERS.find((t) => n < t.n);
-  // 2.22 (пример Никиты): коротко — «До «Напарник» — 1 приглашение»
-  const left = next ? next.n - n : 0;
-  const sub = next ? `До «${next.title}» — ${left} ${plural(left, 'приглашение', 'приглашения', 'приглашений')}` : `Засчитано: ${n} · все вещи открыты`;
+  // 2.21.2 (Никита): без подписи под строкой
   return `<button class="row" data-act="go" data-page="invites" id="inv-entry"><span class="ico" style="--c:var(--warn)">${I.gift}</span>
-    <div class="grow"><div class="t1">Пригласить коллег</div><div class="t2">${esc(sub)}</div></div>${small(I.right, 18)}</button>`;
+    <div class="grow"><div class="t1">Пригласить коллег</div></div>${small(I.right, 18)}</button>`;
 }
 
 // ---------------------------------------------------------------- плашки для тех, кто без аккаунта
