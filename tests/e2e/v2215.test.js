@@ -13,7 +13,7 @@ const sheet = (page) => page.locator('#layers .layer:not(.closing)').last();
 const trips = (page) => page.evaluate(async () => (await import('./js/store.js')).S.trips.map(({ id, start, end }) => ({ id, start, end })));
 const fits = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const T1 = { id: 't1', routeLabel: 'Сосновка → Ольховка', start: '2026-10-14T08:00', end: '2026-10-14T16:00', restType: 'turnaround' };
-const T2 = { id: 't2', routeLabel: 'Ольховка → Сосновка', start: '2026-10-15T08:00', end: '2026-10-15T16:00', restType: 'home' };
+const T2 = { id: 't2', routeLabel: 'Ольховка → Сосновка', start: '2026-10-15T08:00', end: '2026-10-15T16:00', restType: 'home', homeChoice: 'queue' };
 const SICK = { id: 'a1', type: 'sick', start: '2026-10-08', end: '2026-10-09', auto: true, monthHours: {}, createdAt: 1 };
 
 async function setTimes(f, sd, st, ed, et) {

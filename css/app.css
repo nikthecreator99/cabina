@@ -680,6 +680,13 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .choice-row.with-calc { grid-template-columns: 1fr 1fr; }
 .choice-row.with-calc .calc-btn { grid-column: 2; grid-row: 1 / span 2; }
 .choice-row.with-calc [data-choice=dayOff] { grid-column: 1; grid-row: 2; }
+.choice-row.with-calc [data-choice=other] { grid-column: 1 / -1; grid-row: 3; }
+.choice-row.with-calc { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+/* очень крупный текст на узком экране: «Рассчитать полный отдых» не помещается в половину ширины — кнопки друг под другом */
+@media (max-width: 360px) {
+  html[data-text="xl"] .choice-row.with-calc { grid-template-columns: 1fr; }
+  html[data-text="xl"] .choice-row.with-calc > * { grid-column: auto !important; grid-row: auto !important; }
+}
 .choice-row.stack { grid-template-columns: 1fr; }
 .choice { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 10px 12px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); text-align: left; font-weight: 700; font-size: calc(15px * var(--fs)); line-height: 1.2; }
 .choice svg { color: var(--night); }
@@ -1398,7 +1405,12 @@ body.selecting .screen { padding-bottom: calc(var(--tabbar-h) + env(safe-area-in
 .rest-field.need #tf-rest button { border-color: var(--accent); }
 .rest-field.need #tf-rest-why { color: var(--accent); font-weight: 700; }
 @keyframes rest-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
-@media (prefers-reduced-motion: reduce) { #tf-rest.rest-pulse button { animation: none; border-color: var(--accent); } .rest-field.need #tf-rest { animation: none; } }
+/* 2.22: после «Домашний отдых» — так же обязательно выбрать, какой именно */
+#tf-home.rest-pulse .choice-row .choice { animation: rest-pulse 2.2s ease-in-out infinite; }
+.rest-field.need-home #tf-home .choice-row { animation: rest-shake .45s ease-in-out 1; }
+.rest-field.need-home #tf-home .choice-row .choice { border-color: var(--accent); }
+.rest-field.need-home #tf-home-why { color: var(--accent); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { #tf-rest.rest-pulse button, #tf-home.rest-pulse .choice-row .choice { animation: none; border-color: var(--accent); } .rest-field.need #tf-rest, .rest-field.need-home #tf-home .choice-row { animation: none; } }
 
 /* 2.21: выходной в профиле — кнопка, нажатием меняется окончание */
 button.pr-status { font: inherit; color: inherit; cursor: pointer; }

@@ -79,6 +79,9 @@ export const HOME_CHOICES = {
   full: 'Полный отдых',
   fullOff: 'Полный отдых с выходным',
 };
+// Что можно выбрать после «Домашний отдых» (2.22: выбор обязателен). 'other' — «Другое»: отдыха на главной нет,
+// как у старых поездок без выбора (homeChoice: null — так и остаётся, пока поездку не поправят)
+export const HOME_PICKS = ['queue', 'dayOff', 'full', 'fullOff', 'other'];
 
 // Выбранный после поездки отдых: { kind, label, until } или null
 export function chosenRest(trip, pool = S.trips) {

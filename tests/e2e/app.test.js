@@ -214,13 +214,14 @@ test('полный отдых по поездке туда и обратно', a
   // (6 ч + 6 ч) × 2,6 − 6 ч = 25 ч 12 мин
   assert.match(home, /Полный отдых\s+25 ч 12 мин/);
   assert.match(home, /С выходным \(\+24 ч\)\s+49 ч 12 мин/);
-  // ничего не выбрано — на главном экране отдых не показывается
+  // 2.22: какой домашний отдых — обязательно: поездки отмечены, но «Пойти на полный отдых» не нажато — не сохраняется
+  assert.match(await text(f, '#tf-home-why'), /Пойти на полный отдых/);
   await f.locator('[data-act=save-trip]').click();
-  await waitNoLayers(page);
-  assert.equal(await page.locator('.rest-banner').count(), 0);
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('#layers .layer:not(.closing)').count(), 1, 'форма осталась открытой');
+  assert.match(await f.locator('#tf-rest-field').getAttribute('class'), /need-home/);
   // выбираем «Пойти на полный отдых»: кнопка подсвечена, отдых виден на главном
-  await page.locator('.trip').first().click();
-  const g = sheet(page);
+  const g = f;
   await g.locator('[data-choice=full]').click();
   assert.equal(await g.locator('[data-choice=full]').getAttribute('aria-pressed'), 'true');
   assert.equal(await g.locator('[data-choice=fullOff]').getAttribute('aria-pressed'), 'false');
