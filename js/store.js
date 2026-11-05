@@ -47,7 +47,7 @@ export async function loadAll() {
   S.onboarded = !!m.onboarded;
   S.trips.forEach(normalizeTrip);
   S.trips.forEach((t) => { t._stats = null; statsOf(t); });
-  try { localStorage.setItem('cabina-theme', S.settings.theme); } catch {}
+  try { localStorage.setItem('cabina-theme', S.settings.theme); localStorage.setItem('cabina-text', textSize()); } catch {}
 }
 
 // Поездки из версий 1.x: полный отдых считался и сразу показывался на главной — считаем это выбором «Полный отдых».
@@ -199,10 +199,14 @@ export function extraOrder(saved = S.settings.extraOrder) {
   return [...mine, ...EXTRA_KEYS.filter((k) => !mine.includes(k))];
 }
 
+// Размер текста (2.21.6): 'm' обычный, 'l' крупный, 'xl' очень крупный
+export const TEXT_SIZES = [{ id: 'm', name: 'Обычный' }, { id: 'l', name: 'Крупный' }, { id: 'xl', name: 'Очень крупный' }];
+export const textSize = (v = S.settings?.textSize) => (TEXT_SIZES.some((x) => x.id === v) ? v : 'm');
+
 export async function saveSettings(patch) {
   S.settings = { ...S.settings, ...patch };
   await db.put('meta', S.settings);
-  try { localStorage.setItem('cabina-theme', S.settings.theme); } catch {}
+  try { localStorage.setItem('cabina-theme', S.settings.theme); localStorage.setItem('cabina-text', textSize()); } catch {}
   emit();
 }
 

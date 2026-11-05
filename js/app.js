@@ -1,6 +1,6 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, attachReorder, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
-import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo, EXTRA_KEYS, extraOrder } from './store.js';
+import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo, EXTRA_KEYS, extraOrder, TEXT_SIZES, textSize } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
 import { openTripForm, openDayOffEdit, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
@@ -37,7 +37,7 @@ import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, j
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 
-export const VERSION = '2.21.5';
+export const VERSION = '2.21.6';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -50,6 +50,9 @@ function applyTheme() {
   const t = S.settings.theme === 'light' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', t);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'dark' ? '#07090f' : '#eef1f7');
+  const z = textSize();
+  if (z === 'm') document.documentElement.removeAttribute('data-text');
+  else document.documentElement.setAttribute('data-text', z);
 }
 
 // ---------------------------------------------------------------- небо
@@ -463,7 +466,7 @@ const inFrame = () => { try { return window.top !== window; } catch { return tru
 const lastBackupText = () => (S.backup.lastAt ? `Последняя копия: ${new Date(S.backup.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Копия ещё не сохранялась');
 function setSub(id) {
   const s = S.settings;
-  if (id === 'set-look') return `${s.theme === 'light' ? 'Светлая' : 'Тёмная'} тема · ${PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name.toLowerCase()}`;
+  if (id === 'set-look') return `${s.theme === 'light' ? 'Светлая' : 'Тёмная'} тема${textSize() !== 'm' ? ` · ${TEXT_SIZES.find((x) => x.id === textSize()).name.toLowerCase()} текст` : ''} · ${PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name.toLowerCase()}`;
   if (id === 'set-privacy') return `Код для входа ${lockOn() ? 'включён' : 'выключен'}${flipOn() ? ' · суммы скрываются переворотом' : ''}`;
   if (id === 'set-data') return isMemoryMode() ? 'Записи не сохраняются — откройте в обычном окне' : lastBackupText();
   if (id === 'set-time') return `${tzLabel(s.tz)} · ${yearInfo(new Date(nowLocal()).getUTCFullYear()).hours} ч в году`;
@@ -482,6 +485,9 @@ function renderSetLook() {
   return `${pageHead('Оформление', { back: true })}
     <div class="group"><div class="group-title">Тема</div>
       <div class="seg" id="theme-seg">${themeBtn('dark', 'Тёмная', I.moon)}${themeBtn('light', 'Светлая', I.sun)}</div></div>
+    <div class="group"><div class="group-title">Размер текста</div>
+      <div class="seg" id="text-seg">${TEXT_SIZES.map((x) => `<button data-act="text-size" data-v="${x.id}" aria-pressed="${textSize() === x.id}">${x.name}</button>`).join('')}</div>
+      <div class="hint">Крупнее — легче читать. Цифры на главном и так крупные — они не меняются.</div></div>
     <div class="group"><div class="group-title">Обновление</div>
       <div class="panel"><button class="row" data-act="pull-style" id="pull-row"><span class="ico" style="--c:var(--night)">${I.refresh}</span><div class="grow"><div class="t1">Анимация обновления</div><div class="t2">${esc(PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name)} · потяните экран вниз, чтобы обновить</div></div>${small(I.right, 18)}</button></div></div>`;
 }
@@ -835,6 +841,7 @@ app.addEventListener('click', async (e) => {
     case 'doc-menu': docMenu(id); break;
     case 'doc-mkdir': mkdir(); break;
     case 'theme': await saveSettings({ theme: b.dataset.v }); applyTheme(); break;
+    case 'text-size': await saveSettings({ textSize: textSize(b.dataset.v) }); applyTheme(); break;
     case 'money-eye': await toggleMoney(); break;
     case 'lock-settings': openLockSettings(rerender); break;
     case 'flip-toggle': if (await setFlip(!flipOn())) rerender(); break;
