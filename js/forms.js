@@ -296,8 +296,6 @@ export function openTripForm(tripId) {
       <button type="button" class="add-btn" data-act="add-leg" id="tf-add-leg">${I.train} Добавить локомотив</button>
     </div>
     <div class="field">
-      <div class="list" id="tf-wait"></div>
-      <button type="button" class="add-btn" data-act="add-wait" id="tf-add-wait" hidden>${I.clock} Ожидание следования пассажиром</button>
       <div class="list" id="tf-pass"></div>
       <button type="button" class="add-btn" data-act="add-pass">${I.passenger} Следование пассажиром</button>
       <button type="button" class="add-btn" data-act="add-routeno" id="tf-add-routeno">${I.file} Номер маршрута</button>
@@ -501,7 +499,7 @@ export function openTripForm(tripId) {
     const a = `${p.sd}T${p.st}`, b = `${p.ed}T${p.et}`;
     const day = (x) => (x.slice(0, 10) !== (F.sd || x.slice(0, 10)) ? `${dayMonth(parseLocal(x))}, ` : '');
     const dur = Math.max(0, (parseLocal(b) - parseLocal(a)) / MIN);
-    const what = kind === 'wait' ? `${I.clock} Ожидание${F.waiting.length > 1 ? ` №${i + 1}` : ''}` : `${I.passenger} Пассажиром${F.passenger.length > 1 ? ` №${i + 1}` : ''}`;
+    const what = kind === 'wait' ? `${I.clock} Ожидание${F.passenger.length > 1 || F.waiting.length > 1 ? ` №${i + 1}` : ''}` : `${I.passenger} Пассажиром${F.passenger.length > 1 ? ` №${i + 1}` : ''}`;
     return `<button type="button" class="interval short${kind === 'wait' ? ' wait' : ''}" data-act="pass-open" data-pid="${esc(p.id)}" data-iv="${kind}" aria-label="${kind === 'wait' ? 'Ожидание' : 'Следование пассажиром'}: развернуть">
         <span class="iv-what">${what}</span>
         <span class="iv-when"><b>${day(a)}${esc(p.st)} – ${day(b)}${esc(p.et)}</b><small>${fmtDur(dur, { short: true })}${kind === 'pass' && trainNo(p.train) ? ` · поезд ${esc(trainNo(p.train))}` : ''}</small></span>
@@ -515,16 +513,16 @@ export function openTripForm(tripId) {
         <div class="dt"><input type="date" class="input" data-pf="sd" value="${p.sd}" aria-label="Дата начала"><input type="time" class="input" data-pf="st" value="${p.st}" aria-label="Время начала"></div>
         <div class="mini-label">Окончание</div>
         <div class="dt"><input type="date" class="input" data-pf="ed" value="${p.ed}" aria-label="Дата окончания"><input type="time" class="input" data-pf="et" value="${p.et}" aria-label="Время окончания"></div>
-        ${kind === 'pass' ? `<div class="hint" data-open-hint${p.et ? ' hidden' : ''}>Едете пассажиром сейчас? Окончание можно не указывать: следование закончится вместе с поездкой.</div>
-        <label class="mini-label" for="pf-train-${esc(p.id)}">Номер поезда <small>(не локомотива), если нужно</small></label>
+        ${kind === 'pass' ? `<label class="mini-label" for="pf-train-${esc(p.id)}">Номер поезда <small>(необязательно)</small></label>
         <input class="input" id="pf-train-${esc(p.id)}" data-pf="train" value="${esc(p.train || '')}" maxlength="8" autocomplete="off" autocapitalize="characters" inputmode="text" placeholder="Например, 6501">` : ''}
         ${done(p) ? `<button type="button" class="link-btn iv-fold" data-act="pass-fold" data-pid="${esc(p.id)}">${I.up} Свернуть</button>` : ''}
       </div>`;
   function renderPass() {
-    $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => intervalHtml(p, i, 'pass')).join('');
-    $(el, '#tf-wait').innerHTML = F.waiting.map((p, i) => intervalHtml(p, i, 'wait')).join('');
-    // ожидание следования — по одному на каждое следование пассажиром
-    $(el, '#tf-add-wait').hidden = F.waiting.length >= F.passenger.length;
+    // 2.21.2 (Никита): ожидание стоит строго над своим следованием пассажиром (по одному на каждое);
+    // кнопка «Ожидание следования пассажиром» — над первым следованием, у которого ожидания ещё нет
+    const addWait = `<button type="button" class="add-btn" data-act="add-wait" id="tf-add-wait">${I.clock} Ожидание следования пассажиром</button>`;
+    $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => (F.waiting[i] ? intervalHtml(F.waiting[i], i, 'wait') : i === F.waiting.length ? addWait : '') + intervalHtml(p, i, 'pass')).join('')
+      + F.waiting.slice(F.passenger.length).map((w, j) => intervalHtml(w, F.passenger.length + j, 'wait')).join('');
     if (F.passenger.length && !F.waiting.length) setTimeout(() => waitTour(el), 400);
   }
   function renderKind() {
@@ -706,7 +704,6 @@ export function openTripForm(tripId) {
     if (key === 'note' || key === 'routeNo' || key === 'train' || t.dataset.tf) return;
     if (obj === F && key === 'ed') F.endTouched = true;
     if (obj === F && (key === 'sd' || key === 'st' || key === 'et')) autoEnd();
-    if (t.dataset.pf === 'et') { const h = t.closest('.interval')?.querySelector('[data-open-hint]'); if (h) h.hidden = !!t.value; }
     $(el, '[data-error]').innerHTML = '';
     refreshAll();
   };
@@ -714,7 +711,7 @@ export function openTripForm(tripId) {
   el.addEventListener('change', onTripField);
   // заполнили начало и окончание и ушли из карточки следования / ожидания — она сворачивается в строку (2.21.2)
   el.addEventListener('focusout', (e) => {
-    const box = e.target.closest?.('#tf-pass div.interval[data-pid], #tf-wait div.interval[data-pid]');
+    const box = e.target.closest?.('#tf-pass div.interval[data-pid]');
     if (!box || (e.relatedTarget && box.contains(e.relatedTarget))) return;
     setTimeout(() => {
       if (!box.isConnected || box.contains(document.activeElement)) return;
@@ -779,7 +776,8 @@ export function openTripForm(tripId) {
       const going = !F.et && F.sd && F.st && parseLocal(`${F.sd}T${F.st}`) < nowMs;
       F.passenger.push(going ? { id: uid(), sd: n.slice(0, 10), st: n.slice(11, 16), ed: n.slice(0, 10), et: '' } : { id: uid(), sd: F.sd || today, st: '', ed: F.sd || today, et: '' });
       renderPass(); refreshAll();
-      const last = el.querySelectorAll('#tf-pass .interval'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const np = F.passenger[F.passenger.length - 1];
+      el.querySelector(`#tf-pass [data-pid="${CSS.escape(np.id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else if (act === 'add-wait') {
       if (F.waiting.length >= F.passenger.length) return;
       // сначала ждали, потом поехали: окончание ожидания = начало следования пассажиром (можно поправить)
@@ -793,7 +791,7 @@ export function openTripForm(tripId) {
       if (!p) return;
       p.open = act === 'pass-open';
       renderPass();
-      const box = el.querySelector(`#tf-pass [data-pid="${CSS.escape(p.id)}"], #tf-wait [data-pid="${CSS.escape(p.id)}"]`);
+      const box = el.querySelector(`#tf-pass [data-pid="${CSS.escape(p.id)}"]`);
       if (act === 'pass-open') box?.querySelector('input[data-pf=st]')?.focus({ preventScroll: true });
       else box?.focus({ preventScroll: true });
     } else if (act === 'del-pass') {

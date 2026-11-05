@@ -41,12 +41,14 @@ test('в пути: «Добавить локомотив» — время «се
   await card.locator('[data-lf=locoNumber]').fill('1234');
   await card.locator('[data-act=leg-train]').click();
   await card.locator('[data-lf=weight]').fill('5000');
-  // пассажиром — с этой минуты, окончание пустое, есть пояснение
+  // пассажиром — с этой минуты, окончание пустое
   await f.locator('[data-act=add-pass]').click();
   const pass = f.locator('#tf-pass .interval');
   assert.equal(await pass.locator('[data-pf=st]').inputValue(), '12:00');
   assert.equal(await pass.locator('[data-pf=et]').inputValue(), '');
-  assert.match(await pass.innerText(), /Окончание можно не указывать: следование закончится вместе с поездкой/);
+  // 2.21.2 (Никита): без пояснения, только «Номер поезда (необязательно)»
+  assert.doesNotMatch(await pass.innerText(), /Окончание можно не указывать/);
+  assert.match(await pass.innerText(), /Номер поезда \(необязательно\)/);
   await pass.locator('[data-pf=st]').fill('11:00');
   assert.match(await text(f, '#tf-calc'), /В пути\s+7 ч 00 мин/);
   assert.match(await f.locator('[data-act=save-trip]').innerText(), /В путь/);
