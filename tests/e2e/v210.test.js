@@ -117,6 +117,31 @@ test('скрытие сумм: глаз, переворот экраном вн�
   await context.close();
 });
 
+// с Chrome 153 DeviceOrientationEvent.requestPermission есть и в Chrome: по нему одному Android нельзя принять за iPhone
+const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36';
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+test('переворот: на Android включён сразу, даже если у браузера есть requestPermission; на iPhone — выключен до разрешения', async () => {
+  for (const [ua, on] of [[ANDROID, true], [IPHONE, false]]) {
+    const { context, page, errors } = await openApp(env, { userAgent: ua });
+    assert.equal(await page.evaluate(() => typeof DeviceOrientationEvent.requestPermission), 'function', 'проверяем именно браузер с requestPermission');
+    await seed(page, { routes: ROUTES, trips: TRIPS, settings: { pay: PAY } });
+    await page.waitForSelector('.hero-pay .eye-btn');
+    await flip(page, 10); await flip(page, 179); await page.waitForTimeout(450);
+    assert.equal(await hidden(page), on, on ? 'Android: экраном вниз — суммы скрыты' : 'iPhone: без разрешения переворот не работает');
+    await tab(page, 'profile');
+    await openSettings(page, 'set-privacy');
+    assert.equal(await page.locator('#flip-sw').getAttribute('aria-checked'), String(on));
+    if (!on) { // на iPhone включили сами — разрешение спрошено, переворот работает
+      await page.locator('#flip-sw').click();
+      await page.waitForFunction(() => document.querySelector('#flip-sw')?.getAttribute('aria-checked') === 'true');
+      await flip(page, 10); await flip(page, 179); await page.waitForTimeout(450);
+      assert.equal(await hidden(page), true);
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
 test('код для входа: предупреждение, два раза одинаково, экран при запуске, ошибка, выключение по текущему коду', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { trips: TRIPS.slice(0, 2) });

@@ -12,10 +12,11 @@ export async function startEnv() {
 }
 
 // Новый «телефон»: пустые данные, подсказки и поздравления с наградами выключены, приветствие закрыто.
-export async function openApp(env, { onboard = true, tours = false, awards = false, now = NOW, sw = false } = {}) {
+export async function openApp(env, { onboard = true, tours = false, awards = false, now = NOW, sw = false, userAgent } = {}) {
   const context = await env.browser.newContext({
     viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
     locale: 'ru-RU', timezoneId: 'Europe/Moscow', serviceWorkers: sw ? 'allow' : 'block', acceptDownloads: true,
+    ...(userAgent ? { userAgent } : {}),
   });
   if (!tours) await context.addInitScript(() => { try { localStorage.setItem('cabina-tours-off', '1'); } catch {} });
   if (!awards) await context.addInitScript(() => { try { localStorage.setItem('cabina-awards-quiet', '1'); } catch {} });

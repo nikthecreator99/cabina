@@ -9,7 +9,7 @@ import {
   autoAbsenceHours, absenceBreakdown, absenceMonths, validateAbsence, monthSummary, DAY, MIN, LEGS_MAX, LEG_NAMES, legsOf,
 } from './calc.js';
 import { dayInfo } from './calendar.js';
-import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restEndOf } from './rest.js';
+import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restEndOf, HOME_PICKS } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub, vacationPay, VAC_MIN_MONTHS } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive } from './share.js';
@@ -554,6 +554,16 @@ export function openTripForm(tripId) {
   // Вид отдыха обязателен (2.21, решение Никиты): у всех и всегда, как только указано окончание поездки —
   // без него не посчитаются отдых, переотдых по домам отдыха и его оплата. Пока не выбран — кнопки медленно пульсируют
   const needRest = () => !!(F.et && F.ed);
+  // Домашний отдых — тоже с выбором, какой именно (2.22, просьба Никиты): на очередь, на выходной, полный отдых или «Другое».
+  // Без него на главной, в профиле и у коллег не видно, когда отдых кончается. Полный отдых считается выбранным,
+  // только когда отмечены поездки и нажато «Пойти на полный отдых» (draft() иначе сбрасывает выбор)
+  const homeOk = (d) => d.restType !== 'home' || HOME_PICKS.includes(d.homeChoice);
+  const needHome = () => needRest() && F.restType === 'home' && !homeOk(draft());
+  function nudgeHome() {
+    const f = $(el, '#tf-rest-field');
+    f.classList.remove('need-home'); void f.offsetWidth; f.classList.add('need-home');
+    ($(el, '#tf-home-why') || $(el, '#tf-home')).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
   // Сохранить без вида отдыха нельзя: экран доезжает до кнопок, они вздрагивают и подсвечиваются
   function nudgeRest() {
     const f = $(el, '#tf-rest-field');
@@ -589,6 +599,7 @@ export function openTripForm(tripId) {
     const box = $(el, '#tf-calc');
     const rbox = $(el, '#tf-rest-calc');
     const home = $(el, '#tf-home');
+    home.classList.remove('rest-pulse');
     const nowMs = nowLocal();
     if (err) {
       const incomplete = !d.start;
@@ -652,6 +663,7 @@ export function openTripForm(tripId) {
       ${choiceBtn('queue', 'На очередь', `вызов не раньше чем через ${shiftH()}`, I.clock)}
       ${F.homeOpen ? '' : `<button type="button" class="choice calc-btn" data-act="home-calc">${ico(I.home2, 20)}<span>Рассчитать полный отдых</span></button>`}
       ${choiceBtn('dayOff', 'Пойти на выходной', `на ${fmtDur(F.homeChoice === 'dayOff' ? d.dayOffMin : dayOffMin(), { short: true })}`, I.calendar)}
+      ${choiceBtn('other', 'Другое', 'ничего из этого не подходит', I.more)}
     </div>`;
     if (F.homeOpen) {
       const sug = suggestChain(d);
@@ -691,6 +703,14 @@ export function openTripForm(tripId) {
       } else h += '<div class="hint">Отметьте хотя бы одну поездку.</div>';
       setTimeout(() => homeRestPickTour(el), 300);
     } else setTimeout(() => homeRestButtonTour(el), 300);
+    const homeNeed = !homeOk(d);
+    if (homeNeed) {
+      const picked = F.homeOpen && F.homeSel.length >= 1 && h.includes('tf-full-choice');
+      h += `<div class="hint" id="tf-home-why">${picked
+        ? 'Нажмите «Пойти на полный отдых» (или «с выходным»), «На очередь», «Пойти на выходной» или «Другое» — без этого поездку не сохранить.'
+        : 'Выберите, какой домашний отдых: «На очередь», «Пойти на выходной», полный отдых или «Другое» — без этого поездку не сохранить.'}</div>`;
+    } else $(el, '#tf-rest-field').classList.remove('need-home');
+    home.classList.toggle('rest-pulse', homeNeed);
     setHTML(home, h);
     renderSummary(st, live, pay);
   }
@@ -834,6 +854,7 @@ export function openTripForm(tripId) {
       if (text && (!d.locoType || !d.locoNumber)) { showError(el, 'Чтобы сохранить заметку, укажите тип и номер локомотива.'); return; }
       // сначала ошибки в полях, потом — вид отдыха
       if (d.end && !d.restType && needRest()) { showError(el, ''); nudgeRest(); return; }
+      if (d.end && needHome()) { showError(el, ''); nudgeHome(); return; }
       const warn = draftWarnings(d);
       if (warn.length) {
         const ok = await confirmDialog({ title: 'Проверьте поездку', text: warn.join(' '), ok: 'Сохранить', cancel: 'Исправить', danger: false });

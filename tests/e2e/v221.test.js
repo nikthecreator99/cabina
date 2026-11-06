@@ -68,6 +68,7 @@ test('вид отдыха: кнопки внизу формы, после раб
   await page.waitForTimeout(300);
   assert.equal((await trips(page)).length, 1, 'без выбора не сохранилась');
   await g.locator('[data-rest=home]').click();
+  await g.locator('[data-choice=dayOff]').click();
   await g.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   assert.equal((await trips(page)).length, 2);
@@ -87,6 +88,7 @@ test('вид отдыха: обязателен у всех — и без акк
     await page.waitForTimeout(300);
     assert.equal((await trips(page)).length, 0, 'без выбора не сохранилась');
     await f.locator('[data-rest=home]').click();
+    await f.locator('[data-choice=queue]').click();
     await f.locator('[data-act=save-trip]').click();
     await waitNoLayers(page);
     assert.equal((await trips(page))[0].restType, 'home');

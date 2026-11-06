@@ -4,7 +4,9 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, text, openSettings } from './helpers.js';
 import { ready } from './mock-colleagues.js';
-import { helpCount } from '../../js/help.js';
+import { HELP, helpCount } from '../../js/help.js';
+// вопросы о группах видны только после входа в аккаунт (2.22), здесь вход не выполнен
+const shownCount = () => helpCount() - HELP.flatMap((g) => g.items).filter((it) => it.need === 'groups').length;
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -28,7 +30,7 @@ test('«Ещё» → «Помощь»: вопросы по группам, от�
   await page.locator('#extra-help').click();
   await page.waitForSelector('#help-q');
   assert.match(await text(page, '.page-head'), /Помощь/);
-  assert.equal(await page.locator('details.faq').count(), helpCount(), 'аккаунт есть в приложении — видны все вопросы');
+  assert.equal(await page.locator('details.faq').count(), shownCount(), 'аккаунт есть в приложении — видны все вопросы (кроме групп без входа)');
   assert.match(await text(page, '.screen'), /Поездки[\s\S]*Отдых[\s\S]*Часы и заработок[\s\S]*Отвлечения[\s\S]*Данные и безопасность[\s\S]*Аккаунт и коллеги[\s\S]*Прочее/i);
   assert.match(await text(page, '.screen'), /ориентировочные[\s\S]*только в этом телефоне/);
   // ответ свёрнут, по нажатию — раскрыт
@@ -71,7 +73,7 @@ test('поиск: «копия» — три ответа и сразу откр�
   await page.waitForSelector('.faq-none');
   assert.match(await text(page, '.faq-none'), /Ничего не нашлось/);
   await page.locator('[data-act=help-clear]').click();
-  await page.waitForFunction((n) => document.querySelectorAll('details.faq').length === n, helpCount());
+  await page.waitForFunction((n) => document.querySelectorAll('details.faq').length === n, shownCount());
   assert.equal(await page.locator('#help-q').inputValue(), '');
   assert.equal(await page.locator('[data-act=help-clear]').count(), 0);
   // открытые поиском ответы не запоминаются как открытые человеком

@@ -45,6 +45,7 @@ test('новая поездка: отдых не выбран и недосту�
   assert.equal(await store(page, async () => (await import('./js/store.js')).S.trips.length), 0, 'без выбора отдыха не сохранилась');
   assert.match(await f.locator('#tf-rest').getAttribute('class'), /rest-pulse/);
   await f.locator('[data-rest=home]').click();
+  await f.locator('[data-choice=other]').click();
   await save.click();
   await waitNoLayers(page);
   const t = await store(page, async () => (await import('./js/store.js')).S.trips[0]);
