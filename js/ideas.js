@@ -143,6 +143,21 @@ async function send() {
   await loadIdeas({ force: true });
 }
 
+// Готовый текст — как идея (2.23.0: «Сообщить об ошибке» в уроке «Обучения»): тот же сервер, лимит в день и согласие.
+// Сообщение потом видно в «Предложить идею» — там его можно стереть. → { ok, msg } (msg пустой — человек сам отказался)
+export async function sendIdea(text) {
+  const body = ideaText(text);
+  if (body.length < 3) return { ok: false, msg: 'Напишите хотя бы несколько слов' };
+  let r = await rpc('send_idea', { p_body: body });
+  if (r && !r.ok && /consent required/.test(msgOf(r))) {
+    if (!(await ensureConsent())) return { ok: false, msg: '' };
+    r = await rpc('send_idea', { p_body: body });
+  }
+  if (!r?.ok) return { ok: false, msg: ideaError(r) };
+  D.at = 0; // список «Мои идеи» обновится при следующем открытии
+  return { ok: true };
+}
+
 export async function ideasClick(act, b) {
   if (act !== 'idea-send' && act !== 'idea-del') return false;
   if (D.busy) return true;

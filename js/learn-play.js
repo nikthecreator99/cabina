@@ -2,6 +2,8 @@
 // «Верно» / «Неверно» с правильным ответом, объяснением (если есть) и пунктом документа с цитатой. Ошибка уходит в конец урока
 // и повторяется, пока не будет верного ответа. Время считается, только пока урок на экране.
 // Ничего не хранит и не отправляет: итог урока передаётся в finish(), прогресс сохраняет learn.js.
+// Под ответом — «Сообщить об ошибке» (onReport, окно и отправка — в learn.js) и, если вопрос не проверен экспертом
+// (нет checked), пометка «Не проверен экспертом»: решение Никиты 06.11.2026 — уроки открыты и до такой проверки.
 import { I, esc, small, openLayer, closeLayer, confirmDialog, plural } from './ui.js';
 import * as L from './learn-state.js';
 
@@ -33,13 +35,15 @@ const ARRIVE = `<svg class="lp-scene" viewBox="0 0 320 120" aria-hidden="true">
   </g>
 </svg>`;
 
-// questions — вопросы урока (из файла модуля), finish(r) → news из completeLesson, onClose(пройден ли урок)
-export function playLesson({ title, kicker, questions, finish, onClose }) {
+// questions — вопросы урока (из файла модуля), finish(r) → news из completeLesson, onClose(пройден ли урок),
+// onReport(вопрос) — «Сообщить об ошибке»
+export function playLesson({ title, kicker, questions, finish, onClose, onReport }) {
   const byId = new Map(questions.map((q) => [q.id, q]));
   let run = L.newRun(questions.map((q) => q.id));
   let phase = 'q'; // 'q' — отвечаем, 'fb' — разбор ответа, 'busy' — сохраняем, 'end' — итог
   let pick = null; // номер выбранного варианта в вопросе
   let order = []; // порядок показа вариантов
+  let curQ = null; // вопрос на экране (после ответа run уже смотрит на следующий)
   let done = false;
 
   // время — только пока урок виден (свернули приложение — часы стоят)
@@ -91,6 +95,7 @@ export function playLesson({ title, kicker, questions, finish, onClose }) {
   };
   function show() {
     const cur = q();
+    curQ = cur;
     phase = 'q';
     pick = null;
     const n = cur.type === 'choice' ? cur.options.length : 0;
@@ -142,12 +147,13 @@ export function playLesson({ title, kicker, questions, finish, onClose }) {
     const quote = src ? `<details class="lp-src"${quoteOpen() ? ' open' : ''}>
         <summary><span class="lp-src-ico">${small(I.file, 20)}</span><span class="lp-src-t"><small>Где написано</small><b>${esc(src.title)}</b>${src.doc ? `<span>${esc(src.doc)}</span>` : ''}</span><span class="lp-src-chev" aria-hidden="true">${small(I.down, 18)}</span></summary>
         ${cur.src.quote ? `<blockquote>«${esc(cur.src.quote)}»</blockquote>` : ''}</details>` : '';
+    const rep = onReport ? `<div class="lp-rep">${cur.checked ? '' : '<span class="lp-unchk">Не проверен экспертом</span>'}<button class="lp-rep-btn" type="button" data-lp="report">Сообщить об ошибке</button></div>` : '';
     foot.className = `lp-foot ${ok ? 'ok' : 'bad'}`;
     foot.innerHTML = `<div class="lp-fb" role="status">
         <div class="lp-fb-h"><span class="lp-fb-ico">${ok ? small(I.check, 20) : small(I.x, 20)}</span><b>${ok ? OK_WORDS[run.answers.length % OK_WORDS.length] : 'Неверно'}</b></div>
         ${!ok ? `<div class="lp-fb-a">Правильный ответ: <b>${esc(right)}</b></div>${L.runDone(run) ? '' : '<div class="lp-fb-later">Этот вопрос повторится в конце урока.</div>'}`
           : typo ? `<div class="lp-fb-a">Есть опечатка, правильно: <b>${esc(right)}</b></div>` : ''}
-        ${cur.explain ? `<p class="lp-fb-x">${esc(cur.explain)}</p>` : ''}${quote}
+        ${cur.explain ? `<p class="lp-fb-x">${esc(cur.explain)}</p>` : ''}${quote}${rep}
       </div>
       <button class="btn lp-go ${ok ? 'lp-go-ok' : 'lp-go-bad'}" data-lp="next">${L.runDone(run) ? 'Завершить урок' : 'Дальше'}</button>`;
     foot.querySelector('.lp-src')?.addEventListener('toggle', (e) => rememberQuote(e.currentTarget.open));
@@ -207,6 +213,7 @@ export function playLesson({ title, kicker, questions, finish, onClose }) {
       foot.querySelector('[data-lp=check]').disabled = false;
     } else if (a === 'check') check();
     else if (a === 'next') next();
+    else if (a === 'report' && phase === 'fb' && curQ) onReport?.(curQ);
     else if (a === 'close') closeLayer(el);
   });
   // клавиатура: 1–4 — вариант, Enter — проверить / дальше

@@ -1749,6 +1749,15 @@ button.pr-status svg { color: var(--text-2); }
 .lp-src-chev { flex: none; display: grid; place-items: center; color: var(--muted); transition: transform .2s; }
 .lp-src[open] .lp-src-chev { transform: rotate(180deg); }
 .lp-src blockquote { margin: 0 10px 10px; padding: 8px 12px; border-left: 3px solid var(--lr-sign-2); background: color-mix(in srgb, var(--bg) 45%, transparent); border-radius: 0 10px 10px 0; font-size: calc(13px * var(--fs)); line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
+/* 2.23.0: под ответом — «Сообщить об ошибке» и пометка «Не проверен экспертом» (решение Никиты 06.11.2026) */
+.lp-rep { display: flex; align-items: center; justify-content: space-between; gap: 2px 12px; flex-wrap: wrap; }
+.lp-unchk { font-size: calc(12px * var(--fs)); color: var(--muted); }
+.lp-rep-btn { margin-left: auto; min-height: 40px; padding: 6px 2px; background: none; border: 0; color: var(--text-2); font: inherit; font-size: calc(14px * var(--fs)); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.lp-rep-btn:focus-visible { outline: 2px solid var(--night); outline-offset: 2px; border-radius: 6px; }
+.lr-rep { display: flex; flex-direction: column; gap: 10px; }
+.lr-rep-q { margin: 0; padding: 8px 12px; border-left: 3px solid var(--lr-sign-2); background: var(--card-2); border-radius: 0 10px 10px 0; font-size: calc(14px * var(--fs)); line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
+.lr-rep-l { font-weight: 700; font-size: calc(15px * var(--fs)); }
+.lr-rep textarea { width: 100%; resize: vertical; min-height: 96px; }
 .lp-go-ok { background: var(--ok); color: var(--ok-ink); box-shadow: 0 6px 18px color-mix(in srgb, var(--ok) 35%, transparent); }
 .lp-go-bad { background: var(--holiday); color: #fff; box-shadow: 0 6px 18px color-mix(in srgb, var(--holiday) 30%, transparent); }
 .lp-go:disabled { opacity: 1; background: var(--line-2); color: var(--muted); box-shadow: none; cursor: default; }

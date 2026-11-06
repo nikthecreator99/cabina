@@ -356,12 +356,21 @@ test('курс ПТЭ: вопросы заполнены правильно, в�
   }
 });
 
-test('курс ПТЭ: урок без проверки человеком — только черновик', () => {
+// Решение Никиты 06.11.2026 («я тебе доверяю»): уроки открыты и до проверки экспертом — у такого вопроса в уроке
+// пометка «Не проверен экспертом» (tests/e2e/v223-learn.test.js). Открытый урок — только из готовых вопросов курса.
+test('курс ПТЭ: все уроки открыты, в каждом — готовые вопросы с цитатой и редакцией курса', () => {
   const byId = new Map(allQs.map((q) => [q.id, q]));
+  let open = 0;
   for (const m of PTE.modules) for (const t of m.topics) for (const l of t.lessons) {
     if (l.draft) continue;
-    for (const id of l.q) assert.ok(byId.get(id)?.checked, `${l.id}: вопрос ${id} не проверен — урок должен быть draft: true`);
+    open++;
+    for (const id of l.q) {
+      const q = byId.get(id);
+      assert.ok(q, `${l.id}: вопроса ${id} нет в файле модуля`);
+      assert.ok(q.src?.ref && q.src?.quote && q.ed === PTE.ed, `${l.id}: ${id} — без пункта, цитаты или редакции`);
+    }
   }
+  assert.equal(open, 120, 'все 120 уроков открыты');
 });
 
 test('курс ПТЭ: цитаты дословно есть в тексте приказа', () => {

@@ -8,6 +8,9 @@ import { dateKeyOf } from './calc.js';
 import * as L from './learn-state.js';
 import { PTE } from './learn/pte.js';
 import { playLesson } from './learn-play.js';
+import { session } from './auth.js';
+import { legalReady } from './legal.js';
+import { sendIdea, IDEA_MAX } from './ideas.js';
 
 let ctx = { rerender: () => {}, go: () => {} };
 export function initLearn(c) { ctx = { ...ctx, ...c }; }
@@ -100,7 +103,7 @@ function nextHtml(s) {
     const any = L.lessonsOf(c, opts()).length;
     const again = weakest(s);
     return `<div class="lr-next panel${again ? ' lr-next-wrap' : ''}"><div class="grow"><div class="lr-kicker">${any ? 'Все готовые уроки пройдены' : 'Первые уроки скоро'}</div>
-      <p class="hint">${any ? 'Новые темы появятся в обновлениях. Пройденные уроки можно повторять — так знания держатся дольше.' : 'Каждый вопрос проверяет работник локомотивной бригады: в учебнике по безопасности движения не должно быть ошибок.'}</p></div>
+      <p class="hint">${any ? 'Новые темы появятся в обновлениях. Пройденные уроки можно повторять — так знания держатся дольше.' : 'Уроки появятся в обновлениях.'}</p></div>
       ${again ? `<button class="btn btn-plain btn-sm lr-go" data-act="lr-start" data-id="${esc(again)}">${small(I.refresh, 18)} Повторить урок</button>` : ''}</div>`;
   }
   const f = find(cur.lesson.id);
@@ -128,7 +131,7 @@ export function renderLearn() {
       </div>
     </div>
     ${nextHtml(s)}
-    <p class="hint lr-foot">Вопросы составлены по тексту ПТЭ (${esc(c.edition)}) и проверены работником локомотивной бригады. Учебник не заменяет обучение и аттестацию: в работе сверяйтесь с действующими документами.</p>`;
+    <p class="hint lr-foot">Вопросы составлены по тексту ПТЭ (${esc(c.edition)}) и сверены с ним, но экспертом пока не проверены. Нашли ошибку — нажмите «Сообщить об ошибке» под ответом. Учебник не заменяет обучение и аттестацию: в работе сверяйтесь с действующими документами.</p>`;
 }
 
 // ---------------------------------------------------------------- дорога курса
@@ -418,6 +421,36 @@ async function begin(id) {
       if (doneOk && wasCurrent) road.just = id;
       ctx.rerender();
     },
+    onReport: openReport,
+  });
+}
+
+// «Сообщить об ошибке» под ответом (решение Никиты 06.11.2026: уроки открыты до проверки экспертом). Сообщение уходит
+// как идея на наш сервер (тот же лимит в день и согласие): номер вопроса, начало его текста и слова человека — больше ничего.
+// Без аккаунта — только объяснение: записи из телефона никуда не уходят.
+const cut = (t, n) => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t);
+export const reportHead = (q) => `Ошибка в вопросе ${q.id} («${cut(String(q.text), 70)}»): `;
+function openReport(q) {
+  const can = legalReady() && !!session();
+  const head = reportHead(q);
+  const body = `<div class="lr-rep"><blockquote class="lr-rep-q">${esc(q.text)}</blockquote>${can
+    ? `<label class="lr-rep-l" for="lr-rep-text">Что не так?</label>
+      <textarea class="input" id="lr-rep-text" rows="4" maxlength="${IDEA_MAX - head.length}" placeholder="Например: по ПТЭ правильный ответ другой — …"></textarea>
+      <div class="notice">${I.alert}<div>Сообщение прочитает разработчик. Оно появится в «Предложить идею» — там его можно стереть. Не пишите имена, телефоны, номера поездов и служебную информацию.</div></div>`
+    : `<p class="hint">${legalReady() ? 'Сообщить об ошибке можно с аккаунтом CABINA: так разработчик сможет ответить, а вы — стереть сообщение. Войти можно в Настройках → «Настройки аккаунта». Записи из телефона при этом никуда не уходят.' : 'Скоро отсюда можно будет сообщить об ошибке разработчику.'}</p>`}</div>`;
+  const el = openLayer(sheet({ title: 'Ошибка в вопросе', body,
+    foot: can ? '<button class="btn btn-primary" data-rep="send">Отправить</button>' : '<button class="btn btn-primary" data-close>Понятно</button>' }));
+  const btn = el.querySelector('[data-rep=send]');
+  btn?.addEventListener('click', async () => {
+    const box = el.querySelector('#lr-rep-text');
+    const words = box.value.trim();
+    if (words.length < 3) { toast('Напишите, что не так', { error: true }); box.focus(); return; }
+    btn.disabled = true;
+    const r = await sendIdea(head + words);
+    btn.disabled = false;
+    if (!r.ok) { if (r.msg) toast(r.msg, { error: true, ms: 6000 }); return; }
+    closeLayer(el);
+    toast('Спасибо! Сообщение отправлено разработчику');
   });
 }
 

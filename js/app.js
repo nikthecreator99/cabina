@@ -42,7 +42,7 @@ import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, s
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, learnClick, learnAfter } from './learn.js';
 
-export const VERSION = '2.22.0';
+export const VERSION = '2.23.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };

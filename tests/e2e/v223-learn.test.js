@@ -1,13 +1,15 @@
 // Браузерные проверки CABINA 2.23.0 (просьба Никиты 05.11.2026): «Обучение» — курс ПТЭ.
 // Экран курса, дорога от станции к станции, урок с повтором ошибок и временем, серия, заморозки, магазин, «Все модули».
 // Вопросы курса берутся из js/learn/pte-q01.js. Выдуманные вопросы ниже — только для проверки ввода ответа, в курс они не попадают.
-// С 05.11.2026 в курсе вопросы ChatGPT, сверенные с приказом: черновики, видны только проверяющему; после ответа — «Где написано».
+// С 05.11.2026 в курсе вопросы ChatGPT, сверенные с приказом; после ответа — «Где написано».
+// С 06.11.2026 (решение Никиты) уроки открыты и до проверки экспертом: под ответом — «Не проверен экспертом» и «Сообщить об ошибке».
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startEnv, openApp, openSettings } from './helpers.js';
+import { ready, CUR } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -56,7 +58,7 @@ const seedLearn = (page, st) => page.evaluate(async (st) => {
 }, st);
 const days = (from, n) => Array.from({ length: n }, (_, i) => new Date(Date.parse(`${from}T00:00:00Z`) + i * 864e5).toISOString().slice(0, 10));
 
-test('«Обучение» — своя вкладка справа от «Главной»; урок без проверки машинистом виден только проверяющему', async () => {
+test('«Обучение» — своя вкладка справа от «Главной»; уроки открыты для всех, внизу — честно о проверке', async () => {
   const { context, page, errors } = await openApp(env);
   // в «Ещё» строки «Обучение» нет — всё обучение во вкладке
   await page.locator('.tab[data-tab=extra]').click();
@@ -70,24 +72,12 @@ test('«Обучение» — своя вкладка справа от «Гл�
   assert.equal(await page.locator('.screen .page-head [data-act=lr-shop]').count(), 1);
   assert.match(await page.locator('.lr-course').innerText(), /Твой курс[\s\S]*ПТЭ[\s\S]*Правила технической эксплуатации[\s\S]*Пройдено 0%[\s\S]*Все модули/i);
   assert.match(await page.locator('.lr-pills').innerText(), /0\s*дней[\s\S]*0[\s\S]*∞/);
-  const gate = await page.evaluate(async () => {
-    const { PTE } = await import('./js/learn/pte.js');
-    const { QUESTIONS } = await import('./js/learn/pte-q01.js');
-    const l = PTE.modules[0].topics[0].lessons[0];
-    return { draft: !!l.draft, checked: l.q.every((id) => QUESTIONS.find((q) => q.id === id)?.checked) };
-  });
-  if (gate.draft) {
-    assert.match(await page.locator('.lr-next').innerText(), /Первые уроки скоро/i);
-    assert.equal(await page.locator('[data-act=lr-start]').count(), 0, 'черновик начать нельзя');
-  } else {
-    assert.ok(gate.checked, 'урок открыт для всех — значит, все его вопросы проверены');
-    assert.match(await page.locator('.lr-next').innerText(), /Что такое ПТЭ/);
-  }
-  // проверяющему черновики видны
-  await drafts(page);
-  await openLearn(page);
+  // решение Никиты 06.11.2026: уроки открыты и до проверки экспертом — без отметки проверяющего
   await page.waitForSelector('.lr-next [data-act=lr-start]');
   assert.match(await page.locator('.lr-next').innerText(), /Начните с первого урока[\s\S]*Что такое ПТЭ[\s\S]*Урок 1 · 6 вопросов/i);
+  assert.equal(await page.evaluate(async () => (await import('./js/learn/pte.js')).PTE.modules.flatMap((m) => m.topics).flatMap((t) => t.lessons).filter((l) => l.draft).length), 0);
+  assert.match(await page.locator('.lr-foot').innerText(), /сверены с ним, но экспертом пока не проверены[\s\S]*«Сообщить об ошибке»/);
+  assert.doesNotMatch(await page.locator('.screen').innerText(), /проверены работником/);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -476,4 +466,64 @@ test('резервная копия: прогресс обучения пере�
   assert.equal(await two.page.evaluate(() => window.__pwned), undefined);
   assert.deepEqual(two.errors, []);
   await two.context.close();
+});
+
+// Решение Никиты 06.11.2026: уроки открыты до проверки экспертом. Под ответом — честная пометка и «Сообщить об ошибке»;
+// сообщение уходит как идея (номер вопроса, начало его текста и слова человека), без аккаунта — только объяснение
+test('под ответом: «Не проверен экспертом» (у проверенного — нет) и «Сообщить об ошибке»: без аккаунта — объяснение, с аккаунтом — уходит как идея', async () => {
+  const realErrors = (errors) => errors.filter((e) => !/Failed to load resource/.test(e));
+  const startFirst = async (page) => {
+    await openLearn(page);
+    await page.locator('.lr-next [data-act=lr-start]').click();
+    await page.waitForSelector('.lp-q');
+  };
+  {
+    const { context, page, errors } = await openApp(env);
+    await startFirst(page);
+    assert.equal(await answer(page, true), 'pte-q0001');
+    assert.equal(await page.locator('.lp-rep .lp-unchk').count(), 0, 'вопрос проверен Никитой — без пометки');
+    assert.match(await page.locator('.lp-rep').innerText(), /Сообщить об ошибке/);
+    await next(page);
+    assert.equal(await answer(page, false), 'pte-q0002');
+    assert.match(await page.locator('.lp-rep').innerText(), /Не проверен экспертом[\s\S]*Сообщить об ошибке/);
+    await page.locator('[data-lp=report]').click();
+    const sh = top(page);
+    await sh.locator('.lr-rep').waitFor();
+    assert.match(await sh.innerText(), /Ошибка в вопросе[\s\S]*с аккаунтом CABINA[\s\S]*никуда не уходят/);
+    assert.equal(await sh.locator('textarea').count(), 0, 'без аккаунта отправить нечем');
+    await sh.getByRole('button', { name: 'Понятно' }).click();
+    await page.waitForFunction(() => document.querySelectorAll('#layers .layer:not(.closing)').length === 1);
+    await next(page);
+    await page.waitForSelector('.lp-foot:not(.ok):not(.bad) [data-lp=check]');
+    assert.deepEqual(realErrors(errors), []);
+    await context.close();
+  }
+  {
+    const { context, page, errors } = await openApp(env);
+    const srv = await ready(context, page, { consents: [{ document: CUR, withdrawn_at: null }] });
+    await startFirst(page);
+    await answer(page, true);
+    await next(page);
+    assert.equal(await answer(page, false), 'pte-q0002');
+    await page.locator('[data-lp=report]').click();
+    const sh = top(page);
+    await sh.locator('#lr-rep-text').waitFor();
+    assert.match(await sh.innerText(), /Не пишите имена, телефоны, номера поездов и служебную информацию/);
+    await sh.locator('[data-rep=send]').click();
+    assert.equal(srv.calls('send_idea').length, 0, 'пустое не отправляется');
+    await sh.locator('#lr-rep-text').fill('  Тестовое   замечание к ответу  ');
+    await sh.locator('[data-rep=send]').click();
+    await page.waitForFunction(() => document.querySelectorAll('#layers .layer:not(.closing)').length === 1);
+    const sent = srv.calls('send_idea');
+    assert.equal(sent.length, 1);
+    const body = sent[0].body.p_body;
+    assert.match(body, /^Ошибка в вопросе pte-q0002 \(«.+»\): Тестовое замечание к ответу$/);
+    assert.ok(body.length <= 500);
+    assert.deepEqual(Object.keys(sent[0].body), ['p_body'], 'только текст — без почты и данных из телефона');
+    // урок продолжается
+    await next(page);
+    await page.waitForSelector('.lp-foot:not(.ok):not(.bad) [data-lp=check]');
+    assert.deepEqual(realErrors(errors), []);
+    await context.close();
+  }
 });
