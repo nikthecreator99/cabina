@@ -205,7 +205,7 @@ test('экраны 2.6 на 320 px в обеих темах: ничего не �
     assert.equal(await wide(), 320, `форма поездки, ${theme}`);
     await sheet(page).locator('button[data-close]').first().click();
     await waitNoLayers(page);
-    await page.locator('.hero').click();
+    await page.locator('.hero .big').click(); // с 2.24.1 в середине карточки может быть «Указать ставку ›»
     await page.locator('.cal-grid [data-d="2026-10-14"]').click();
     assert.equal(await wide(), 320, `сводка дня, ${theme}`);
     await sheet(page).locator('button[data-close]').first().click();

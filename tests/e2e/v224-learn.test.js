@@ -43,7 +43,7 @@ const inView = (page, sel) => page.evaluate((sel) => {
   const foot = document.querySelector('.tabbar')?.getBoundingClientRect().top || window.innerHeight;
   return !!r && r.top >= head - 1 && r.bottom <= foot + 1;
 }, sel);
-// пройти открытый урок: верно на всё (или первый вопрос — неверно); в конце ждём, пока итоги «набегут» (2.24.1)
+// пройти открытый урок: верно на всё (или первый вопрос — неверно); в конце ждём, пока итоги «набегут» (2.24.2)
 async function passLesson(page, { wrongFirst = false } = {}) {
   for (let k = 0; k < 20; k++) {
     if (await page.locator('.lp-end').count()) break;
@@ -318,7 +318,7 @@ test('«Урок завершён!»: опыт, точность, время, м
   await context.close();
 });
 
-// 2.24.1 (просьба Никиты 06.11.2026): блока «Следующий урок» нет — вся карточка курса ведёт к своему уроку
+// 2.24.2 (просьба Никиты 06.11.2026): блока «Следующий урок» нет — вся карточка курса ведёт к своему уроку
 test('экран «Обучение» без «Следующего урока»: вся карточка курса открывает дорогу у своего урока, «Все модули» — список', async () => {
   const { context, page, errors } = await openApp(env);
   await seedLearn(page, {}, 5);

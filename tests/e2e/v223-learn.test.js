@@ -31,7 +31,7 @@ async function openRoad(page) {
   await page.locator('.lr-course-main').click();
   await page.waitForSelector('.screen[data-page=learn-road] .rd-node');
 }
-// начать текущий урок: карточка курса → дорога → «шайба» текущего урока → «Начать» (блока «Следующий урок» с 2.24.1 нет)
+// начать текущий урок: карточка курса → дорога → «шайба» текущего урока → «Начать» (блока «Следующий урок» с 2.24.2 нет)
 async function startCurrent(page) {
   if (!(await page.locator('.screen[data-page=learn-road]').count())) await openRoad(page);
   await page.locator('.rd-node.is-current').click();
