@@ -81,7 +81,7 @@ test('«Обучение» — своя вкладка внизу; уроки о
   assert.match(await page.locator('.screen .page-head').innerText(), /^Обучение$/);
   assert.equal(await page.locator('.screen .page-head [data-act=lr-shop]').count(), 1);
   assert.match(await page.locator('.lr-course').innerText(), /Твой курс[\s\S]*ПТЭ[\s\S]*Правила технической эксплуатации[\s\S]*Пройдено 0%[\s\S]*Все модули/i);
-  assert.deepEqual(await statLabels(page), ['Серия: 0 дней', 'Монеты: 0 монет. Магазин', 'Опыт: 0 очков опыта']);
+  assert.deepEqual(await statLabels(page), ['Серия: 0 дней', 'Заморозки: 0 из 2. Магазин', 'Монеты: 0 монет. Магазин', 'Опыт: 0 очков опыта']);
   // решение Никиты 06.11.2026: уроки открыты и до проверки экспертом — без отметки проверяющего
   // блока «Следующий урок» нет (просьба Никиты 06.11.2026): вся карточка курса ведёт к своему уроку
   assert.equal(await page.locator('.lr-next').count(), 0);

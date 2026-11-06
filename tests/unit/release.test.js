@@ -37,6 +37,8 @@ test('офлайн-кэш содержит все файлы приложени�
       for (const v of readdirSync(new URL(`js/${f.name}/`, root)).filter((n) => n.endsWith('.js'))) assert.ok(shell.includes(`js/${f.name}/${v}`), `js/${f.name}/${v} не добавлен в SHELL в sw.js`);
     } else assert.ok(shell.includes(`js/${f.name}`), `js/${f.name} не добавлен в SHELL в sw.js`);
   }
+  // картинки «Обучения» (2.24.3: обложка курса ПТЭ) — тоже без интернета
+  for (const n of readdirSync(new URL('icons/learn/', root))) assert.ok(shell.includes(`icons/learn/${n}`), `icons/learn/${n} не добавлен в SHELL в sw.js`);
   assert.ok(shell.includes('css/app.css'));
   assert.ok(shell.includes('data/calendar.json'));
   assert.ok(!shell.includes('data/changelog.json'), 'список изменений всегда берётся с сервера');

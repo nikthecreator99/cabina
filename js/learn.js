@@ -10,7 +10,7 @@ import { dateKeyOf } from './calc.js';
 import * as L from './learn-state.js';
 import { PTE } from './learn/pte.js';
 import { playLesson } from './learn-play.js';
-import { ART, CHEST, PTE_BOOK, COURSE_ART, ROAD_DEFS, ROAD_SKY } from './learn-art.js';
+import { ART, CHEST, PTE_BOOK, ROAD_DEFS, ROAD_SKY } from './learn-art.js';
 import { avatarHtml } from './profile.js';
 import { session } from './auth.js';
 import { legalReady } from './legal.js';
@@ -78,16 +78,20 @@ export function learnResume() {
   return ['learn-road'];
 }
 
-// ---------------------------------------------------------------- серия · монеты · опыт · профиль (по макету: огонь, гайка, молния, кубок)
+// ---------------------------------------------------------------- серия · заморозки · монеты · опыт · лига
+// По макетам Никиты: огонь, снежинка, гайка, молния, кубок. С 2.24.3 (его макет 06.11.2026) — снежинка: сколько заморозок
+// в запасе, нет ни одной — «0» красным; нажатие — магазин. Кубок — окно «Лига коллег» (скоро); профиль обучения открывают
+// кнопка с человеком в шапке экрана и молния.
 function statsHtml(s) {
   const t = today();
   const streak = L.streakAt(s, t);
   const lit = L.doneToday(s, t);
   return `<div class="lr-stats">
     <button class="lr-st lr-st-fire${lit ? ' on' : ''}" data-act="lr-streak" aria-label="Серия: ${days(streak)}${lit ? ', сегодня урок пройден' : ''}">${ART.flame(24)}<b class="num">${num(streak)}</b></button>
+    <button class="lr-st lr-st-ice${s.freezes ? '' : ' none'}" data-act="lr-shop" aria-label="Заморозки: ${s.freezes} из ${L.FREEZE_MAX}. Магазин">${ART.snow(23)}<b class="num">${num(s.freezes)}</b></button>
     <button class="lr-st lr-st-coin" data-act="lr-shop" aria-label="Монеты: ${coinsText(s.coins)}. Магазин">${ART.nut(24)}<b class="num">${num(s.coins)}</b></button>
     <button class="lr-st lr-st-xp" data-act="lr-me" aria-label="Опыт: ${xpText(s.xp)}">${ART.bolt(24)}<b class="num">${num(s.xp)}</b></button>
-    <button class="lr-cup" data-act="lr-me" aria-label="Профиль обучения">${ART.trophy(24)}</button>
+    <button class="lr-cup" data-act="lr-league" aria-label="Лига коллег — скоро">${ART.trophy(24)}</button>
   </div>`;
 }
 function noteHtml(s) {
@@ -109,6 +113,8 @@ function repairHtml(s) {
 }
 
 // ---------------------------------------------------------------- экран «Обучение»
+// Обложки курсов (2.24.3): ПТЭ — электровоз с книгой на закате из макета Никиты (он сделал его в ChatGPT). Новый файл — в SHELL.
+const COVERS = { pte: 'icons/learn/pte-course.webp' };
 export function renderLearn() {
   const s = daily();
   const c = course();
@@ -118,18 +124,24 @@ export function renderLearn() {
   const f = cur && find(cur.lesson.id);
   const go = !f ? `Курс ${c.title}: все готовые уроки пройдены. Открыть дорогу курса`
     : `Курс ${c.title}. ${Object.keys(s.done).length ? 'Продолжить' : 'Начать'}: ${f.topic.title}, урок ${f.no}`;
-  return `<div class="page-head"><h1>Обучение</h1><button class="icon-btn" data-act="lr-shop" aria-label="Магазин">${LI.bag(22)}</button></div>
+  // Вид экрана — по макету Никиты 06.11.2026 (2.24.3): в шапке магазин и профиль обучения (кнопка профиля — яркая, его просьба),
+  // карточка курса — тёмная «афиша» в обеих темах: картинка справа, рамка-градиент, прогресс — красная точка на полоске.
+  const cover = COVERS[c.id];
+  return `<div class="page-head lr-head"><h1>Обучение</h1>
+      <button class="icon-btn lr-hbtn" data-act="lr-shop" aria-label="Магазин">${LI.bag(24)}</button>
+      <button class="icon-btn lr-hbtn lr-me-btn" data-act="lr-me" aria-label="Профиль обучения">${ART.person(28)}</button></div>
     ${statsHtml(s)}
     ${noteHtml(s)}
     ${repairHtml(s)}
     <div class="lr-course">
+      ${cover ? `<img class="lr-cover" src="${cover}" alt="" width="658" height="485" decoding="async" draggable="false">` : ''}
       <button class="lr-course-main" data-act="lr-road" aria-label="${esc(go)}">
         <span class="lr-course-txt"><span class="lr-kicker">Твой курс</span><span class="lr-title">${esc(c.title)}</span><span class="lr-sub">${esc(c.name)}</span></span>
-        ${COURSE_ART}
       </button>
-      <div class="lr-course-foot">
-        <div class="lr-prog"><div class="bar${p >= 1 ? ' full' : ''}"><i style="width:${p > 0 ? Math.max(2, p * 100).toFixed(1) : 0}%"></i></div><span>Пройдено <b>${L.progressLabel(p)}</b></span></div>
-        <button class="lr-all" data-act="go" data-page="learn-modules">Все модули ${small(I.right, 16)}</button>
+      <div class="lr-course-foot lr-prog">
+        <div class="bar${p >= 1 ? ' full' : ''}"><i class="${p > 0 ? 'on' : ''}" style="width:${p > 0 ? Math.max(2, p * 100).toFixed(1) : 0}%"></i></div>
+        <div class="lr-prog-row"><span class="lr-prog-t">Пройдено <b>${L.progressLabel(p)}</b></span>
+          <button class="lr-all" data-act="go" data-page="learn-modules">Все модули ${small(I.right, 18)}</button></div>
       </div>
     </div>
     <p class="hint lr-foot">Вопросы составлены по тексту ПТЭ (${esc(c.edition)}) и сверены с ним, но экспертом пока не проверены. Нашли ошибку — нажмите «Сообщить об ошибке» под ответом. Учебник не заменяет обучение и аттестацию: в работе сверяйтесь с действующими документами.</p>`;
@@ -358,7 +370,17 @@ function countUp() {
 }
 
 // После отрисовки экрана (вызывает app.js): путь, подпись модуля, прокрутка к нужному месту; вкладка запоминает, где человек
+// Строка серии, заморозок, монет и опыта: если большие числа не влезают вместе с кубком — прячем кубок (.tight),
+// чтобы числа не обрезались. Меряем после отрисовки и ещё раз, когда загрузятся шрифты.
+function fitStats() {
+  for (const row of document.querySelectorAll('.lr-stats')) {
+    row.classList.remove('tight');
+    if ([...row.querySelectorAll('.lr-st b')].some((b) => b.scrollWidth > b.clientWidth + 1)) row.classList.add('tight');
+  }
+}
 export function learnAfter(p, tab) {
+  fitStats();
+  document.fonts?.ready?.then(fitStats);
   if (tab === 'learn' && !p) rememberView('hub');
   if (tab === 'learn' && p === 'learn-road') rememberView('road');
   if (p !== 'learn-road') { road.pop = null; countUp(); return; }
@@ -635,6 +657,16 @@ function openShop(focus) {
   });
   if (focus === 'energy') setTimeout(() => el.querySelector('#lr-energy')?.scrollIntoView({ block: 'center' }), 60);
 }
+// Кубок (2.24.3): «Лига коллег» — пока только объяснение. Лига появится позже: только по согласию человека и после
+// изменения уведомления в Роскомнадзор (раздел 3.4 CLAUDE.md); до этого опыт не покидает телефон.
+function openLeague() {
+  openLayer(sheet({
+    title: 'Лига коллег',
+    body: `<div class="lr-league"><span class="lr-league-ico">${ART.trophy(64)}</span><b>Скоро</b>
+      <p>Соревнование по очкам опыта за неделю с коллегами, которые тоже этого захотят. Включится позже и только по вашему согласию.</p>
+      <p class="hint">Пока опыт хранится только в этом телефоне: на сервер не уходит и работодателю не показывается.</p></div>`,
+  }));
+}
 function openCourses() {
   const s = daily();
   const c = course();
@@ -730,6 +762,7 @@ export async function learnClick(act, b) {
     case 'lr-streak': openStreak(); break;
     case 'lr-shop': openShop(b.dataset.focus); break;
     case 'lr-courses': openCourses(); break;
+    case 'lr-league': openLeague(); break;
     case 'lr-node': openPop(b); break;
     case 'lr-chest': await chestTap(b); break;
     case 'lr-start': await start(b.dataset.id); break;

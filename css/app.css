@@ -1515,6 +1515,7 @@ button.pr-status svg { color: var(--text-2); }
    «шайбы» уроков на каменных подставках, сундуки, опыт и монеты, магазин, профиль обучения, «Урок завершён!» ---- */
 :root {
   --lr-sign: #1d4ea3; --lr-sign-2: #2b62c4; --lr-rail: #9aa6bd; --ok-ink: #04140c; --lr-xp: #ffc53d; --lr-coin-num: #9cc8ff;
+  --lr-ice: #8fd3ff; --lr-zero: #ff4d4f; --lr-me: #8b6bff; --lr-me-2: #cbb6ff;
   /* дорога: лес, земля, щебень, шпалы, рельсы */
   --rd-forest: #0a0f0c; --rd-ground: #121a15; --rd-patch: rgba(74, 118, 62, .14); --rd-patch-2: rgba(120, 92, 54, .1);
   --rd-bal: #2c2926; --rd-grv: #48423c; --rd-grv2: #1c1a18; --rd-sleeper: #6e4c31; --rd-rail: #bcc4ce; --rd-plan: rgba(160, 125, 92, .34);
@@ -1532,6 +1533,7 @@ button.pr-status svg { color: var(--text-2); }
 }
 :root[data-theme="light"] {
   --lr-rail: #5f6b84; --lr-xp: #b87d00; --lr-coin-num: #2d6fd6;
+  --lr-ice: #1f7fe0; --lr-zero: #d92d2d; --lr-me: #6a45f0; --lr-me-2: #a68bff;
   --rd-forest: #5b8a66; --rd-ground: #dde7cf; --rd-patch: rgba(92, 142, 72, .16); --rd-patch-2: rgba(150, 120, 70, .1);
   --rd-bal: #bdb6aa; --rd-grv: #d8d2c8; --rd-grv2: #9e978c; --rd-sleeper: #8a684a; --rd-rail: #636d7a; --rd-plan: rgba(120, 90, 60, .34);
   --rd-tree: #3d6b49; --rd-tree-l: #5a8c62; --rd-bush: #6d9a5d; --rd-bush-l: #8db97a; --rd-leaf: #e2c55c; --rd-grass: #7fa465;
@@ -1588,13 +1590,15 @@ button.pr-status svg { color: var(--text-2); }
 .pte-book .bk-t { fill: #f8e7c3; font-family: var(--font-display); font-weight: 800; font-size: 12.5px; letter-spacing: .02em; }
 .pte-book .bk-rail { fill: none; stroke: #f8e7c3; stroke-width: 1.6; stroke-linecap: round; opacity: .9; }
 
-/* серия · монеты · опыт · профиль обучения (по макету: огонь, гайка, молния, кубок) */
+/* серия · заморозки · монеты · опыт · лига (по макетам: огонь, снежинка, гайка, молния, кубок; снежинка — с 2.24.3) */
 .lr-stats { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.lr-st { position: relative; flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 4px; border-radius: 12px; color: var(--text); transition: transform .12s ease; }
+.lr-st { position: relative; flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; padding: 0 3px; border-radius: 12px; color: var(--text); transition: transform .12s ease; }
 .lr-st::after { content: ""; position: absolute; right: -2px; top: 13px; bottom: 13px; width: 1px; background: var(--line-2); }
 .lr-st svg { flex: none; }
-.lr-st b { display: inline-block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: min(calc(19px * var(--fs)), 6.6vw); font-weight: 800; letter-spacing: -.01em; }
+.lr-st b { display: inline-block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: min(calc(19px * var(--fs)), 6vw); font-weight: 800; letter-spacing: -.01em; }
 .lr-st-coin b { color: var(--lr-coin-num); }
+.lr-st-ice svg, .lr-st-ice b { color: var(--lr-ice); }
+.lr-st-ice.none b { color: var(--lr-zero); } /* заморозок нет — «0» красным, как на макете */
 .lr-st.on svg { animation: lrFlame 2.4s ease-in-out infinite; }
 .lr-st-up svg { animation: lrUp .7s ease 2; }
 .lr-st-up b { animation: lrUpB .8s ease; }
@@ -1602,10 +1606,12 @@ button.pr-status svg { color: var(--text-2); }
 @keyframes lrUpB { 40% { transform: translateY(-3px); } }
 .lr-cup { flex: none; width: 48px; height: 48px; margin-left: 6px; border-radius: 14px; display: grid; place-items: center; background: var(--card-2); border: 1px solid var(--line-2); transition: transform .12s ease; }
 .lr-st:active, .lr-cup:active { transform: scale(.95); }
-/* узкий экран, крупный текст: кубок прячем (профиль обучения открывает и молния), чтобы числа не обрезались */
-@media (max-width: 360px) { .lr-st { gap: 5px; } .lr-st svg { width: 20px; height: 20px; } .lr-cup { display: none; } .lr-st:nth-child(3)::after { display: none; } }
+/* узкий экран, крупный текст: кубок прячем (лига пока «скоро», профиль обучения — в шапке и на молнии), чтобы числа не обрезались */
+@media (max-width: 360px) { .lr-stats { gap: 2px; } .lr-st { gap: 4px; padding: 0 2px; } .lr-st svg { width: 20px; height: 20px; } .lr-cup { display: none; } .lr-st-xp::after { display: none; } }
 :root[data-text="xl"] .lr-st, :root[data-text="l"] .lr-st { gap: 5px; }
-:root[data-text="xl"] .lr-cup { display: none; } :root[data-text="xl"] .lr-st:nth-child(3)::after { display: none; }
+:root[data-text="xl"] .lr-cup { display: none; } :root[data-text="xl"] .lr-st-xp::after { display: none; }
+/* большие числа не влезают вместе с кубком — кубок прячем (класс ставит fitStats в learn.js после отрисовки) */
+.lr-stats.tight .lr-cup { display: none; } .lr-stats.tight .lr-st-xp::after { display: none; }
 @keyframes lrFlame { 0%, 100% { transform: scale(1) rotate(0); } 30% { transform: scale(1.07) rotate(-2deg); } 60% { transform: scale(.97) rotate(1.5deg); } }
 
 /* плашки «заморозка сработала / подарок» и «Верните серию» */
@@ -1623,53 +1629,58 @@ button.pr-status svg { color: var(--text-2); }
 .lr-dots i { width: 26px; height: 6px; border-radius: 3px; background: var(--line-2); }
 .lr-dots i.on { background: var(--accent-2); }
 
-/* карточка курса (макет Никиты): «Твой курс», ПТЭ, электровоз с книгой, «Пройдено N%», «Все модули» */
-.lr-course { position: relative; border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--line-2); box-shadow: var(--shadow);
-  background: radial-gradient(120% 90% at 85% 10%, color-mix(in srgb, var(--sky-3) 26%, transparent), transparent 60%), linear-gradient(165deg, color-mix(in srgb, var(--sky-2) 40%, var(--card-solid)), var(--card-solid) 72%); }
-.lr-course-main { display: flex; align-items: center; justify-content: space-between; gap: 0; width: 100%; padding: 16px 6px 2px 18px; text-align: left; }
-.lr-course-txt { min-width: 0; flex: 1 1 auto; position: relative; z-index: 1; }
+/* шапка (макет Никиты 06.11.2026, 2.24.3): магазин и профиль обучения — квадратные кнопки, как кубок; профиль — яркий (его просьба) */
+.lr-head { gap: 10px; }
+.lr-head .lr-hbtn { width: 48px; height: 48px; border-color: var(--line-2); transition: transform .12s ease; }
+.lr-head .lr-hbtn:active { transform: scale(.95); }
+.lr-head .lr-me-btn { border-color: color-mix(in srgb, var(--lr-me) 62%, var(--line-2)); background: color-mix(in srgb, var(--lr-me) 16%, var(--card-2));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--lr-me) 30%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent); }
+.ic-me .ic-me-b { fill: var(--lr-me); }
+.ic-me .ic-me-h { fill: var(--lr-me-2); }
+.ic-me .ic-me-l { fill: none; stroke: #fff; stroke-opacity: .85; stroke-width: 1.5; stroke-linecap: round; }
+
+/* карточка курса (макет Никиты 06.11.2026, 2.24.3): тёмная «афиша» в обеих темах — справа картинка с электровозом на закате
+   (icons/learn/pte-course.webp, слева и снизу она сама уходит в прозрачность), рамка-градиент, «Пройдено N%» — красная точка */
+.lr-course { position: relative; isolation: isolate; border-radius: var(--r-lg); overflow: hidden; color: #f6f6fa;
+  border: 1.5px solid transparent;
+  background: radial-gradient(70% 85% at 80% 22%, rgba(96, 36, 74, .5), transparent 72%) padding-box,
+    linear-gradient(180deg, #131b2e, #0f1728) padding-box,
+    linear-gradient(110deg, #66729f 0%, #a476c6 42%, #5b4979 72%, #9a72c4 100%) border-box;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .36); }
+:root[data-theme="light"] .lr-course { box-shadow: 0 10px 26px rgba(24, 28, 60, .22); }
+.lr-cover { position: absolute; top: 0; right: 0; z-index: 0; width: min(56%, 270px); height: auto; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.lr-course-main { display: block; width: 100%; padding: 20px 18px 0; text-align: left; color: inherit; }
+.lr-course-txt { display: block; position: relative; z-index: 1; }
 .lr-kicker { display: block; font-size: calc(12px * var(--fs)); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 800; }
 .lr-title { display: block; font-family: var(--font-display); font-size: 40px; font-weight: 800; line-height: 1.05; margin-top: 6px; letter-spacing: .02em; }
-.lr-sub { display: block; color: var(--text-2); font-size: calc(15px * var(--fs)); line-height: 1.3; margin-top: 6px; max-width: 17ch; }
-.lr-art { width: 184px; height: 119px; flex: none; margin: 0 -10px 0 -36px; }
-.lr-art .ca-cloud { fill: color-mix(in srgb, var(--text-2) 34%, transparent); }
-.lr-art .ca-bush { fill: #3f8a4c; } .lr-art .ca-bush2 { fill: #2f7140; }
-.lr-art .ca-rail { stroke: color-mix(in srgb, var(--text-2) 70%, transparent); stroke-width: 2.4; stroke-linecap: round; fill: none; }
-.lr-art .ca-sleep { stroke: color-mix(in srgb, var(--text-2) 32%, transparent); stroke-width: 3; stroke-linecap: round; }
-.lr-art .ca-roof { fill: #8d96a4; stroke: #5b6472; stroke-width: 1.2; stroke-linejoin: round; }
-.lr-art .ca-panto { fill: none; stroke: #5b6472; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.lr-art .ca-side { fill: #b9302b; stroke: #7e1c18; stroke-width: 1.2; stroke-linejoin: round; }
-.lr-art .ca-side-g { fill: #6f7785; }
-.lr-art .ca-side-l { stroke: #f1f3f6; stroke-width: 2.2; }
-.lr-art .ca-win-s, .lr-art .ca-win { fill: #1c2433; stroke: #0e131c; stroke-width: 1; stroke-linejoin: round; }
-.lr-art .ca-door { fill: none; stroke: #7e1c18; stroke-width: 1.4; }
-.lr-art .ca-front { fill: #e3463e; stroke: #8e1f1a; stroke-width: 1.3; stroke-linejoin: round; }
-.lr-art .ca-front-g { fill: #8a929f; stroke: #5b6472; stroke-width: 1.1; }
-.lr-art .ca-front-l { stroke: #f1f3f6; stroke-width: 2.6; }
-.lr-art .ca-wiper { stroke: #6c7686; stroke-width: 1.6; stroke-linecap: round; }
-.lr-art .ca-lamp-top { fill: #fff3cf; stroke: rgba(255, 214, 120, .5); stroke-width: 5; }
-.lr-art .ca-lamp { fill: #fff3cf; stroke: rgba(255, 214, 120, .45); stroke-width: 3; }
-.lr-art .ca-door-f { fill: #3d4552; stroke: #262c36; stroke-width: 1; }
-.lr-art .ca-bogie { fill: #2a303a; }
-.lr-art .ca-book-c { fill: #c6303a; }
-.lr-art .ca-book { fill: #f6ead0; stroke: #c8b48a; stroke-width: 1; stroke-linejoin: round; }
-.lr-art .ca-book-l { fill: none; stroke: #8f9bb0; stroke-width: 1.5; stroke-linecap: round; }
-.lr-course-foot { display: flex; align-items: center; gap: 12px; padding: 4px 10px 14px 18px; }
-.lr-prog { flex: 1; min-width: 0; }
-.lr-prog .bar { margin-top: 0; }
-.lr-prog span { display: block; margin-top: 6px; font-size: calc(14px * var(--fs)); color: var(--text-2); font-weight: 600; }
-.lr-prog span b { color: var(--text); font-weight: 800; }
-.lr-all { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 6px 0 10px; color: var(--text); font-weight: 700; font-size: calc(14px * var(--fs)); white-space: nowrap; border-radius: 12px; }
+.lr-sub { display: block; color: var(--text-2); font-size: calc(16px * var(--fs)); line-height: 1.3; margin-top: 8px; max-width: 17ch; }
+.lr-course .lr-kicker { color: #aeb8d1; }
+.lr-course .lr-title { color: #f6f6fa; text-shadow: 0 2px 12px rgba(5, 8, 20, .45); }
+.lr-course .lr-sub { color: #c9cfe3; text-shadow: 0 1px 8px rgba(5, 8, 20, .5); }
+.lr-course-foot { display: block; padding: 16px 10px 6px 18px; }
+.lr-course .bar { width: 64%; height: 9px; margin: 0; background: #465479; }
+.lr-course .bar > i.on { min-width: 9px; }
+.lr-prog-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 8px; margin-top: 2px; }
+.lr-prog-t { white-space: nowrap; font-size: calc(16px * var(--fs)); font-weight: 600; color: #c3c9db; }
+.lr-prog-t b { color: #fff; font-weight: 800; }
+.lr-all { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin-left: auto; padding: 0 4px 0 10px; color: #fff; font-weight: 700; font-size: calc(16px * var(--fs)); white-space: nowrap; border-radius: 12px; }
 /* вся карточка — одна кнопка «к своему уроку» (2.24.2): слой кнопки растянут на карточку, «Все модули» — поверх него */
 .lr-course-main::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: inherit; transition: background-color .15s; }
-.lr-course-main:active::after { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.lr-course-main:active::after { background: rgba(255, 255, 255, .06); }
 .lr-course-main:focus-visible { outline: none; }
 .lr-course-main:focus-visible::after { outline: 3px solid var(--accent-2); outline-offset: -3px; border-radius: var(--r-lg); }
 .lr-all { position: relative; z-index: 2; }
 .lr-repair .grow, .lr-mod-h .grow { flex: 1; min-width: 0; }
 .lr-foot { margin: 0 2px; }
-@media (max-width: 360px) { .lr-art { width: 140px; height: 91px; margin-left: -30px; } .lr-title { font-size: 34px; } }
-:root[data-text="xl"] .lr-art { width: 140px; height: 91px; margin-left: -30px; }
+@media (max-width: 360px) { .lr-title { font-size: 34px; } .lr-course .bar { width: 60%; } }
+/* узко или крупный текст: подпись курса — левее картинки, чтобы не наезжала на электровоз и книгу */
+@media (max-width: 380px) { .lr-course-txt { max-width: 58%; } }
+:root[data-text="l"] .lr-course-txt, :root[data-text="xl"] .lr-course-txt { max-width: 58%; }
+/* «Лига коллег» (кубок, 2.24.3): пока только объяснение */
+.lr-league { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 6px 4px 4px; }
+.lr-league-ico { display: grid; filter: drop-shadow(0 6px 18px rgba(245, 184, 46, .35)); }
+.lr-league b { font-family: var(--font-display); font-size: 22px; font-weight: 800; }
+.lr-league p { margin: 4px 0 0; max-width: 34ch; }
 
 /* дорога курса: шапка (курс, серия, монеты, опыт, модуль) прилипает сверху, ниже — одна лента до конца курса */
 .screen[data-page="learn-road"] { gap: 0; }

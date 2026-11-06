@@ -151,7 +151,7 @@ test('сундук: после пройденных уроков открыва�
   const { context, page, errors } = await openApp(env);
   await seedLearn(page, { coins: 40, xp: 45 }, 3);
   await openLearn(page);
-  assert.deepEqual(await statNums(page), ['0', '40', '45']);
+  assert.deepEqual(await statNums(page), ['0', '0', '40', '45']);
   await openRoad(page);
   const chest = page.locator('.rd-chest.is-ready');
   assert.equal(await chest.getAttribute('data-id'), 'pte-t03');
@@ -184,7 +184,7 @@ test('магазин: сверху — сколько заморозок, ниж
   await seedLearn(page, { coins: 250 });
   await openLearn(page);
   // монеты наверху открывают магазин
-  await page.locator('.lr-stats [data-act=lr-shop]').click();
+  await page.locator('.lr-stats .lr-st-coin').click();
   let s = top(page);
   await s.locator('.lr-shop').waitFor();
   assert.match(await s.locator('.lr-shop-top').innerText(), /Заморозки: 0 из 2[\s\S]*Сохраняют серию[\s\S]*У вас\s*250 монет/);
@@ -207,7 +207,7 @@ test('магазин: сверху — сколько заморозок, ниж
   assert.ok(await fits(page));
   await s.locator('button[data-close]').first().click();
   await page.waitForFunction(() => !document.querySelector('#layers .layer:not(.closing)'));
-  assert.equal((await statNums(page))[1], '50');
+  assert.deepEqual((await statNums(page)).slice(1, 3), ['2', '50']);
   // одна заморозка, монет мало — «Не хватает …»
   await seedLearn(page, { coins: 60, freezes: 1 });
   await page.reload(); await page.waitForSelector('.screen');
@@ -233,7 +233,7 @@ test('профиль обучения: опыт всего и за неделю,
     done: { 'pte-l001': { n: 1, best: 70, last: 70, acc: 100, at: '2026-10-19' }, 'pte-l002': { n: 1, best: 90, last: 90, acc: 60, at: '2026-10-20' } },
   });
   await openLearn(page);
-  assert.deepEqual(await statLabels(page), ['Серия: 3 дня, сегодня урок пройден', 'Монеты: 95 монет. Магазин', 'Опыт: 145 очков опыта']);
+  assert.deepEqual(await statLabels(page), ['Серия: 3 дня, сегодня урок пройден', 'Заморозки: 1 из 2. Магазин', 'Монеты: 95 монет. Магазин', 'Опыт: 145 очков опыта']);
   // молния (опыт) — профиль обучения
   await page.locator('.lr-stats .lr-st-xp').click();
   await page.waitForSelector('.screen[data-page=learn-me] .lm-xp');
@@ -260,8 +260,8 @@ test('профиль обучения: опыт всего и за неделю,
   // «Назад» — на экран курса
   await page.locator('.page-head [data-act=back]').click();
   await page.waitForSelector('.screen.lr-hub .lr-course');
-  // кубок справа — тоже профиль обучения
-  await page.locator('.lr-cup').click();
+  // с 2.24.3 профиль обучения открывает и кнопка с человеком в шапке; кубок — «Лига коллег» (скоро)
+  await page.locator('.lr-head .lr-me-btn').click();
   await page.waitForSelector('.screen[data-page=learn-me]');
   assert.deepEqual(errors, []);
   await context.close();
@@ -420,13 +420,13 @@ test('320 px, тёмная тема, очень крупный текст и б�
   const unclipped = (sel) => page.locator(sel).evaluateAll((els) => els.every((e) => e.scrollWidth <= e.clientWidth + 1));
   await openLearn(page);
   assert.ok(await fits(page), 'экран курса');
-  assert.deepEqual(await statNums(page), ['1', '1 234', '12 345']);
+  assert.deepEqual(await statNums(page), ['1', '1', '1 234', '12 345']);
   assert.ok(await unclipped('.lr-stats .lr-st b'), 'числа наверху целиком');
   await openRoad(page);
   assert.ok(await fits(page), 'дорога');
   assert.ok(await unclipped('.rd-top .lr-st b'));
   assert.ok(await unclipped('.rd-bar h1'), '«Обучение» в шапке дороги целиком');
-  await page.locator('.rd-top [data-act=lr-shop]').click();
+  await page.locator('.rd-top .lr-st-coin').click();
   await top(page).locator('.lr-shop').waitFor();
   assert.ok(await fits(page), 'магазин');
   await top(page).locator('button[data-close]').first().click();
@@ -460,7 +460,7 @@ test('переход с 2.23.0 и резервная копия: опыт за �
   await one.page.reload(); await one.page.waitForSelector('.screen');
   await openLearn(one.page);
   // l001: 10 + 5 (без ошибок) + повтор 5; l002: 10
-  assert.deepEqual(await statLabels(one.page), ['Серия: 2 дня, сегодня урок пройден', 'Монеты: 30 монет. Магазин', 'Опыт: 30 очков опыта']);
+  assert.deepEqual(await statLabels(one.page), ['Серия: 2 дня, сегодня урок пройден', 'Заморозки: 0 из 2. Магазин', 'Монеты: 30 монет. Магазин', 'Опыт: 30 очков опыта']);
   await one.page.locator('.lr-stats .lr-st-xp').click();
   await one.page.waitForSelector('.lm-xp');
   assert.match(await one.page.locator('.lm-xp').innerText(), /30\s*очков опыта[\s\S]*\+30\s*за эту неделю/);
@@ -486,7 +486,7 @@ test('переход с 2.23.0 и резервная копия: опыт за �
   const st = await two.page.evaluate(async () => (await import('./js/store.js')).S.learn);
   assert.deepEqual([st.xp, st.coins, st.chests, st.xpDays], [300, 0, ['pte-t03'], { '2026-10-20': 40 }]);
   await openLearn(two.page);
-  assert.deepEqual(await statNums(two.page), ['1', '0', '300']);
+  assert.deepEqual(await statNums(two.page), ['1', String(st.freezes), '0', '300']);
   assert.equal(await two.page.evaluate(() => window.__pwned), undefined);
   assert.deepEqual(two.errors, []);
   await two.context.close();
