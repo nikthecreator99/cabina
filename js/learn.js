@@ -563,9 +563,6 @@ export function renderLearnMe() {
       <span class="lm-xp-all"><b class="num">${num(s.xp)}</b><small>${plural(s.xp, 'очко опыта', 'очка опыта', 'очков опыта')}</small></span>
       <span class="lm-xp-week"><b class="num">+${num(weekSum)}</b><small>за эту неделю</small></span>
     </div>
-    <div class="lm-league"><span class="lm-league-ico">${ART.trophy(30)}</span><div class="grow"><b>Лига коллег <em>скоро</em></b>
-      <p>Соревнование по очкам опыта за неделю с коллегами, которые тоже этого захотят. Включится позже и только по вашему согласию. Пока опыт хранится только в этом телефоне.</p></div></div>
-    <section class="lm-sec"><h2 class="group-title">Опыт за неделю</h2><div class="panel lm-chart">${weekChart(week, t)}</div></section>
     <section class="lm-sec"><h2 class="group-title">Статистика</h2>
       <div class="lm-grid">
         ${tile(`lm-fire${L.doneToday(s, t) ? ' on' : ''}`, ART.flame(26), 'серия', days(streak))}
@@ -579,6 +576,7 @@ export function renderLearnMe() {
         ${tile('lm-days', I.calendar, plural(s.days.length, 'день с уроком', 'дня с уроками', 'дней с уроками'), num(s.days.length))}
         ${tile('lm-ans', I.check, plural(ans.answers, 'ответ', 'ответа', 'ответов'), num(ans.answers))}
       </div></section>
+    <section class="lm-sec"><h2 class="group-title">Опыт за неделю</h2><div class="panel lm-chart">${weekChart(week, t)}</div></section>
     ${wd && wd.acc < 100 && wf ? `<div class="panel"><button class="row" data-act="lr-start" data-id="${esc(weak)}"><span class="ico" style="--c:var(--warn)">${I.refresh}</span>
       <div class="grow"><div class="t1">Повторить трудный урок</div><div class="t2">${esc(wf.topic.title)} · урок ${wf.no} · с первого раза ${wd.acc}%</div></div>${small(I.right, 18)}</button></div>` : ''}
     <p class="hint lm-foot">Опыт, монеты и статистика — только в этом телефоне и в резервной копии. На сервер не уходят и работодателю не показываются.</p>`;

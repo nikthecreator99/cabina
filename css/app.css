@@ -1890,7 +1890,7 @@ button.pr-status svg { color: var(--text-2); }
 .lr-crs-art { flex: none; display: grid; }
 .lr-crs > svg:last-child { color: var(--ok); flex: none; }
 
-/* профиль обучения (просьба Никиты 06.11.2026): опыт, неделя, серия, монеты, статистика — только из этого телефона */
+/* профиль обучения (просьба Никиты 06.11.2026; с 2.24.4 — без плашки лиги, опыт за неделю под статистикой): только из этого телефона */
 .lm-hero { display: flex; align-items: center; gap: 14px; padding: 2px; }
 .lm-ava { flex: none; width: 64px; height: 64px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--card-2); border: 1px solid var(--line); }
 .lm-who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -1904,12 +1904,6 @@ button.pr-status svg { color: var(--text-2); }
 .lm-xp-all small, .lm-xp-week small { color: var(--text-2); font-size: calc(13px * var(--fs)); font-weight: 600; }
 .lm-xp-week { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
 .lm-xp-week b { font-size: calc(20px * var(--fs)); color: var(--lr-xp); font-weight: 800; }
-.lm-league { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: var(--r-md); border: 1.5px dashed var(--line-2); background: var(--card-solid); }
-.lm-league-ico { flex: none; display: grid; }
-.lm-league .grow { flex: 1; min-width: 0; }
-.lm-league b { font-size: calc(16px * var(--fs)); }
-.lm-league em { font-style: normal; margin-left: 4px; padding: 2px 8px; border-radius: 99px; background: color-mix(in srgb, var(--lr-xp) 18%, transparent); color: var(--lr-xp); font-size: calc(12px * var(--fs)); font-weight: 800; white-space: nowrap; }
-.lm-league p { margin: 4px 0 0; color: var(--text-2); font-size: calc(14px * var(--fs)); }
 .lm-sec { display: flex; flex-direction: column; gap: 8px; }
 .lm-chart { padding: 12px 14px 8px; }
 .lm-week .bar { fill: color-mix(in srgb, var(--lr-xp) 72%, transparent); }

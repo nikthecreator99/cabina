@@ -223,7 +223,7 @@ test('магазин: сверху — сколько заморозок, ниж
   await context.close();
 });
 
-test('профиль обучения: опыт всего и за неделю, лига — позже и по согласию, статистика, опыт по дням', async () => {
+test('профиль обучения: опыт всего и за неделю, статистика, под ней опыт по дням; плашки лиги нет (2.24.4)', async () => {
   const { context, page, errors } = await openApp(env);
   await page.evaluate(async () => { const s = await import('./js/store.js'); await s.saveProfile({ name: 'Тест Тестов' }); });
   await seedLearn(page, {
@@ -240,7 +240,14 @@ test('профиль обучения: опыт всего и за неделю,
   assert.match(await page.locator('.page-head').innerText(), /Профиль обучения/);
   assert.match(await page.locator('.lm-hero').innerText(), /Тест Тестов[\s\S]*Курс ПТЭ · пройдено 2%/);
   assert.match(await page.locator('.lm-xp').innerText(), /145\s*очков опыта[\s\S]*\+55\s*за эту неделю/, 'неделя — с понедельника 19 октября');
-  assert.match(await page.locator('.lm-league').innerText(), /Лига коллег\s*скоро[\s\S]*только по вашему согласию[\s\S]*только в этом телефоне/i);
+  // с 2.24.4 (просьба Никиты) плашки лиги в профиле нет — о лиге рассказывает кубок на экране «Обучение»;
+  // разделы по порядку: «Статистика», под ней — «Опыт за неделю»
+  const me = page.locator('.screen[data-page=learn-me]');
+  assert.equal(await me.locator('.lm-league').count(), 0);
+  assert.doesNotMatch(await me.innerText(), /лига/i);
+  assert.deepEqual(await me.locator('.lm-sec > .group-title').allTextContents(), ['Статистика', 'Опыт за неделю']);
+  assert.ok(await page.evaluate(() => document.querySelector('.lm-chart').getBoundingClientRect().top >= document.querySelector('.lm-grid').getBoundingClientRect().bottom),
+    '«Опыт за неделю» — под статистикой');
   const grid = await page.locator('.lm-grid').innerText();
   for (const re of [/3 дня\s*серия/, /4 дня\s*лучшая серия/, /95\s*монет/, /1 из 2\s*заморозки в запасе/, /2 из 120\s*уроков пройдено/,
     /2 из 85\s*тем пройдено/, /75%\s*верных ответов/, /10:40\s*всего в уроках/, /3\s*дня с уроками/, /4\s*ответа/]) assert.match(grid, re);
