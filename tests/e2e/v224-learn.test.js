@@ -43,10 +43,10 @@ const inView = (page, sel) => page.evaluate((sel) => {
   const foot = document.querySelector('.tabbar')?.getBoundingClientRect().top || window.innerHeight;
   return !!r && r.top >= head - 1 && r.bottom <= foot + 1;
 }, sel);
-// пройти открытый урок: верно на всё (или первый вопрос — неверно)
+// пройти открытый урок: верно на всё (или первый вопрос — неверно); в конце ждём, пока итоги «набегут» (2.24.1)
 async function passLesson(page, { wrongFirst = false } = {}) {
   for (let k = 0; k < 20; k++) {
-    if (await page.locator('.lp-end').count()) return;
+    if (await page.locator('.lp-end').count()) break;
     const right = await page.evaluate(async () => {
       const { PTE } = await import('./js/learn/pte.js');
       const t = document.querySelector('.lp-q')?.textContent;
@@ -72,7 +72,7 @@ async function passLesson(page, { wrongFirst = false } = {}) {
     await page.locator('[data-lp=next]').click();
     await page.waitForFunction(() => document.querySelector('.lp-end') || !document.querySelector('.lp-foot.ok, .lp-foot.bad'));
   }
-  await page.waitForSelector('.lp-end');
+  await page.waitForSelector('.lp-end.is-counted');
 }
 
 test('вкладки: Главная · Ещё · Обучение · Профиль; «Обучение» помнит дорогу и открывает её у текущего урока', async () => {
@@ -280,7 +280,7 @@ test('«Урок завершён!»: опыт, точность, время, м
   assert.match(end, /Очки опыта\s*\+15/i, 'новый урок без ошибок: 10 + 5');
   assert.match(end, /Точность\s*100%/i);
   assert.match(end, /Время\s*\d+:\d\d/i);
-  assert.match(end, /\+15\s*монет[\s\S]*Серия: 1 день\s*\+1[\s\S]*Тема «Что такое ПТЭ» пройдена/);
+  assert.match(end, /Монеты\s*\+15[\s\S]*Серия: 1 день\s*\+1[\s\S]*Тема «Что такое ПТЭ» пройдена/);
   assert.ok(await fits(page));
   // «Поделиться»: системное окно телефона
   await page.evaluate(() => { window.__shared = null; navigator.share = async (d) => { window.__shared = d; }; });
@@ -314,6 +314,99 @@ test('«Урок завершён!»: опыт, точность, время, м
   assert.match(await page.locator('.lp-end').innerText(), /Очки опыта\s*\+5[\s\S]*Точность\s*83%/i);
   await page.locator('[data-lp=close]').click();
   await page.waitForFunction(() => document.querySelector('.rd-top .lr-st-xp b')?.textContent === '20');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// 2.24.1 (просьба Никиты 06.11.2026): блока «Следующий урок» нет — вся карточка курса ведёт к своему уроку
+test('экран «Обучение» без «Следующего урока»: вся карточка курса открывает дорогу у своего урока, «Все модули» — список', async () => {
+  const { context, page, errors } = await openApp(env);
+  await seedLearn(page, {}, 5);
+  await openLearn(page);
+  assert.equal(await page.locator('.lr-next').count(), 0);
+  assert.doesNotMatch(await page.locator('.screen').innerText(), /Следующий урок|Начните с первого урока/);
+  assert.equal(await page.locator('.lr-course-main').getAttribute('aria-label'), 'Курс ПТЭ. Продолжить: Переходы, время, АСУ, урок 1');
+  // нажатие внизу карточки, на полоску «Пройдено …», — тоже дорога, прокрученная к текущему уроку
+  const bar = await page.locator('.lr-prog').boundingBox();
+  await page.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
+  await page.waitForSelector('.screen[data-page=learn-road] .rd-node.is-current');
+  await page.waitForFunction(() => window.scrollY > 300);
+  assert.ok(await inView(page, '.rd-node.is-current'));
+  assert.equal(await page.locator('.rd-node.is-current').getAttribute('data-id'), 'pte-l006');
+  // «Все модули» — поверх карточки, открывает список, а не дорогу
+  await page.locator('.rd-top [data-act=back]').click();
+  await page.waitForSelector('.screen.lr-hub .lr-course');
+  await page.locator('.lr-all').click();
+  await page.waitForSelector('.screen[data-page=learn-modules] .lr-mod');
+  // все готовые уроки пройдены — карточка так и говорит
+  await seedLearn(page, {}, 120);
+  await page.reload(); await page.waitForSelector('.screen');
+  await page.locator('.tab[data-tab=learn]').click();
+  await page.waitForSelector('.screen.lr-hub .lr-course');
+  assert.equal(await page.locator('.lr-course-main').getAttribute('aria-label'), 'Курс ПТЭ: все готовые уроки пройдены. Открыть дорогу курса');
+  assert.ok(await fits(page));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('«Урок завершён!»: опыт, точность, время и монеты набегают от нуля примерно за полторы секунды; «Уменьшить движение» — сразу итог', async () => {
+  const { context, page, errors } = await openApp(env);
+  // как меняются числа итога: каждое новое значение и когда числа встали на место
+  const record = () => page.evaluate(() => {
+    const seq = { xp: [], acc: [], time: [], coins: [], days: [], t0: 0, t1: 0, busy: false };
+    window.__seq = seq;
+    const pick = { xp: '.lp-t-xp .lp-cnt', acc: '.lp-t-acc .lp-cnt', time: '.lp-t-time .lp-cnt', coins: '.lp-c-coin .lp-cnt', days: '.lp-c-fire .lp-cnt' };
+    const mo = new MutationObserver(() => {
+      const end = document.querySelector('.lp-end');
+      if (!end || seq.t1) return;
+      if (!seq.t0) { seq.t0 = performance.now(); seq.busy = end.getAttribute('aria-busy') === 'true'; }
+      for (const [k, sel] of Object.entries(pick)) {
+        const v = document.querySelector(sel)?.textContent;
+        if (v != null && seq[k][seq[k].length - 1] !== v) seq[k].push(v);
+      }
+      if (end.classList.contains('is-counted')) { seq.t1 = performance.now(); mo.disconnect(); }
+    });
+    mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+  });
+  await openLearn(page);
+  await openRoad(page);
+  await page.locator('.rd-node.is-current').click();
+  await page.locator('.rd-pop [data-act=lr-start]').click();
+  await page.waitForSelector('.lp .lp-q');
+  await record();
+  await passLesson(page);
+  let seq = await page.evaluate(() => window.__seq);
+  const nums = (a) => a.map((x) => Number(x.replace(/\D/g, '')));
+  const rising = (a) => nums(a).every((v, i, n) => !i || v >= n[i - 1]);
+  assert.equal(seq.xp[0], '+0');
+  assert.equal(seq.xp.at(-1), '+15');
+  assert.ok(seq.xp.length >= 6, `опыт набегает по шагам: ${seq.xp.join(' ')}`);
+  assert.equal(seq.acc[0], '0%');
+  assert.equal(seq.acc.at(-1), '100%');
+  assert.ok(seq.acc.length >= 10, `точность набегает: ${seq.acc.length} шагов`);
+  assert.equal(seq.time[0], '0:00');
+  assert.match(seq.time.at(-1), /^0:\d\d$/);
+  assert.equal(seq.coins[0], '+0');
+  assert.equal(seq.coins.at(-1), '+15');
+  assert.deepEqual(seq.days, ['0 дней', '1 день'], 'серия — с прежней до новой');
+  for (const k of ['xp', 'acc', 'time', 'coins']) assert.ok(rising(seq[k]), `${k} только растёт`);
+  assert.ok(seq.busy, 'пока числа бегут, экран помечен «занят» для экранного диктора');
+  const ms = seq.t1 - seq.t0;
+  assert.ok(ms >= 1100 && ms <= 2600, `итоги набегают за ${Math.round(ms)} мс`);
+  assert.equal(await page.locator('.lp-end').getAttribute('aria-busy'), null);
+  assert.equal(await page.locator('.lp-end .lp-hit').count(), 5, 'каждое число в конце «щёлкает»');
+  // в телефоне включено «Уменьшить движение» — сразу итог, без анимации
+  await page.locator('[data-lp=close]').click();
+  await page.waitForSelector('.rd-node.is-current');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.locator('.rd-node.is-current').click();
+  await page.locator('.rd-pop [data-act=lr-start]').click();
+  await page.waitForSelector('.lp .lp-q');
+  await record();
+  await passLesson(page);
+  seq = await page.evaluate(() => window.__seq);
+  assert.deepEqual([seq.xp, seq.acc, seq.coins], [['+15'], ['100%'], ['+15']]);
+  assert.equal(seq.busy, false);
   assert.deepEqual(errors, []);
   await context.close();
 });

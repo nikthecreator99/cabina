@@ -31,6 +31,13 @@ async function openRoad(page) {
   await page.locator('.lr-course-main').click();
   await page.waitForSelector('.screen[data-page=learn-road] .rd-node');
 }
+// начать текущий урок: карточка курса → дорога → «шайба» текущего урока → «Начать» (блока «Следующий урок» с 2.24.1 нет)
+async function startCurrent(page) {
+  if (!(await page.locator('.screen[data-page=learn-road]').count())) await openRoad(page);
+  await page.locator('.rd-node.is-current').click();
+  await page.locator('.rd-pop [data-act=lr-start]').click();
+  await page.waitForSelector('.lp .lp-q');
+}
 // ответить на вопрос урока: верно или неверно (варианты перемешаны — ищем по тексту)
 async function answer(page, right) {
   const info = await page.evaluate(async () => {
@@ -76,8 +83,9 @@ test('«Обучение» — своя вкладка внизу; уроки о
   assert.match(await page.locator('.lr-course').innerText(), /Твой курс[\s\S]*ПТЭ[\s\S]*Правила технической эксплуатации[\s\S]*Пройдено 0%[\s\S]*Все модули/i);
   assert.deepEqual(await statLabels(page), ['Серия: 0 дней', 'Монеты: 0 монет. Магазин', 'Опыт: 0 очков опыта']);
   // решение Никиты 06.11.2026: уроки открыты и до проверки экспертом — без отметки проверяющего
-  await page.waitForSelector('.lr-next [data-act=lr-start]');
-  assert.match(await page.locator('.lr-next').innerText(), /Начните с первого урока[\s\S]*Что такое ПТЭ[\s\S]*Урок 1 · 6 вопросов/i);
+  // блока «Следующий урок» нет (просьба Никиты 06.11.2026): вся карточка курса ведёт к своему уроку
+  assert.equal(await page.locator('.lr-next').count(), 0);
+  assert.equal(await page.locator('.lr-course-main').getAttribute('aria-label'), 'Курс ПТЭ. Начать: Что такое ПТЭ, урок 1');
   assert.equal(await page.evaluate(async () => (await import('./js/learn/pte.js')).PTE.modules.flatMap((m) => m.topics).flatMap((t) => t.lessons).filter((l) => l.draft).length), 0);
   assert.match(await page.locator('.lr-foot').innerText(), /сверены с ним, но экспертом пока не проверены[\s\S]*«Сообщить об ошибке»/);
   assert.doesNotMatch(await page.locator('.screen').innerText(), /проверены работником/);
@@ -153,13 +161,13 @@ test('урок: ошибка уходит в конец и повторяетс�
   assert.equal(await answer(page, true), first);
   assert.match(await page.locator('[data-lp=next]').innerText(), /Завершить урок/);
   await next(page);
-  await page.waitForSelector('.lp-end');
+  await page.waitForSelector('.lp-end.is-counted');
   const end = await page.locator('.lp-end').innerText();
   assert.match(end, /Урок завершён!/);
   assert.match(end, /Очки опыта\s*\+10/i);
   assert.match(end, /Время\s*\d+:\d\d/i);
   assert.match(end, /Точность\s*83%/i);
-  assert.match(end, /\+10\s*монет/);
+  assert.match(end, /Монеты\s*\+10/);
   assert.match(end, /Серия: 1 день\s*\+1/);
   assert.match(end, /Тема «Что такое ПТЭ» пройдена/);
   assert.ok(await fits(page));
@@ -183,7 +191,7 @@ test('урок: ошибка уходит в конец и повторяетс�
   await page.locator('.rd-top [data-act=back]').click();
   await page.waitForSelector('.lr-course');
   assert.match(await page.locator('.lr-prog').innerText(), /Пройдено 1%/);
-  assert.match(await page.locator('.lr-next').innerText(), /Следующий урок[\s\S]*Обязанности работников[\s\S]*Урок 1 · 5 вопросов/i);
+  assert.equal(await page.locator('.lr-course-main').getAttribute('aria-label'), 'Курс ПТЭ. Продолжить: Обязанности работников, урок 1');
   assert.equal((await statLabels(page))[0], 'Серия: 1 день, сегодня урок пройден');
   // с другой вкладки и обратно — тот же экран курса, дорога не открыта
   await page.locator('.tab[data-tab=home]').click();
@@ -202,12 +210,12 @@ test('выйти из урока можно только с вопросом; «
   await drafts(page);
   await openLearn(page);
   // ещё ни одного ответа — закрывается сразу
-  await page.locator('.lr-next [data-act=lr-start]').click();
+  await startCurrent(page);
   await page.waitForSelector('.lp .lp-opt');
   await page.locator('[data-lp=quit]').click();
   await page.waitForFunction(() => !document.querySelector('#layers .layer:not(.closing)'));
   // после ответа — «Выйти из урока?»
-  await page.locator('.lr-next [data-act=lr-start]').click();
+  await startCurrent(page);
   await page.waitForSelector('.lp .lp-opt');
   await answer(page, true);
   await page.locator('[data-lp=quit]').click();
@@ -227,14 +235,15 @@ test('выйти из урока можно только с вопросом; «
   await page.waitForSelector('.dialog');
   await top(page).getByRole('button', { name: 'Выйти' }).click();
   await page.waitForFunction(() => !document.querySelector('#layers .layer:not(.closing)'));
-  assert.equal(await page.locator('.screen.lr-hub').count(), 1, 'остались на экране «Обучение»');
+  assert.equal(await page.locator('.screen[data-page=learn-road]').count(), 1, 'остались на дороге курса');
   // прерванный урок не засчитан, серии нет
   const st = await learnOf(page);
   assert.deepEqual(st.done, {});
   assert.deepEqual(st.days, []);
-  // после выхода из урока лишнего шага в истории нет: системная «Назад» уходит с экрана «Обучение», урок не возвращается
+  // после выхода из урока лишнего шага в истории нет: системная «Назад» уходит с дороги, урок не возвращается
   await page.goBack();
-  await page.waitForFunction(() => !document.querySelector('.screen.lr-hub'));
+  await page.waitForFunction(() => !document.querySelector('.screen[data-page=learn-road]'));
+  assert.equal(await page.locator('.lp').count(), 0);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -397,7 +406,7 @@ test('ввод ответа: число со словами вокруг, опе
   await page.locator('[data-lp=check]').click();
   await page.waitForSelector('.lp-foot.ok');
   await next(page);
-  await page.waitForSelector('.lp-end');
+  await page.waitForSelector('.lp-end.is-counted');
   const res = await page.evaluate(() => window.__res);
   assert.equal(res.total, 3);
   assert.equal(res.firstOk, 1);
@@ -484,8 +493,7 @@ test('под ответом: «Не проверен экспертом» (у п
   const realErrors = (errors) => errors.filter((e) => !/Failed to load resource/.test(e));
   const startFirst = async (page) => {
     await openLearn(page);
-    await page.locator('.lr-next [data-act=lr-start]').click();
-    await page.waitForSelector('.lp-q');
+    await startCurrent(page);
   };
   {
     const { context, page, errors } = await openApp(env);

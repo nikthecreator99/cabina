@@ -109,32 +109,21 @@ function repairHtml(s) {
 }
 
 // ---------------------------------------------------------------- экран «Обучение»
-function nextHtml(s) {
-  const c = course();
-  const cur = L.currentLesson(c, s, opts());
-  if (!cur) {
-    const any = L.lessonsOf(c, opts()).length;
-    const again = weakest(s);
-    return `<div class="lr-next panel${again ? ' lr-next-wrap' : ''}"><div class="grow"><div class="lr-kicker">${any ? 'Все готовые уроки пройдены' : 'Первые уроки скоро'}</div>
-      <p class="hint">${any ? 'Новые темы появятся в обновлениях. Пройденные уроки можно повторять — так знания держатся дольше.' : 'Уроки появятся в обновлениях.'}</p></div>
-      ${again ? `<button class="btn btn-plain btn-sm lr-go" data-act="lr-start" data-id="${esc(again)}">${small(I.refresh, 18)} Повторить урок</button>` : ''}</div>`;
-  }
-  const f = find(cur.lesson.id);
-  const total = ready(cur.topic).length;
-  return `<div class="lr-next panel"><div class="grow"><div class="lr-kicker">${Object.keys(s.done).length ? 'Следующий урок' : 'Начните с первого урока'}</div>
-      <b>${esc(cur.topic.title)}</b><div class="hint">Урок ${f.no}${total > 1 ? ` из ${total}` : ''} · ${cur.lesson.q.length} ${plural(cur.lesson.q.length, 'вопрос', 'вопроса', 'вопросов')} · 1–2 минуты</div></div>
-    <button class="btn btn-primary btn-sm lr-go" data-act="lr-start" data-id="${esc(cur.lesson.id)}">Начать</button></div>`;
-}
 export function renderLearn() {
   const s = daily();
   const c = course();
   const p = L.courseProgress(c, s, opts());
+  // Блока «Следующий урок» нет (просьба Никиты 06.11.2026): вся карточка курса — одна кнопка, она открывает дорогу у текущего урока.
+  const cur = L.currentLesson(c, s, opts());
+  const f = cur && find(cur.lesson.id);
+  const go = !f ? `Курс ${c.title}: все готовые уроки пройдены. Открыть дорогу курса`
+    : `Курс ${c.title}. ${Object.keys(s.done).length ? 'Продолжить' : 'Начать'}: ${f.topic.title}, урок ${f.no}`;
   return `<div class="page-head"><h1>Обучение</h1><button class="icon-btn" data-act="lr-shop" aria-label="Магазин">${LI.bag(22)}</button></div>
     ${statsHtml(s)}
     ${noteHtml(s)}
     ${repairHtml(s)}
     <div class="lr-course">
-      <button class="lr-course-main" data-act="lr-road" aria-label="Открыть курс ${esc(c.title)}">
+      <button class="lr-course-main" data-act="lr-road" aria-label="${esc(go)}">
         <span class="lr-course-txt"><span class="lr-kicker">Твой курс</span><span class="lr-title">${esc(c.title)}</span><span class="lr-sub">${esc(c.name)}</span></span>
         ${COURSE_ART}
       </button>
@@ -143,7 +132,6 @@ export function renderLearn() {
         <button class="lr-all" data-act="go" data-page="learn-modules">Все модули ${small(I.right, 16)}</button>
       </div>
     </div>
-    ${nextHtml(s)}
     <p class="hint lr-foot">Вопросы составлены по тексту ПТЭ (${esc(c.edition)}) и сверены с ним, но экспертом пока не проверены. Нашли ошибку — нажмите «Сообщить об ошибке» под ответом. Учебник не заменяет обучение и аттестацию: в работе сверяйтесь с действующими документами.</p>`;
 }
 

@@ -1653,17 +1653,15 @@ button.pr-status svg { color: var(--text-2); }
 .lr-prog span { display: block; margin-top: 6px; font-size: calc(14px * var(--fs)); color: var(--text-2); font-weight: 600; }
 .lr-prog span b { color: var(--text); font-weight: 800; }
 .lr-all { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 6px 0 10px; color: var(--text); font-weight: 700; font-size: calc(14px * var(--fs)); white-space: nowrap; border-radius: 12px; }
-.lr-next { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; }
-.lr-next b { display: block; font-size: calc(17px * var(--fs)); margin: 4px 0 2px; }
-.lr-next p { margin: 6px 0 0; }
-.lr-next .grow, .lr-repair .grow, .lr-mod-h .grow { flex: 1; min-width: 0; }
-.lr-next .lr-go { width: auto; flex: none; padding: 0 20px; }
-.lr-next.lr-next-wrap { flex-wrap: wrap; }
-.lr-next.lr-next-wrap .lr-go { width: 100%; }
+/* вся карточка — одна кнопка «к своему уроку» (2.24.1): слой кнопки растянут на карточку, «Все модули» — поверх него */
+.lr-course-main::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: inherit; transition: background-color .15s; }
+.lr-course-main:active::after { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.lr-course-main:focus-visible { outline: none; }
+.lr-course-main:focus-visible::after { outline: 3px solid var(--accent-2); outline-offset: -3px; border-radius: var(--r-lg); }
+.lr-all { position: relative; z-index: 2; }
+.lr-repair .grow, .lr-mod-h .grow { flex: 1; min-width: 0; }
 .lr-foot { margin: 0 2px; }
-@media (max-width: 360px) { .lr-art { width: 140px; height: 91px; margin-left: -30px; } .lr-title { font-size: 34px; } .lr-next { flex-wrap: wrap; } .lr-next .lr-go { width: 100%; } }
-:root[data-text="xl"] .lr-next, :root[data-text="l"] .lr-next { flex-wrap: wrap; }
-:root[data-text="xl"] .lr-next .lr-go, :root[data-text="l"] .lr-next .lr-go { width: 100%; }
+@media (max-width: 360px) { .lr-art { width: 140px; height: 91px; margin-left: -30px; } .lr-title { font-size: 34px; } }
 :root[data-text="xl"] .lr-art { width: 140px; height: 91px; margin-left: -30px; }
 
 /* дорога курса: шапка (курс, серия, монеты, опыт, модуль) прилипает сверху, ниже — одна лента до конца курса */
@@ -2032,23 +2030,33 @@ button.pr-status svg { color: var(--text-2); }
 .lp-tile-v { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
 .lp-tile-v svg { flex: none; }
 .lp-tile-v b { font-size: calc(22px * var(--fs)); font-weight: 800; white-space: nowrap; }
+/* итоги набегают (2.24.1): число растёт от нуля, в конце — короткий «щелчок»; плашки и «Рекорд!» появляются по очереди */
+.lp-cnt { display: inline-block; text-align: center; }
+.lp-cnt.lp-hit { animation: lpBump .34s ease-out; }
+@keyframes lpBump { 45% { transform: scale(1.16); } }
+@keyframes lpPop { from { opacity: 0; transform: scale(.4); } }
 .lp-t-acc { --c: #3ccf6e; } .lp-t-time { --c: #4aa3ff; }
 :root[data-theme="light"] .lp-t-acc { --c: #14a04a; } :root[data-theme="light"] .lp-t-time { --c: #1f7fe0; }
-.lp-rec { display: block; margin-top: -4px; font-size: calc(12px * var(--fs)); font-weight: 800; color: var(--ok); }
+.lp-rec { display: block; margin-top: -4px; font-size: calc(12px * var(--fs)); font-weight: 800; color: var(--ok); animation: lpPop .4s cubic-bezier(.2, .9, .3, 1.4) 1.35s both; }
 /* узкий экран и крупный текст: плитки — строками */
 @media (max-width: 380px) {
   .lp-tiles, .lp-tiles.two { grid-template-columns: 1fr; gap: 8px; }
   .lp-tile { flex-direction: row; justify-content: space-between; padding: 10px 14px; }
   .lp-tile small { text-align: left; }
+  .lp-tile .lp-cnt { text-align: right; }
 }
 :root[data-text="xl"] .lp-tiles, :root[data-text="xl"] .lp-tiles.two, :root[data-text="l"] .lp-tiles, :root[data-text="l"] .lp-tiles.two { grid-template-columns: 1fr; gap: 8px; }
 :root[data-text="xl"] .lp-tile, :root[data-text="l"] .lp-tile { flex-direction: row; justify-content: space-between; padding: 10px 14px; }
 :root[data-text="xl"] .lp-tile small, :root[data-text="l"] .lp-tile small { text-align: left; }
+:root[data-text="xl"] .lp-tile .lp-cnt, :root[data-text="l"] .lp-tile .lp-cnt { text-align: right; }
 .lp-chips { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
-.lp-chips li { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 99px; background: var(--card-2); border: 1px solid var(--line); font-weight: 700; font-size: calc(14px * var(--fs)); text-align: left; }
+.lp-chips li { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 99px; background: var(--card-2); border: 1px solid var(--line); font-weight: 700; font-size: calc(14px * var(--fs)); text-align: left;
+  animation: lpChip .42s cubic-bezier(.2, .9, .3, 1.3) both; animation-delay: calc(.35s + var(--i, 0) * .14s); }
+@keyframes lpChip { from { opacity: 0; transform: translateY(10px) scale(.9); } }
+.lp-chips .lp-cnt { text-align: left; }
 .lp-chips li svg { flex: none; }
 .lp-c-coin b { color: var(--lr-coin-num); }
-.lp-c-fire em { font-style: normal; color: var(--accent-2); font-weight: 800; }
+.lp-c-fire em { display: inline-block; font-style: normal; color: var(--accent-2); font-weight: 800; animation: lpPop .4s cubic-bezier(.2, .9, .3, 1.4) 1.05s both; }
 .lp-c-ok svg { color: var(--ok); }
 .lp-c-ice svg { color: var(--night); }
 .lp-end-foot { display: flex; gap: 12px; }
