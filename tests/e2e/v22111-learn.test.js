@@ -1,6 +1,7 @@
 // Браузерные проверки CABINA 2.21.11 (просьба Никиты 05.11.2026): «Обучение» — курс ПТЭ.
 // Экран курса, дорога от станции к станции, урок с повтором ошибок и временем, серия, заморозки, магазин, «Все модули».
 // Вопросы курса берутся из js/learn/pte-q01.js. Выдуманные вопросы ниже — только для проверки ввода ответа, в курс они не попадают.
+// С 05.11.2026 в курсе вопросы ChatGPT, сверенные с приказом: черновики, видны только проверяющему; после ответа — «Где написано».
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile } from 'node:fs/promises';
@@ -86,7 +87,7 @@ test('«Обучение» — своя вкладка справа от «Гл�
   await drafts(page);
   await openLearn(page);
   await page.waitForSelector('.lr-next [data-act=lr-start]');
-  assert.match(await page.locator('.lr-next').innerText(), /Начните с первого урока[\s\S]*Что такое ПТЭ[\s\S]*Урок 1 · 5 вопросов/i);
+  assert.match(await page.locator('.lr-next').innerText(), /Начните с первого урока[\s\S]*Что такое ПТЭ[\s\S]*Урок 1 · 6 вопросов/i);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -101,7 +102,8 @@ test('урок: ошибка уходит в конец и повторяетс�
   assert.match(await page.locator('.rd-st').first().innerText(), /Тема 1[\s\S]*Что такое ПТЭ/i);
   assert.equal(await page.locator('.rd-node.is-current').count(), 1);
   assert.match(await page.locator('.rd-start').innerText(), /Начать/i);
-  assert.match(await page.locator('.rd-build').innerText(), /Путь строится[\s\S]*Обязанности работников/);
+  assert.match(await page.locator('.rd-st').nth(1).innerText(), /Тема 2[\s\S]*Обязанности работников/i);
+  assert.match(await page.locator('.rd-build').first().innerText(), /Путь строится[\s\S]*Платформы и грузы у пути/);
   assert.ok((await page.locator('.rd-svg .rd-rail').getAttribute('d')).length > 10, 'рельсы нарисованы');
   assert.ok((await page.locator('.rd-svg .rd-plan').getAttribute('d')).length > 10, 'строящийся путь нарисован');
   assert.ok(await fits(page));
@@ -109,7 +111,7 @@ test('урок: ошибка уходит в конец и повторяетс�
   await page.locator('.rd-node.is-current').click();
   const pop = page.locator('.rd-pop');
   await pop.waitFor();
-  assert.match(await pop.innerText(), /Урок 1[\s\S]*Что такое ПТЭ[\s\S]*5 вопросов · 1–2 минуты/i);
+  assert.match(await pop.innerText(), /Урок 1[\s\S]*Что такое ПТЭ[\s\S]*6 вопросов · 1–2 минуты/i);
   // нажатие мимо окошка — закрывает
   await page.locator('.rd-mod').first().click();
   await pop.waitFor({ state: 'detached' });
@@ -122,24 +124,36 @@ test('урок: ошибка уходит в конец и повторяетс�
   const first = await answer(page, false);
   const fb = await page.locator('.lp-foot').innerText();
   assert.match(fb, /Неверно[\s\S]*Правильный ответ:[\s\S]*Этот вопрос повторится в конце урока/);
-  assert.match(fb, /Где написано:/);
   assert.equal(await page.locator('.lp-opt.is-ok').count(), 1, 'верный вариант подсвечен');
   assert.equal(await page.locator('.lp-opt.is-bad').count(), 1);
   assert.equal(await page.locator('.lp-bar').getAttribute('aria-valuenow'), '0');
-  // цитата из документа раскрывается
-  await page.locator('.lp-src summary').click();
-  assert.match(await page.locator('.lp-src blockquote').innerText(), /^«.+»$/s);
+  // «Где написано» (просьба Никиты): пункт документа — табличкой, цитата из него под ней сразу раскрыта
+  const src = page.locator('.lp-src');
+  assert.match(await src.locator('summary').innerText(), /Где написано[\s\S]*(ПТЭ, пункт|Приказ Минтранса|Инструкция по)/i);
+  assert.equal(await src.getAttribute('open'), '');
+  assert.match(await src.locator('blockquote').innerText(), /^«.+»$/s);
+  // цитату можно свернуть: пункт остаётся виден, а дальше цитата свёрнута, пока человек её снова не раскроет
+  await src.locator('summary').click();
+  assert.equal(await src.getAttribute('open'), null);
+  await page.waitForFunction(() => localStorage.getItem('cabina-learn-quote') === '0'); // событие toggle приходит не сразу
   await next(page);
-  // остальные четыре — верно
+  // остальные пять — верно
   const seen = [first];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     await page.waitForSelector('.lp .lp-opt:not([disabled])');
     seen.push(await answer(page, true));
     assert.match(await page.locator('.lp-foot').innerText(), /Верно!|Правильно!|Точно!/);
+    if (i === 0) {
+      assert.equal(await page.locator('.lp-src').getAttribute('open'), null, 'свёрнутая цитата остаётся свёрнутой');
+      assert.match(await page.locator('.lp-src summary').innerText(), /Где написано/i);
+      await page.locator('.lp-src summary').click();
+      await page.locator('.lp-src blockquote').waitFor();
+      await page.waitForFunction(() => localStorage.getItem('cabina-learn-quote') === '1');
+    }
     assert.match(await page.locator('[data-lp=next]').innerText(), /Дальше/);
     await next(page);
   }
-  assert.equal(new Set(seen).size, 5, 'все пять вопросов по одному разу');
+  assert.equal(new Set(seen).size, 6, 'все шесть вопросов по одному разу');
   // ошибка — в конце
   await page.waitForSelector('.lp .lp-opt:not([disabled])');
   assert.match(await page.locator('.lp-kicker').innerText(), /Повтор ошибки/i);
@@ -150,7 +164,7 @@ test('урок: ошибка уходит в конец и повторяетс�
   const end = await page.locator('.lp-end').innerText();
   assert.match(end, /Урок пройден![\s\S]*Что такое ПТЭ/);
   assert.match(end, /Время\s*\d+:\d\d/i);
-  assert.match(end, /С первого раза\s*4 из 5/i);
+  assert.match(end, /С первого раза\s*5 из 6/i);
   assert.match(end, /1\s*день подряд\s*\+1/);
   assert.match(end, /Тема «Что такое ПТЭ» пройдена/);
   assert.ok(await fits(page));
@@ -158,11 +172,11 @@ test('урок: ошибка уходит в конец и повторяетс�
   // прогресс сохранён в телефоне
   const st = await stored(page);
   assert.equal(st.done['pte-l001'].n, 1);
-  assert.equal(st.done['pte-l001'].acc, 80);
+  assert.equal(st.done['pte-l001'].acc, 83);
   assert.ok(st.done['pte-l001'].best >= 1);
   assert.deepEqual(st.days, ['2026-10-20']);
   assert.deepEqual(st.qs[first], { a: 2, w: 1 });
-  assert.equal(Object.keys(st.qs).length, 5);
+  assert.equal(Object.keys(st.qs).length, 6);
 
   // «Дальше» — снова дорога: огонь зелёный, табличка «пройдена»
   await page.locator('[data-lp=close]').click();
@@ -170,11 +184,11 @@ test('урок: ошибка уходит в конец и повторяетс�
   assert.match(await page.locator('.rd-st').first().innerText(), /пройдена/i);
   assert.match(await page.locator('.rd-top .lr-p-streak').innerText(), /1/);
   assert.ok(await page.locator('.rd-top .lr-p-streak.on').count());
-  // обратно на экран курса: 1% курса, следующий урок — повторить
+  // обратно на экран курса: 1% курса, дальше — урок следующей темы
   await page.locator('.rd-top [data-act=back]').click();
   await page.waitForSelector('.lr-course');
   assert.match(await page.locator('.lr-prog').innerText(), /Пройдено 1%/);
-  assert.match(await page.locator('.lr-next').innerText(), /Все готовые уроки пройдены[\s\S]*Повторить урок/i);
+  assert.match(await page.locator('.lr-next').innerText(), /Следующий урок[\s\S]*Обязанности работников[\s\S]*Урок 1 · 5 вопросов/i);
   assert.match(await page.locator('.lr-pills').innerText(), /1\s*день/);
   // с другой вкладки и обратно — тот же экран курса, дорога не открыта
   await page.locator('.tab[data-tab=home]').click();
@@ -333,9 +347,9 @@ test('ввод ответа: число со словами вокруг, опе
     playLesson({
       title: 'Проверка ввода', kicker: 'Тест',
       questions: [
-        { id: 'pte-q9001', type: 'input', text: 'Тестовый вопрос: сколько будет 40 + 40?', prompt: 'Введите число', answer: 80, explain: 'Сорок и сорок — восемьдесят.' },
+        { id: 'pte-q9001', type: 'input', text: 'Тестовый вопрос: сколько будет 40 + 40?', prompt: 'Введите число', answer: 80, unit: 'км/ч', explain: 'Сорок и сорок — восемьдесят.' },
         { id: 'pte-q9002', type: 'input', text: 'Тестовый вопрос: какое слово написано на этой строке — «переключатель»?', answer: 'переключатель', explain: 'Слово в кавычках.' },
-        { id: 'pte-q9003', type: 'input', text: 'Тестовый вопрос: сколько будет 2 + 2?', answer: 4, explain: 'Два и два — четыре.' },
+        { id: 'pte-q9003', type: 'input', text: 'Тестовый вопрос: сколько будет 2 + 2?', answer: 4, unit: 'мм' },
       ],
       finish: async (r) => { window.__res = r; return { first: true, record: false, streak: 1, extended: true, timed: true, acc: 67, sec: r.sec }; },
       onClose: () => {},
@@ -345,21 +359,28 @@ test('ввод ответа: число со словами вокруг, опе
   await inp.waitFor();
   assert.equal(await inp.getAttribute('inputmode'), 'numeric');
   assert.equal(await page.locator('[data-lp=check]').isDisabled(), true);
+  // единица — подписью после поля: вписывают только число
+  assert.equal(await page.locator('.lp-in-w .lp-unit').innerText(), 'км/ч');
+  assert.equal(await inp.getAttribute('aria-describedby'), 'lp-unit');
   await inp.fill('80 км/ч');
   await page.locator('[data-lp=check]').click();
   await page.waitForSelector('.lp-foot.ok');
   await next(page);
   await page.waitForFunction(() => !document.querySelector('#lp-input')?.readOnly);
   assert.equal(await inp.getAttribute('inputmode'), null, 'для слова — обычная клавиатура');
+  assert.equal(await page.locator('.lp-unit').count(), 0, 'у слова подписи нет');
   await inp.fill('выключатель');
   await inp.press('Enter');
   await page.waitForSelector('.lp-foot.bad');
   assert.match(await page.locator('.lp-foot').innerText(), /Неверно[\s\S]*Правильный ответ:\s*переключатель/);
   await next(page);
   await page.waitForFunction(() => !document.querySelector('#lp-input')?.readOnly);
+  assert.equal(await page.locator('.lp-unit').innerText(), 'мм');
   await inp.fill('5');
   await page.locator('[data-lp=check]').click();
   await page.waitForSelector('.lp-foot.bad');
+  assert.match(await page.locator('.lp-foot').innerText(), /Правильный ответ:\s*4 мм/);
+  assert.equal(await page.locator('.lp-fb-x').count(), 0, 'без пояснения — только пункт и цитата (их здесь нет)');
   await next(page);
   // повторы ошибок: опечатка в одну букву засчитывается с пометкой
   await page.waitForFunction(() => !document.querySelector('#lp-input')?.readOnly);

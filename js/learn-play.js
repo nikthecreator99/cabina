@@ -1,11 +1,15 @@
 // «Обучение» (2.21.11): урок на весь экран. Вопросы по одному: выбрать ответ или ввести самому → «Проверить» →
-// «Верно» / «Неверно» с правильным ответом, объяснением и цитатой из документа. Ошибка уходит в конец урока
+// «Верно» / «Неверно» с правильным ответом, объяснением (если есть) и пунктом документа с цитатой. Ошибка уходит в конец урока
 // и повторяется, пока не будет верного ответа. Время считается, только пока урок на экране.
 // Ничего не хранит и не отправляет: итог урока передаётся в finish(), прогресс сохраняет learn.js.
 import { I, esc, small, openLayer, closeLayer, confirmDialog, plural } from './ui.js';
 import * as L from './learn-state.js';
 
 const OK_WORDS = ['Верно!', 'Правильно!', 'Точно!'];
+// Цитата из документа после ответа раскрыта; свернул её — следующие показываем свёрнутыми (только удобство этого телефона)
+const QUOTE_KEY = 'cabina-learn-quote';
+const quoteOpen = () => { try { return localStorage.getItem(QUOTE_KEY) !== '0'; } catch { return true; } };
+const rememberQuote = (open) => { try { localStorage.setItem(QUOTE_KEY, open ? '1' : '0'); } catch { /* хранилище недоступно — не страшно */ } };
 const flame = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.2c-3.9 0-6.6-2.7-6.6-6.3 0-3.4 2.4-5.4 3.7-7.8.5 1.7 1.4 2.8 2.5 3.4-.2-3 .9-5.8 3.4-8.1.2 3.5 1.7 5.5 3.2 7.4 1 1.4 1.6 3 1.6 5.1 0 3.6-3.2 6.3-7.8 6.3z" fill="currentColor" fill-opacity=".2"/></svg>';
 const snow = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2.8v18.4M4 7.4l16 9.2M4 16.6l16-9.2"/></svg>';
 // Картинка в конце урока: поезд прибывает к платформе (рисуем сами)
@@ -79,10 +83,11 @@ export function playLesson({ title, kicker, questions, finish, onClose }) {
   const q = () => byId.get(L.runCurrent(run));
   const optHtml = (cur) => `<div class="lp-opts" role="group" aria-label="Варианты ответа">${order.map((i, k) => `<button class="lp-opt" data-lp="opt" data-i="${i}" aria-pressed="false">
       <span class="lp-opt-n num" aria-hidden="true">${k + 1}</span><span class="lp-opt-t">${esc(cur.options[i])}</span></button>`).join('')}</div>`;
+  // unit — подпись после поля («км/ч», «мм», «°»): человек вписывает только число
   const inputHtml = (cur) => {
     const num = typeof cur.answer === 'number';
     return `<label class="lp-in-l" for="lp-input">${esc(cur.prompt || (num ? 'Введите число' : 'Введите ответ'))}</label>
-      <input class="input lp-input" id="lp-input" type="text" ${num ? `inputmode="${Number.isInteger(cur.answer) ? 'numeric' : 'decimal'}"` : ''} autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" maxlength="60">`;
+      <div class="lp-in-w"><input class="input lp-input" id="lp-input" type="text" ${num ? `inputmode="${Number.isInteger(cur.answer) ? 'numeric' : 'decimal'}"` : ''}${cur.unit ? ' aria-describedby="lp-unit"' : ''} autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" maxlength="60">${cur.unit ? `<span class="lp-unit" id="lp-unit">${esc(cur.unit)}</span>` : ''}</div>`;
   };
   function show() {
     const cur = q();
@@ -131,16 +136,21 @@ export function playLesson({ title, kicker, questions, finish, onClose }) {
     phase = 'fb';
     setBar();
     if (ok) { bar.classList.remove('flash'); void bar.offsetWidth; bar.classList.add('flash'); }
-    const right = cur.type === 'choice' ? cur.options[cur.answer] : String(cur.answer);
-    const quote = cur.src?.quote ? `<details class="lp-src"><summary>${small(I.file, 16)} Где написано: ${esc(cur.src.ref)}</summary><blockquote>«${esc(cur.src.quote)}»</blockquote></details>` : '';
+    const right = cur.type === 'choice' ? cur.options[cur.answer] : `${cur.answer}${!cur.unit ? '' : cur.unit === '°' ? '°' : ` ${cur.unit}`}`;
+    // «Где написано»: пункт документа виден всегда (просьба Никиты), цитата под ним — раскрыта, пока человек её не свернёт
+    const src = L.srcLabel(cur.src?.ref);
+    const quote = src ? `<details class="lp-src"${quoteOpen() ? ' open' : ''}>
+        <summary><span class="lp-src-ico">${small(I.file, 20)}</span><span class="lp-src-t"><small>Где написано</small><b>${esc(src.title)}</b>${src.doc ? `<span>${esc(src.doc)}</span>` : ''}</span><span class="lp-src-chev" aria-hidden="true">${small(I.down, 18)}</span></summary>
+        ${cur.src.quote ? `<blockquote>«${esc(cur.src.quote)}»</blockquote>` : ''}</details>` : '';
     foot.className = `lp-foot ${ok ? 'ok' : 'bad'}`;
     foot.innerHTML = `<div class="lp-fb" role="status">
         <div class="lp-fb-h"><span class="lp-fb-ico">${ok ? small(I.check, 20) : small(I.x, 20)}</span><b>${ok ? OK_WORDS[run.answers.length % OK_WORDS.length] : 'Неверно'}</b></div>
         ${!ok ? `<div class="lp-fb-a">Правильный ответ: <b>${esc(right)}</b></div>${L.runDone(run) ? '' : '<div class="lp-fb-later">Этот вопрос повторится в конце урока.</div>'}`
           : typo ? `<div class="lp-fb-a">Есть опечатка, правильно: <b>${esc(right)}</b></div>` : ''}
-        <p class="lp-fb-x">${esc(cur.explain)}</p>${quote}
+        ${cur.explain ? `<p class="lp-fb-x">${esc(cur.explain)}</p>` : ''}${quote}
       </div>
       <button class="btn lp-go ${ok ? 'lp-go-ok' : 'lp-go-bad'}" data-lp="next">${L.runDone(run) ? 'Завершить урок' : 'Дальше'}</button>`;
+    foot.querySelector('.lp-src')?.addEventListener('toggle', (e) => rememberQuote(e.currentTarget.open));
     setTimeout(() => foot.querySelector('[data-lp=next]')?.focus({ preventScroll: true }), 60);
   }
   async function next() {

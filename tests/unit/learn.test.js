@@ -205,6 +205,7 @@ test('ввод ответа: числа со словами, пробелы в �
   // единицы рядом с числом
   for (const v of ['80 км/ч', '80км/ч', 'скорость 80 км/ч']) assert.equal(L.checkInput({ answer: 80 }, v).ok, true, v);
   assert.equal(L.checkInput({ answer: 2.5 }, '2,5 ‰').ok, true);
+  for (const v of ['135°', '135 °', '135 градусов']) assert.equal(L.checkInput({ answer: 135 }, v).ok, true, v);
   assert.equal(L.checkInput({ answer: 80 }, '80/100').ok, false);
   const w = { type: 'input', answer: 'звуковые', accept: ['звуковых'] };
   assert.deepEqual(L.checkInput(w, 'Звуковые'), { ok: true, typo: false });
@@ -220,6 +221,17 @@ test('варианты перемешиваются без потерь', () => 
   let seed = 1;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < 20; i++) assert.deepEqual([...L.shuffleOrder(4, rnd)].sort(), [0, 1, 2, 3]);
+});
+
+test('«Где написано»: сокращения документа — понятными словами', () => {
+  assert.deepEqual(L.srcLabel('ПТЭ, п. 139'), { title: 'ПТЭ, пункт 139', doc: 'Правила технической эксплуатации железных дорог' });
+  assert.deepEqual(L.srcLabel('ИДП, прил. 12, пп. 8, 12'), { title: 'Инструкция по движению поездов, приложение 12, пункты 8, 12', doc: 'ИДП — приложение 2 к ПТЭ' });
+  assert.deepEqual(L.srcLabel('ИСИ, табл. 2'), { title: 'Инструкция по сигнализации, таблица 2', doc: 'ИСИ — приложение 1 к ПТЭ' });
+  assert.equal(L.srcLabel('ИСИ, п. 41–43').title, 'Инструкция по сигнализации, пункты 41–43');
+  assert.equal(L.srcLabel('Приказ Минтранса России от 23.06.2022 № 250, п. 1–3').title, 'Приказ Минтранса № 250, пункты 1–3');
+  assert.deepEqual(L.srcLabel('Что-то своё'), { title: 'Что-то своё', doc: '' });
+  assert.equal(L.srcLabel(''), null);
+  assert.equal(L.srcLabel(undefined), null);
 });
 
 test('энергия: бесконечная сейчас, конечная копится и тратится', () => {
@@ -318,10 +330,12 @@ test('курс ПТЭ: вопросы заполнены правильно, в�
   for (const q of allQs) {
     const at = q.id;
     assert.ok(['choice', 'input'].includes(q.type), at);
-    for (const f of ['text', 'explain']) assert.ok(typeof q[f] === 'string' && q[f].trim().length > 5, `${at}: ${f}`);
+    assert.ok(typeof q.text === 'string' && q.text.trim().length > 5, `${at}: text`);
+    if (q.explain != null) assert.ok(typeof q.explain === 'string' && q.explain.trim().length > 5, `${at}: explain`); // необязательно
     assert.ok(q.src && q.src.ref && q.src.quote, `${at}: нет источника`);
+    assert.ok(L.srcLabel(q.src.ref)?.doc, `${at}: «${q.src.ref}» — неизвестный документ, после ответа не будет понятно, где написано`);
     assert.equal(q.ed, PTE.ed, `${at}: вопрос проверен по другой редакции — сверьте с действующей`);
-    for (const s of [q.text, q.explain, q.prompt || '', ...(q.options || [])]) assert.doesNotMatch(s, /[<>]/, `${at}: в тексте разметка`);
+    for (const s of [q.text, q.explain || '', q.prompt || '', q.unit || '', q.src.quote, ...(q.options || [])]) assert.doesNotMatch(s, /[<>]/, `${at}: в тексте разметка`);
     if (q.type === 'choice') {
       assert.ok(Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 4, `${at}: 2–4 варианта`);
       assert.equal(new Set(q.options.map((o) => o.trim().toLowerCase())).size, q.options.length, `${at}: одинаковые варианты`);
@@ -330,6 +344,10 @@ test('курс ПТЭ: вопросы заполнены правильно, в�
     } else {
       assert.ok(typeof q.answer === 'number' || (typeof q.answer === 'string' && q.answer.trim()), `${at}: ответ`);
       for (const v of [String(q.answer), ...(q.accept || [])]) assert.equal(L.checkInput(q, v).ok, true, `${at}: «${v}» не принимается`);
+      if (q.unit != null) {
+        assert.ok(['км/ч', 'мм', 'м', 'км', 'мин', '°'].includes(q.unit), `${at}: подпись после поля «${q.unit}»`);
+        assert.equal(L.checkInput(q, `${q.answer} ${q.unit}`).ok, true, `${at}: ответ вместе с «${q.unit}» не принимается`);
+      }
     }
     if (q.checked != null) {
       assert.ok(typeof q.checked.by === 'string' && q.checked.by.trim(), `${at}: кто проверил`);

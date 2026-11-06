@@ -301,8 +301,8 @@ export function checkInput(q, value) {
   if (typeof q.answer === 'number') {
     const nums = numbersIn(raw);
     const rest = normText(raw.replace(/\d+(?:[.,\s  ]\d+)*/g, ' '));
-    // рядом с числом — только слова и единицы: «км/ч», «%», «‰»
-    const ok = nums.length === 1 && Math.abs(nums[0] - q.answer) < 1e-9 && /^[a-zа-я /%‰]*$/.test(rest);
+    // рядом с числом — только слова и единицы: «км/ч», «%», «‰», «°»
+    const ok = nums.length === 1 && Math.abs(nums[0] - q.answer) < 1e-9 && /^[a-zа-я /%‰°]*$/.test(rest);
     return { ok, typo: false };
   }
   const typo = variants.some((v) => v.length >= 6 && editDistance(v, text) === 1);
@@ -371,4 +371,27 @@ export function fmtSec(sec) {
   const m = Math.floor((v % 3600) / 60);
   const x = String(v % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
+}
+
+// «Где написано» после ответа (просьба Никиты: видно, из какого пункта вопрос). Сокращения документа — понятными словами:
+// «ИДП, прил. 9, п. 57» → { title: 'Инструкция по движению поездов, приложение 9, пункт 57', doc: 'ИДП — приложение 2 к ПТЭ' }
+const SRC_DOCS = [
+  ['ПТЭ', 'ПТЭ', 'Правила технической эксплуатации железных дорог'],
+  ['ИСИ', 'Инструкция по сигнализации', 'ИСИ — приложение 1 к ПТЭ'],
+  ['ИДП', 'Инструкция по движению поездов', 'ИДП — приложение 2 к ПТЭ'],
+  ['Приказ Минтранса России от 23.06.2022 № 250', 'Приказ Минтранса № 250', 'Приказ, которым утверждены ПТЭ'],
+];
+export function srcLabel(ref) {
+  const s = String(ref ?? '').replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  const d = SRC_DOCS.find(([k]) => s === k || s.startsWith(`${k},`));
+  if (!d) return { title: s, doc: '' };
+  const rest = s.slice(d[0].length).replace(/^,\s*/, '')
+    .replace(/(^|\s)пп\.\s*/g, '$1пункты ')
+    .replace(/(^|\s)п\.\s*(?=\d+\s*[–-])/g, '$1пункты ')
+    .replace(/(^|\s)п\.\s*/g, '$1пункт ')
+    .replace(/(^|\s)прил\.\s*/g, '$1приложение ')
+    .replace(/(^|\s)табл\.\s*/g, '$1таблица ')
+    .replace(/(\d)\s*-\s*(\d)/g, '$1–$2');
+  return { title: rest ? `${d[1]}, ${rest}` : d[1], doc: d[2] };
 }
