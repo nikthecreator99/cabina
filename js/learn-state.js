@@ -1,9 +1,9 @@
-// «Обучение» (2.23.0): прогресс, ударный режим, заморозки, энергия, ход урока и проверка ответов.
+// «Обучение» (2.23.0; с 2.24.0 — опыт, монеты, сундуки и магазин): прогресс, ударный режим, заморозки, энергия, ход урока и проверка ответов.
 // Только чистые функции — без экрана и без базы, поэтому всё проверяется автотестами (tests/unit/learn.test.js).
 // Прогресс хранится только в телефоне (meta 'learn' в IndexedDB) и попадает в резервную копию; на сервер не уходит.
 // Всё, что пришло из базы или из копии, — непроверенное: читается только через normalizeLearn.
 //
-// Модель прогресса (meta 'learn', v: 1):
+// Модель прогресса (meta 'learn', v: 2; v: 1 — 2.23.0, переводится в v: 2 при чтении):
 //   done   { [id урока]: { n — сколько раз пройден, best — лучшее время (с), last — последнее (с), acc — % верных с первого раза, at — день } }
 //   qs     { [id вопроса]: { a — сколько раз отвечали, w — сколько раз ошиблись } } — для будущего повторения ошибок
 //   days   ['YYYY-MM-DD'] — дни, когда пройден хотя бы один урок (по часовому поясу из настроек)
@@ -12,6 +12,8 @@
 //   giftAt — день последней подаренной заморозки, lost — прерванная серия, которую ещё можно вернуть { n, last, until },
 //   note — что показать на экране «Обучение» сегодня { k: 'froze' | 'gift', n — сколько дней закрыто, left — заморозок осталось, at },
 //   energy { n, at } — запас энергии и когда он был таким (мс; нужен только при конечной энергии)
+//   (v: 2, с 2.24.0) xp — очки опыта всего, xpDays { 'YYYY-MM-DD': опыт за день } — последние XP_DAYS дней (неделя в профиле,
+//   потом — лига), coins — монеты в запасе, chests ['id темы'] — открытые сундуки на дороге
 //
 // Серия (решения Никиты 05.11.2026: серию нужно беречь — человек, потерявший серию в 10–20 дней, редко начинает снова):
 //   • заморозка — за каждые 10 дней серии, в запасе не больше двух; пропущенный день она закрывает сама;
@@ -19,7 +21,7 @@
 //   • серия от 10 дней всё же прервалась (пропуск до 7 дней) — её можно вернуть: пройти урок 3 дня подряд.
 //   Всё это человек видит: что закрыла заморозка, что подарено и сколько осталось. Закрытые дни серию не удлиняют.
 
-export const LEARN_V = 1;
+export const LEARN_V = 2;
 export const FREEZE_MAX = 2;
 export const FREEZE_EVERY = 10;
 export const GIFT_FROM = 10;
@@ -30,6 +32,15 @@ export const REPAIR_DAYS = 3;
 // Энергия тратится на урок. Пока она бесконечная (решение Никиты 05.11.2026); конечный режим готов и проверен тестами.
 export const ENERGY = { unlimited: true, max: 25, perLesson: 5, regenMin: 30 };
 export const LESSON_MAX_SEC = 3 * 3600; // урок дольше трёх часов (телефон забыли с открытым уроком) — время не запоминаем
+// Очки опыта и монеты (2.24.0, просьба Никиты 06.11.2026). Опыт — за уроки, по нему позже — лига с коллегами (только по согласию
+// человека и после изменения уведомления в Роскомнадзор); сейчас опыт, как и весь прогресс, только в телефоне.
+// Монеты — только за учёбу (уроки и сундуки на дороге), тратятся в магазине на заморозки; за деньги не продаются.
+// Всё начисляется открыто и по одним правилам — без случайных наград и скрытых поправок.
+export const XP = { lesson: 10, repeat: 5, perfect: 5 };
+export const COINS = { lesson: 10, repeat: 5, perfect: 5, chest: 30 };
+export const FREEZE_PRICE = 100;
+export const CHEST_EVERY = 6; // сундук — примерно через каждые 6 уроков модуля и в конце каждого модуля
+export const XP_DAYS = 400; // сколько дней помнить опыт по дням
 
 const DAY_MS = 86400000;
 const DK = /^\d{4}-\d{2}-\d{2}$/;
@@ -38,12 +49,38 @@ export const isDayKey = (k) => typeof k === 'string' && DK.test(k) && dayKey(day
 export const dayNum = (k) => { const [y, m, d] = String(k).split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / DAY_MS); };
 export const dayKey = (n) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 const int = (v, lo, hi, def) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; };
+// время урока в секундах или null (времени нет: урок шёл дольше LESSON_MAX_SEC); null и 0 — не «1 секунда»
+const optSec = (v) => { const n = Math.floor(Number(v)); return v != null && Number.isFinite(n) && n >= 1 ? Math.min(LESSON_MAX_SEC, n) : null; };
 const daysList = (v, cap = 5000) => (Array.isArray(v) ? [...new Set(v.filter(isDayKey))].sort().slice(-cap) : []);
 const range = (a, b) => { const out = []; for (let d = a; d <= b; d++) out.push(dayKey(d)); return out; };
 const NOTES = ['froze', 'gift'];
 
 export function emptyLearn() {
-  return { v: LEARN_V, done: {}, qs: {}, days: [], frozen: [], freezes: 0, best: 0, sec: 0, giftAt: null, lost: null, note: null, energy: { n: ENERGY.max, at: 0 } };
+  return { v: LEARN_V, done: {}, qs: {}, days: [], frozen: [], freezes: 0, best: 0, sec: 0, giftAt: null, lost: null, note: null, energy: { n: ENERGY.max, at: 0 }, xp: 0, xpDays: {}, coins: 0, chests: [] };
+}
+// Опыт и монеты за урок по правилам XP / COINS: повтор пройденного — меньше, без единой ошибки — прибавка
+export function lessonGain(repeat, perfect) {
+  return {
+    xp: (repeat ? XP.repeat : XP.lesson) + (perfect ? XP.perfect : 0),
+    coins: (repeat ? COINS.repeat : COINS.lesson) + (perfect ? COINS.perfect : 0),
+  };
+}
+const capDays = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-XP_DAYS));
+// Прогресс версии 1 (2.23.0, опыта и монет ещё не было): начисляем за уже пройденные уроки по тем же правилам —
+// первый раз как новый урок (без ошибок — если последний раз было 100%), остальные разы — как повторы; опыт — в день урока.
+function backfill(done) {
+  let xp = 0;
+  let coins = 0;
+  const days = {};
+  for (const d of Object.values(done)) {
+    const first = lessonGain(false, d.acc === 100);
+    const more = lessonGain(true, false);
+    const x = first.xp + (d.n - 1) * more.xp;
+    xp += x;
+    coins += first.coins + (d.n - 1) * more.coins;
+    if (d.at) days[d.at] = Math.min(1e6, (days[d.at] || 0) + x);
+  }
+  return { xp: Math.min(1e9, xp), coins: Math.min(1e9, coins), days: capDays(days) };
 }
 
 // Прогресс из базы или из резервной копии: только известные поля, числа — в своих пределах, id — из безопасных символов
@@ -53,9 +90,7 @@ export function normalizeLearn(raw) {
   if (raw.done && typeof raw.done === 'object') {
     for (const [k, v] of Object.entries(raw.done)) {
       if (!ID.test(k) || !v || typeof v !== 'object') continue;
-      const best = int(v.best, 1, LESSON_MAX_SEC, 0);
-      const last = int(v.last, 1, LESSON_MAX_SEC, 0);
-      s.done[k] = { n: int(v.n, 1, 1e6, 1), best: best || null, last: last || null, acc: int(v.acc, 0, 100, 0), at: isDayKey(v.at) ? v.at : null };
+      s.done[k] = { n: int(v.n, 1, 1e6, 1), best: optSec(v.best), last: optSec(v.last), acc: int(v.acc, 0, 100, 0), at: isDayKey(v.at) ? v.at : null };
     }
   }
   if (raw.qs && typeof raw.qs === 'object') {
@@ -83,6 +118,20 @@ export function normalizeLearn(raw) {
   }
   const e = raw.energy && typeof raw.energy === 'object' ? raw.energy : {};
   s.energy = { n: int(e.n, 0, ENERGY.max, ENERGY.max), at: int(e.at, 0, 1e14, 0) };
+  s.chests = Array.isArray(raw.chests) ? [...new Set(raw.chests.filter((x) => typeof x === 'string' && ID.test(x)))].slice(0, 1000) : [];
+  if (Number(raw.v) >= 2) {
+    s.xp = int(raw.xp, 0, 1e9, 0);
+    s.coins = int(raw.coins, 0, 1e9, 0);
+    const xd = raw.xpDays && typeof raw.xpDays === 'object' ? raw.xpDays : {};
+    const days = {};
+    for (const [k, v] of Object.entries(xd)) { const n = int(v, 0, 1e6, 0); if (isDayKey(k) && n) days[k] = n; }
+    s.xpDays = capDays(days);
+  } else {
+    const b = backfill(s.done);
+    s.xp = b.xp;
+    s.coins = b.coins;
+    s.xpDays = b.days;
+  }
   return s;
 }
 
@@ -223,7 +272,13 @@ export function completeLesson(s0, r) {
     const q = qs[a.id] || { a: 0, w: 0 };
     qs[a.id] = { a: q.a + 1, w: q.w + (a.ok ? 0 : 1) };
   }
-  s = { ...s, done: { ...s.done, [r.lessonId]: entry }, qs, sec: s.sec + (timed ? sec : 0), best: Math.max(s.best, streak) };
+  const total = Math.max(0, Math.floor(Number(r.total) || 0));
+  const perfect = total > 0 && Math.min(r.firstOk, total) === total;
+  const gain = lessonGain(!!prev, perfect);
+  const xd = s.xpDays || {};
+  const xpDays = capDays({ ...xd, [r.today]: Math.min(1e6, (xd[r.today] || 0) + gain.xp) });
+  s = { ...s, done: { ...s.done, [r.lessonId]: entry }, qs, sec: s.sec + (timed ? sec : 0), best: Math.max(s.best, streak),
+    xp: Math.min(1e9, (s.xp || 0) + gain.xp), xpDays, coins: Math.min(1e9, (s.coins || 0) + gain.coins) };
   const miles = Math.max(0, Math.floor(streak / FREEZE_EVERY) - Math.floor(base / FREEZE_EVERY));
   let freezes = s.freezes;
   let got = 0;
@@ -238,6 +293,7 @@ export function completeLesson(s0, r) {
       sec, timed, acc: entry.acc,
       streakBefore: before, streak, extended: streak > before, restored,
       freezesGot: got, freezesFull: full, freezes,
+      xp: gain.xp, coins: gain.coins, perfect, xpTotal: s.xp, coinsTotal: s.coins,
       topicDone: !topicWas && lessons.length > 0 && lessons.every((id) => s.done[id]),
     },
   };
@@ -362,6 +418,52 @@ export function progressLabel(p) {
 export function topicProgress(t, s, opts = {}) {
   const ls = ready(t, opts);
   return { total: ls.length, done: ls.filter((l) => s.done[l.id]).length };
+}
+
+// ---------------------------------------------------------------- сундуки, магазин, профиль обучения (2.24.0)
+// Сундуки на дороге: в конце каждого модуля и внутри модуля — после темы, где с прошлого сундука набралось CHEST_EVERY уроков
+// (если до конца модуля остаётся ещё хотя бы 3). id сундука — id темы, после которой он стоит: id тем не меняются никогда.
+// Появились новые уроки — сундук может переехать на другую тему: открытый остаётся открытым, новый можно открыть.
+export function chestsOf(course, opts = {}) {
+  const out = [];
+  for (const m of course.modules) {
+    const ts = m.topics.map((t) => ({ t, ls: ready(t, opts) })).filter((x) => x.ls.length);
+    const total = ts.reduce((a, x) => a + x.ls.length, 0);
+    let run = 0;
+    let seen = 0;
+    ts.forEach((x, i) => {
+      run += x.ls.length;
+      seen += x.ls.length;
+      const end = i === ts.length - 1;
+      if (end || (run >= CHEST_EVERY && total - seen >= 3)) {
+        out.push({ id: x.t.id, module: m, topic: x.t, after: x.ls[x.ls.length - 1].id, end });
+        run = 0;
+      }
+    });
+  }
+  return out;
+}
+// 'open' — открыт, 'ready' — урок перед ним пройден (уроки идут по порядку), можно открыть, 'locked' — ещё впереди
+export const chestState = (s, chest) => ((s.chests || []).includes(chest.id) ? 'open' : s.done[chest.after] ? 'ready' : 'locked');
+// Открыть сундук: монеты COINS.chest — один раз и только когда до него дошли
+export function openChest(s, chest) {
+  if (chestState(s, chest) !== 'ready') return { state: s, coins: 0 };
+  return { state: { ...s, chests: [...(s.chests || []), chest.id], coins: Math.min(1e9, (s.coins || 0) + COINS.chest) }, coins: COINS.chest };
+}
+// Магазин: заморозка за FREEZE_PRICE монет, в запасе — не больше FREEZE_MAX (столько же, сколько за серию)
+export function buyFreeze(s) {
+  if (s.freezes >= FREEZE_MAX) return { state: s, ok: false, why: 'full' };
+  if ((s.coins || 0) < FREEZE_PRICE) return { state: s, ok: false, why: 'coins' };
+  return { state: { ...s, freezes: s.freezes + 1, coins: s.coins - FREEZE_PRICE }, ok: true };
+}
+// Опыт по дням этой недели (с понедельника) — для профиля обучения
+export const weekXp = (s, today) => weekView(s, today).map((d) => ({ key: d.key, xp: (s.xpDays || {})[d.key] || 0, state: d.state }));
+// Все ответы: сколько, сколько верных и доля верных (%; null — ответов ещё не было)
+export function answerStats(s) {
+  let a = 0;
+  let w = 0;
+  for (const q of Object.values(s.qs)) { a += q.a; w += q.w; }
+  return { answers: a, right: a - w, acc: a ? Math.round(((a - w) / a) * 100) : null };
 }
 
 // Время урока «1:05» / «12:40» / «1:02:03»

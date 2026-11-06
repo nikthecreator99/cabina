@@ -11,11 +11,11 @@ after(async () => { await env?.stop(); });
 const sheet = (page) => page.locator('#layers .layer:not(.closing)').last();
 const tab = (page, name) => page.locator(`.tab[data-tab=${name}]`).click();
 
-test('нижнее меню (2.5, с 2.23.0 — и «Обучение»): Главная · Обучение · Ещё · Профиль, помещается на 320 px', async () => {
+test('нижнее меню (2.5, с 2.23.0 — и «Обучение», с 2.24.0 — слева от «Профиля»): Главная · Ещё · Обучение · Профиль, помещается на 320 px', async () => {
   const { context, page, errors } = await openApp(env);
   await page.setViewportSize({ width: 320, height: 640 });
   const labels = await page.locator('.tab').allInnerTexts();
-  assert.deepEqual(labels.map((s) => s.trim()), ['Главная', 'Обучение', 'Ещё', 'Профиль']);
+  assert.deepEqual(labels.map((s) => s.trim()), ['Главная', 'Ещё', 'Обучение', 'Профиль']);
   // подписи не обрезаются и с очень крупным текстом
   for (const size of ['m', 'xl']) {
     await page.evaluate((v) => { document.documentElement.dataset.text = v; }, size);

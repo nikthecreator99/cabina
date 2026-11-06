@@ -273,6 +273,100 @@ test('курс: порядок уроков, текущий урок, черно
   assert.equal(L.fmtSec(3723), '1:02:03');
 });
 
+// ---------------------------------------------------------------- опыт, монеты, сундуки, магазин (2.24.0)
+test('опыт и монеты за урок: новый 10, повтор 5, без ошибок +5; опыт помнится по дням', () => {
+  const t = '2026-11-05';
+  const r1 = L.completeLesson(L.emptyLearn(), { lessonId: 'pte-l001', today: t, sec: 60, total: 5, firstOk: 4, answers: [] });
+  assert.deepEqual([r1.news.xp, r1.news.coins, r1.news.perfect], [10, 10, false]);
+  assert.deepEqual([r1.state.xp, r1.state.coins, r1.state.xpDays], [10, 10, { [t]: 10 }]);
+  const r2 = L.completeLesson(r1.state, { lessonId: 'pte-l001', today: t, sec: 60, total: 5, firstOk: 5, answers: [] });
+  assert.deepEqual([r2.news.xp, r2.news.coins, r2.news.perfect], [10, 10, true], 'повтор без ошибок: 5 + 5');
+  assert.deepEqual([r2.news.xpTotal, r2.news.coinsTotal], [20, 20]);
+  const r3 = L.completeLesson(r2.state, { lessonId: 'pte-l002', today: day(t, 1), sec: 60, total: 6, firstOk: 6, answers: [] });
+  assert.deepEqual([r3.news.xp, r3.news.coins], [15, 15], 'новый урок без ошибок: 10 + 5');
+  assert.deepEqual(r3.state.xpDays, { [t]: 20, [day(t, 1)]: 15 });
+  assert.equal(L.completeLesson(L.emptyLearn(), { lessonId: 'x', today: t, sec: 60, total: 0, firstOk: 0, answers: [] }).news.perfect, false,
+    'урок без вопросов «без ошибок» не считается');
+  // опыт по дням — только последние XP_DAYS дней
+  const many = Object.fromEntries(Array.from({ length: L.XP_DAYS }, (_, i) => [day(t, -L.XP_DAYS + i), 1]));
+  const r4 = L.completeLesson(st({ xpDays: many }), { lessonId: 'x', today: t, sec: 60, total: 5, firstOk: 5, answers: [] });
+  assert.equal(Object.keys(r4.state.xpDays).length, L.XP_DAYS);
+  assert.equal(day(t, -L.XP_DAYS) in r4.state.xpDays, false, 'самый старый день забыт');
+  assert.equal(r4.state.xpDays[t], 15);
+});
+
+test('переход с 2.23.0: за пройденные раньше уроки — опыт и монеты по тем же правилам; чужие числа — в пределах', () => {
+  const s = L.normalizeLearn({ v: 1, done: { 'pte-l001': { n: 3, acc: 100, at: '2026-11-05' }, 'pte-l002': { n: 1, acc: 80, at: '2026-11-04' } } });
+  assert.equal(s.v, 2);
+  assert.equal(s.xp, 15 + 2 * 5 + 10);
+  assert.equal(s.coins, 15 + 2 * 5 + 10);
+  assert.deepEqual(s.xpDays, { '2026-11-04': 10, '2026-11-05': 25 });
+  assert.deepEqual(s.chests, []);
+  const v2 = L.normalizeLearn({ v: 2, done: { 'pte-l001': { n: 3, acc: 100 } }, xp: 'много', coins: 1e12,
+    xpDays: { '2026-11-05': 30, '2026-02-30': 5, 'вчера': 1, '2026-11-04': -3 }, chests: ['pte-t03', 'pte-t03', '<b>', 7] });
+  assert.equal(v2.xp, 0, 'в версии 2 опыт не пересчитывается заново');
+  assert.equal(v2.coins, 1e9);
+  assert.deepEqual(v2.xpDays, { '2026-11-05': 30 });
+  assert.deepEqual(v2.chests, ['pte-t03']);
+  // сохранённое — читается так же
+  assert.deepEqual(L.normalizeLearn(JSON.parse(JSON.stringify(s))), s);
+});
+
+test('сундуки: в конце модуля и через каждые 6 уроков, открываются один раз и только когда до них дошли', () => {
+  const ls = (p, n) => Array.from({ length: n }, (_, i) => ({ id: `${p}-${i + 1}` }));
+  const course = { modules: [
+    { id: 'm1', topics: [{ id: 't1', lessons: ls('a', 3) }, { id: 't2', lessons: ls('b', 3) }, { id: 't3', lessons: ls('c', 2) }, { id: 't4', lessons: ls('d', 2) }] },
+    { id: 'm2', topics: [{ id: 't5', lessons: ls('e', 6) }, { id: 't6', lessons: ls('f', 2) }, { id: 't7', lessons: [] }] },
+    { id: 'm3', topics: [{ id: 't8', lessons: [] }] },
+  ] };
+  const ch = L.chestsOf(course);
+  assert.deepEqual(ch.map((c) => [c.id, c.after, c.end]), [['t2', 'b-3', false], ['t4', 'd-2', true], ['t6', 'f-2', true]],
+    'в m2 после 6 уроков до конца модуля меньше 3 — только сундук в конце; модуль без уроков — без сундука');
+  const c = ch[0];
+  assert.equal(L.chestState(st({}), c), 'locked');
+  const s = st({ done: { 'b-3': { n: 1 } }, coins: 5 });
+  assert.equal(L.chestState(s, c), 'ready');
+  const o = L.openChest(s, c);
+  assert.equal(o.coins, L.COINS.chest);
+  assert.equal(o.state.coins, 5 + L.COINS.chest);
+  assert.equal(L.chestState(o.state, c), 'open');
+  const again = L.openChest(o.state, c);
+  assert.equal(again.coins, 0);
+  assert.equal(again.state, o.state, 'второй раз монет нет');
+  assert.equal(L.openChest(st({}), c).coins, 0, 'закрытый сундук не открывается');
+  // настоящий курс: сундуки стоят после тем курса, без повторов, в каждом модуле с уроками есть сундук в конце
+  const real = L.chestsOf(PTE);
+  const topicIds = new Set(PTE.modules.flatMap((m) => m.topics.map((t) => t.id)));
+  assert.equal(new Set(real.map((x) => x.id)).size, real.length);
+  assert.ok(real.every((x) => topicIds.has(x.id)));
+  for (const m of PTE.modules) {
+    const has = m.topics.some((t) => t.lessons.some((l) => !l.draft));
+    assert.equal(real.filter((x) => x.module === m && x.end).length, has ? 1 : 0, m.id);
+  }
+});
+
+test('магазин: заморозка за 100 монет, в запасе не больше двух', () => {
+  let r = L.buyFreeze(st({ coins: 250 }));
+  assert.deepEqual([r.ok, r.state.freezes, r.state.coins], [true, 1, 150]);
+  r = L.buyFreeze(r.state);
+  assert.deepEqual([r.ok, r.state.freezes, r.state.coins], [true, 2, 50]);
+  const full = L.buyFreeze(st({ coins: 500, freezes: L.FREEZE_MAX }));
+  assert.deepEqual([full.ok, full.why, full.state.coins], [false, 'full', 500]);
+  const poor = L.buyFreeze(st({ coins: L.FREEZE_PRICE - 1 }));
+  assert.deepEqual([poor.ok, poor.why, poor.state.freezes], [false, 'coins', 0]);
+});
+
+test('профиль обучения: опыт за неделю с понедельника и доля верных ответов', () => {
+  const t = '2026-11-05'; // четверг
+  const s = st({ days: ['2026-11-02', t], xpDays: { '2026-11-01': 50, '2026-11-02': 10, [t]: 25 } });
+  const w = L.weekXp(s, t);
+  assert.deepEqual(w.map((d) => d.key), ['2026-11-02', '2026-11-03', '2026-11-04', t, '2026-11-06', '2026-11-07', '2026-11-08']);
+  assert.deepEqual(w.map((d) => d.xp), [10, 0, 0, 25, 0, 0, 0]);
+  assert.deepEqual(w.map((d) => d.state), ['done', 'missed', 'missed', 'done', 'future', 'future', 'future']);
+  assert.deepEqual(L.answerStats(st({ qs: { a: { a: 3, w: 1 }, b: { a: 2, w: 0 } } })), { answers: 5, right: 4, acc: 80 });
+  assert.deepEqual(L.answerStats(st({})), { answers: 0, right: 0, acc: null });
+});
+
 // ---------------------------------------------------------------- сам курс ПТЭ
 const fixture = gunzipSync(readFileSync(new URL('tests/fixtures/pte-250-2022.txt.gz', root))).toString('utf8');
 // так же, как при подготовке текста: «№» в тексте приказа записан как N, сноски <12> убраны

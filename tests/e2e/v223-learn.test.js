@@ -3,6 +3,7 @@
 // Вопросы курса берутся из js/learn/pte-q01.js. Выдуманные вопросы ниже — только для проверки ввода ответа, в курс они не попадают.
 // С 05.11.2026 в курсе вопросы ChatGPT, сверенные с приказом; после ответа — «Где написано».
 // С 06.11.2026 (решение Никиты) уроки открыты и до проверки экспертом: под ответом — «Не проверен экспертом» и «Сообщить об ошибке».
+// С 2.24.0 — новый вид (макеты Никиты 06.11.2026): опыт, монеты, сундуки, магазин и профиль обучения проверяет v224-learn.test.js.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile } from 'node:fs/promises';
@@ -21,7 +22,7 @@ const learnOf = (page) => page.evaluate(async () => (await import('./js/store.js
 const stored = (page) => page.evaluate(async () => (await (await import('./js/db.js')).getAll('meta')).find((m) => m.id === 'learn') || null);
 // уроки-черновики (вопросы ещё не проверены машинистом) видны только с этой отметкой
 const drafts = (page) => page.evaluate(() => localStorage.setItem('cabina-learn-drafts', '1'));
-// «Обучение» — своя вкладка внизу (2.23.0, справа от «Главной»); нажатие на открытую вкладку перерисовывает экран
+// «Обучение» — своя вкладка внизу (2.23.0; с 2.24.0 — слева от «Профиля»); нажатие на открытую вкладку перерисовывает экран
 async function openLearn(page) {
   await page.locator('.tab[data-tab=learn]').click();
   await page.waitForSelector('.screen.lr-hub .lr-course');
@@ -50,6 +51,8 @@ async function answer(page, right) {
   return info.id;
 }
 const next = (page) => page.locator('[data-lp=next]').click();
+// верхняя строка «Обучения» (2.24.0): серия, монеты, опыт — на экране только числа, словами — для экранного диктора
+const statLabels = (page) => page.locator('.lr-stats').first().locator('.lr-st').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
 // записать состояние «Обучения» напрямую (как будто человек занимался раньше)
 const seedLearn = (page, st) => page.evaluate(async (st) => {
   const L = await import('./js/learn-state.js');
@@ -58,7 +61,7 @@ const seedLearn = (page, st) => page.evaluate(async (st) => {
 }, st);
 const days = (from, n) => Array.from({ length: n }, (_, i) => new Date(Date.parse(`${from}T00:00:00Z`) + i * 864e5).toISOString().slice(0, 10));
 
-test('«Обучение» — своя вкладка справа от «Главной»; уроки открыты для всех, внизу — честно о проверке', async () => {
+test('«Обучение» — своя вкладка внизу; уроки открыты для всех, внизу — честно о проверке', async () => {
   const { context, page, errors } = await openApp(env);
   // в «Ещё» строки «Обучение» нет — всё обучение во вкладке
   await page.locator('.tab[data-tab=extra]').click();
@@ -66,12 +69,12 @@ test('«Обучение» — своя вкладка справа от «Гл�
   await page.locator('.tab[data-tab=learn]').click();
   await page.waitForSelector('.screen.lr-hub .lr-course');
   assert.equal(await page.locator('.tab[data-tab=learn]').getAttribute('aria-current'), 'page');
-  // экран вкладки: без «Назад», справа — магазин
+  // экран вкладки: без «Назад», справа вверху — магазин
   assert.equal(await page.locator('.screen .page-head [data-act=back]').count(), 0);
   assert.match(await page.locator('.screen .page-head').innerText(), /^Обучение$/);
   assert.equal(await page.locator('.screen .page-head [data-act=lr-shop]').count(), 1);
   assert.match(await page.locator('.lr-course').innerText(), /Твой курс[\s\S]*ПТЭ[\s\S]*Правила технической эксплуатации[\s\S]*Пройдено 0%[\s\S]*Все модули/i);
-  assert.match(await page.locator('.lr-pills').innerText(), /0\s*дней[\s\S]*0[\s\S]*∞/);
+  assert.deepEqual(await statLabels(page), ['Серия: 0 дней', 'Монеты: 0 монет. Магазин', 'Опыт: 0 очков опыта']);
   // решение Никиты 06.11.2026: уроки открыты и до проверки экспертом — без отметки проверяющего
   await page.waitForSelector('.lr-next [data-act=lr-start]');
   assert.match(await page.locator('.lr-next').innerText(), /Начните с первого урока[\s\S]*Что такое ПТЭ[\s\S]*Урок 1 · 6 вопросов/i);
@@ -152,10 +155,12 @@ test('урок: ошибка уходит в конец и повторяетс�
   await next(page);
   await page.waitForSelector('.lp-end');
   const end = await page.locator('.lp-end').innerText();
-  assert.match(end, /Урок пройден![\s\S]*Что такое ПТЭ/);
+  assert.match(end, /Урок завершён!/);
+  assert.match(end, /Очки опыта\s*\+10/i);
   assert.match(end, /Время\s*\d+:\d\d/i);
-  assert.match(end, /С первого раза\s*5 из 6/i);
-  assert.match(end, /1\s*день подряд\s*\+1/);
+  assert.match(end, /Точность\s*83%/i);
+  assert.match(end, /\+10\s*монет/);
+  assert.match(end, /Серия: 1 день\s*\+1/);
   assert.match(end, /Тема «Что такое ПТЭ» пройдена/);
   assert.ok(await fits(page));
 
@@ -172,14 +177,14 @@ test('урок: ошибка уходит в конец и повторяетс�
   await page.locator('[data-lp=close]').click();
   await page.waitForSelector('.rd-node.is-done');
   assert.match(await page.locator('.rd-st').first().innerText(), /пройдена/i);
-  assert.match(await page.locator('.rd-top .lr-p-streak').innerText(), /1/);
-  assert.ok(await page.locator('.rd-top .lr-p-streak.on').count());
+  assert.match(await page.locator('.rd-top .lr-st-fire').innerText(), /1/);
+  assert.ok(await page.locator('.rd-top .lr-st-fire.on').count());
   // обратно на экран курса: 1% курса, дальше — урок следующей темы
   await page.locator('.rd-top [data-act=back]').click();
   await page.waitForSelector('.lr-course');
   assert.match(await page.locator('.lr-prog').innerText(), /Пройдено 1%/);
   assert.match(await page.locator('.lr-next').innerText(), /Следующий урок[\s\S]*Обязанности работников[\s\S]*Урок 1 · 5 вопросов/i);
-  assert.match(await page.locator('.lr-pills').innerText(), /1\s*день/);
+  assert.equal((await statLabels(page))[0], 'Серия: 1 день, сегодня урок пройден');
   // с другой вкладки и обратно — тот же экран курса, дорога не открыта
   await page.locator('.tab[data-tab=home]').click();
   await openLearn(page);
@@ -243,9 +248,9 @@ test('серия: окно «Ударный режим», магазин, «Вс
     qs: { 'pte-q0001': { a: 3, w: 1 } },
   });
   await openLearn(page);
-  assert.match(await page.locator('.lr-pills').innerText(), /10\s*дней[\s\S]*1[\s\S]*∞/);
+  assert.equal((await statLabels(page))[0], 'Серия: 10 дней');
   // серия
-  await page.locator('.lr-pills [data-act=lr-streak]').click();
+  await page.locator('.lr-stats [data-act=lr-streak]').click();
   let s = top(page);
   await s.locator('.lr-big').waitFor();
   const st = await s.innerText();
@@ -255,12 +260,14 @@ test('серия: окно «Ударный режим», магазин, «Вс
   assert.equal(await s.locator('.lr-wd.is-done').count(), 1, 'на этой неделе — понедельник');
   assert.equal(await s.locator('.lr-wd.is-today').count(), 1);
   await s.locator('button[data-close]').first().click();
-  // магазин: заморозки не продаются, энергия бесконечная
+  // магазин: сверху — сколько заморозок, ниже — купить за монеты (монет нет — кнопка выключена), энергия бесконечная
   await page.locator('.page-head [data-act=lr-shop]').click();
   s = top(page);
   await s.locator('.lr-shop').waitFor();
   const shop = await s.innerText();
-  assert.match(shop, /Заморозка серии\s*1 из 2[\s\S]*не продаются[\s\S]*Энергия\s*∞[\s\S]*бесконечная/);
+  assert.match(shop, /Заморозки: 1 из 2[\s\S]*У вас\s*0 монет[\s\S]*Заморозка серии[\s\S]*\+1 в запас[\s\S]*Не хватает 100 монет/);
+  assert.match(shop, /Как заработать монеты[\s\S]*за деньги не продаются[\s\S]*Энергия\s*∞[\s\S]*Сейчас без ограничений/);
+  assert.equal(await s.locator('[data-shop=buy]').isDisabled(), true);
   await s.locator('button[data-close]').first().click();
   // «Все модули»: 18 модулей, 85 тем, тема 1 пройдена, без уроков — «Уроки готовятся»
   await page.locator('.lr-all').click();
@@ -299,7 +306,7 @@ test('пропуск дня: заморозка и подарок — откры
   const note = page.locator('.lr-note.gift');
   await note.waitFor();
   assert.match(await note.innerText(), /Вчера не было урока, а заморозок не хватало — CABINA подарила заморозку, и серия цела/);
-  assert.match(await page.locator('.lr-pills').innerText(), /12\s*дней/);
+  assert.equal((await statLabels(page))[0], 'Серия: 12 дней');
   let st = await stored(page);
   assert.deepEqual(st.frozen, ['2026-10-19']);
   assert.equal(st.giftAt, '2026-10-20');
@@ -322,7 +329,7 @@ test('пропуск дня: заморозка и подарок — откры
   const rep = page.locator('.lr-repair');
   await rep.waitFor();
   assert.match(await rep.innerText(), /Верните серию 15 дней[\s\S]*Пройдите урок 3 дня подряд — и серия вернётся/);
-  assert.match(await page.locator('.lr-pills').innerText(), /0\s*дней/);
+  assert.equal((await statLabels(page))[0], 'Серия: 0 дней');
   st = await stored(page);
   assert.deepEqual(st.lost, { n: 15, last: '2026-10-16', until: '2026-10-27' });
   assert.deepEqual(errors, []);
@@ -395,7 +402,10 @@ test('ввод ответа: число со словами вокруг, опе
   assert.equal(res.total, 3);
   assert.equal(res.firstOk, 1);
   assert.equal(res.answers.length, 6);
-  assert.match(await page.locator('.lp-end').innerText(), /С первого раза\s*1 из 3/i);
+  // точность — по самому уроку (1 из 3 с первого раза); урок не из курса — без опыта, кнопка «Дальше»
+  assert.match(await page.locator('.lp-end').innerText(), /Точность\s*33%/i);
+  assert.equal(await page.locator('.lp-t-xp').count(), 0);
+  assert.equal((await page.locator('[data-lp=close]').innerText()).trim(), 'Дальше');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -462,7 +472,7 @@ test('резервная копия: прогресс обучения пере�
   assert.equal(st.extra, undefined);
   assert.equal(st.days.length, 6);
   await openLearn(two.page);
-  assert.match(await two.page.locator('.lr-pills').innerText(), /6\s*дней/);
+  assert.equal((await statLabels(two.page))[0], 'Серия: 6 дней, сегодня урок пройден');
   assert.equal(await two.page.evaluate(() => window.__pwned), undefined);
   assert.deepEqual(two.errors, []);
   await two.context.close();

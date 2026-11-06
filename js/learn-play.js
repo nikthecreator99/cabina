@@ -1,43 +1,22 @@
-// «Обучение» (2.23.0): урок на весь экран. Вопросы по одному: выбрать ответ или ввести самому → «Проверить» →
-// «Верно» / «Неверно» с правильным ответом, объяснением (если есть) и пунктом документа с цитатой. Ошибка уходит в конец урока
-// и повторяется, пока не будет верного ответа. Время считается, только пока урок на экране.
+// «Обучение» (2.23.0; конец урока по макету Никиты — 2.24.0): урок на весь экран. Вопросы по одному: выбрать ответ или ввести
+// самому → «Проверить» → «Верно» / «Неверно» с правильным ответом, объяснением (если есть) и пунктом документа с цитатой. Ошибка
+// уходит в конец урока и повторяется, пока не будет верного ответа. Время считается, только пока урок на экране. В конце —
+// «Урок завершён!»: опыт, точность, время, монеты и серия; «Поделиться» (только название урока, точность и время) и «Забрать опыт».
 // Ничего не хранит и не отправляет: итог урока передаётся в finish(), прогресс сохраняет learn.js.
 // Под ответом — «Сообщить об ошибке» (onReport, окно и отправка — в learn.js) и, если вопрос не проверен экспертом
 // (нет checked), пометка «Не проверен экспертом»: решение Никиты 06.11.2026 — уроки открыты и до такой проверки.
-import { I, esc, small, openLayer, closeLayer, confirmDialog, plural } from './ui.js';
+import { I, esc, small, openLayer, closeLayer, confirmDialog, plural, toast } from './ui.js';
 import * as L from './learn-state.js';
+import { ART, END_SCENE } from './learn-art.js';
 
 const OK_WORDS = ['Верно!', 'Правильно!', 'Точно!'];
 // Цитата из документа после ответа раскрыта; свернул её — следующие показываем свёрнутыми (только удобство этого телефона)
 const QUOTE_KEY = 'cabina-learn-quote';
 const quoteOpen = () => { try { return localStorage.getItem(QUOTE_KEY) !== '0'; } catch { return true; } };
 const rememberQuote = (open) => { try { localStorage.setItem(QUOTE_KEY, open ? '1' : '0'); } catch { /* хранилище недоступно — не страшно */ } };
-const flame = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.2c-3.9 0-6.6-2.7-6.6-6.3 0-3.4 2.4-5.4 3.7-7.8.5 1.7 1.4 2.8 2.5 3.4-.2-3 .9-5.8 3.4-8.1.2 3.5 1.7 5.5 3.2 7.4 1 1.4 1.6 3 1.6 5.1 0 3.6-3.2 6.3-7.8 6.3z" fill="currentColor" fill-opacity=".2"/></svg>';
-const snow = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2.8v18.4M4 7.4l16 9.2M4 16.6l16-9.2"/></svg>';
-// Картинка в конце урока: поезд прибывает к платформе (рисуем сами)
-const ARRIVE = `<svg class="lp-scene" viewBox="0 0 320 120" aria-hidden="true">
-  <path class="lp-sc-wire" d="M0 27h320"/><path class="lp-sc-mast" d="M300 92V18M290 22h16"/>
-  <path class="lp-sc-plat" d="M30 72h270v26H30z"/><path class="lp-sc-edge" d="M30 72h270"/>
-  <path class="lp-sc-post" d="M232 72V52M268 72V52"/><rect class="lp-sc-sign" x="220" y="36" width="60" height="18" rx="3"/>
-  <path class="lp-sc-signline" d="M230 45h40"/>
-  <path class="lp-sc-ballast" d="M0 100h320v10H0z"/>
-  <path class="lp-sc-sleep" d="M0 104h320"/>
-  <path class="lp-sc-rail" d="M0 99.5h320"/>
-  <g class="lp-sc-train">
-    <path class="lp-sc-panto" d="M40 50 52 39 42 27.5M34 27.5h16M80 50 92 39 82 27.5M74 27.5h16"/>
-    <rect class="lp-sc-car" x="-6" y="50" width="96" height="38" rx="6"/>
-    <path class="lp-sc-win" d="M6 58h16v12H6zM30 58h16v12H30zM54 58h16v12H54z"/>
-    <path class="lp-sc-cab" d="M96 50h44c10 0 18 8 18 18v20H96z"/>
-    <path class="lp-sc-win" d="M120 58h18c4 0 8 4 8 8v4h-26z"/>
-    <path class="lp-sc-stripe" d="M-6 80h164"/>
-    <circle class="lp-sc-lamp" cx="150" cy="80" r="3.5"/>
-    <circle class="lp-sc-wheel" cx="20" cy="92" r="6"/><circle class="lp-sc-wheel" cx="66" cy="92" r="6"/><circle class="lp-sc-wheel" cx="112" cy="92" r="6"/><circle class="lp-sc-wheel" cx="140" cy="92" r="6"/>
-  </g>
-</svg>`;
-
 // questions — вопросы урока (из файла модуля), finish(r) → news из completeLesson, onClose(пройден ли урок),
-// onReport(вопрос) — «Сообщить об ошибке»
-export function playLesson({ title, kicker, questions, finish, onClose, onReport }) {
+// onReport(вопрос) — «Сообщить об ошибке», course — название курса для «Поделиться» («ПТЭ»)
+export function playLesson({ title, kicker, course = '', questions, finish, onClose, onReport }) {
   const byId = new Map(questions.map((q) => [q.id, q]));
   let run = L.newRun(questions.map((q) => q.id));
   let phase = 'q'; // 'q' — отвечаем, 'fb' — разбор ответа, 'busy' — сохраняем, 'end' — итог
@@ -170,30 +149,54 @@ export function playLesson({ title, kicker, questions, finish, onClose, onReport
     done = !!news;
     end(news, sec);
   }
+  // «Урок завершён!» (макет Никиты 06.11.2026): светофор зелёный; плитки «Очки опыта», «Точность», «Время»; ниже — монеты, серия,
+  // тема, заморозки; внизу — «Поделиться» и «Забрать опыт». Не сохранилось (news нет) — без опыта, с предупреждением.
+  let result = null;
   function end(news, sec) {
     phase = 'end';
     bar.querySelector('i').style.width = '100%';
     const total = run.ids.length;
-    const lines = [];
-    if (news?.restored) lines.push(`<li class="lp-li-fire">${flame}<span>Серия вернулась: ${news.streak} ${plural(news.streak, 'день', 'дня', 'дней')}!</span></li>`);
-    if (news?.topicDone) lines.push(`<li class="lp-li-ok">${small(I.check, 20)}<span>Тема «${esc(title)}» пройдена</span></li>`);
-    if (news?.freezesGot) lines.push(`<li class="lp-li-ice">${snow}<span>+${news.freezesGot} ${plural(news.freezesGot, 'заморозка', 'заморозки', 'заморозок')} за серию. В запасе: ${news.freezes}</span></li>`);
-    const streak = news ? `<div class="lp-streak${news.extended ? ' up' : ''}"><span class="lp-streak-ico">${flame}</span><b class="num">${news.streak}</b><span>${plural(news.streak, 'день', 'дня', 'дней')} подряд</span>${news.extended ? '<em>+1</em>' : ''}</div>` : '';
-    main.innerHTML = `<div class="lp-end lp-in">
-      ${ARRIVE}
-      <h2>Урок пройден!</h2>
-      <p class="lp-end-sub">${esc(title)}</p>
-      <div class="lp-stats">
-        <div class="lp-stat"><small>Время</small><b class="num">${L.fmtSec(sec)}</b>${news?.record ? '<span class="lp-rec">Рекорд!</span>' : news && !news.first && news.best ? `<span>Лучшее ${L.fmtSec(news.best)}</span>` : ''}</div>
-        <div class="lp-stat"><small>С первого раза</small><b class="num">${run.firstOk} из ${total}</b>${run.firstOk === total ? '<span class="lp-rec">Без ошибок</span>' : ''}</div>
+    // точность — всегда по самому уроку (так же считает completeLesson); опыт и монеты — только если урок сохранился
+    const acc = total ? Math.round((Math.min(run.firstOk, total) / total) * 100) : 0;
+    const xp = Number.isFinite(news?.xp) ? news.xp : null;
+    const coins = Number.isFinite(news?.coins) ? news.coins : 0;
+    result = { sec, acc };
+    const sub = acc >= 100 ? 'Отлично! Движемся дальше.' : acc >= 70 ? 'Хорошо! Движемся дальше.' : 'Ошибки — тоже опыт. Движемся дальше.';
+    const dd = (n) => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
+    const chips = [];
+    if (coins > 0) chips.push(`<li class="lp-c-coin">${ART.nut(20)}<span><b class="num">+${coins}</b> ${plural(coins, 'монета', 'монеты', 'монет')}</span></li>`);
+    if (news?.restored) chips.push(`<li class="lp-c-fire on">${ART.flame(20)}<span>Серия вернулась: ${dd(news.streak)}!</span></li>`);
+    else if (news) chips.push(`<li class="lp-c-fire${news.streak ? ' on' : ''}">${ART.flame(20)}<span>Серия: ${dd(news.streak)}${news.extended ? ' <em>+1</em>' : ''}</span></li>`);
+    if (news?.topicDone) chips.push(`<li class="lp-c-ok">${small(I.check, 18)}<span>Тема «${esc(title)}» пройдена</span></li>`);
+    if (news?.freezesGot) chips.push(`<li class="lp-c-ice">${ART.snow(18)}<span>+${news.freezesGot} ${plural(news.freezesGot, 'заморозка', 'заморозки', 'заморозок')} за серию · в запасе ${news.freezes}</span></li>`);
+    const tile = (cls, label, icon, value, extra = '') => `<div class="lp-tile ${cls}"><small>${label}</small><span class="lp-tile-v">${icon}<b class="num">${value}</b></span>${extra}</div>`;
+    main.innerHTML = `<div class="lp-end">
+      ${END_SCENE}
+      <h2>Урок завершён!</h2>
+      <p class="lp-end-sub">${sub}</p>
+      <div class="lp-tiles${xp != null ? '' : ' two'}">
+        ${xp != null ? tile('lp-t-xp', 'Очки опыта', ART.bolt(26), `+${xp}`) : ''}
+        ${tile('lp-t-acc', 'Точность', ART.target(26), `${acc}%`)}
+        ${tile('lp-t-time', 'Время', ART.watch(26), L.fmtSec(sec), news?.record ? '<span class="lp-rec">Рекорд!</span>' : '')}
       </div>
-      ${streak}
-      ${lines.length ? `<ul class="lp-news">${lines.join('')}</ul>` : ''}
+      ${chips.length ? `<ul class="lp-chips">${chips.join('')}</ul>` : ''}
       ${news ? '' : '<p class="hint warn">Не удалось сохранить прогресс в телефоне. Попробуйте пройти урок ещё раз.</p>'}
     </div>`;
+    main.scrollTop = 0;
     foot.className = 'lp-foot';
-    foot.innerHTML = `<button class="btn btn-primary lp-go" data-lp="close">Дальше</button>`;
+    foot.innerHTML = `<div class="lp-end-foot">${news ? `<button class="icon-btn lp-share" data-lp="share" aria-label="Поделиться результатом">${ART.share(24)}</button>` : ''}
+      <button class="btn btn-primary lp-go" data-lp="close">${xp ? 'Забрать опыт' : news ? 'Дальше' : 'Закрыть'}</button></div>`;
     setTimeout(() => foot.querySelector('[data-lp=close]')?.focus({ preventScroll: true }), 60);
+  }
+  // «Поделиться»: только название урока, точность и время — без имени и других данных; где «Поделиться» нет — копируем текст
+  async function share() {
+    if (!result) return;
+    const text = `Урок «${title}»${course ? ` по ${course}` : ''} в CABINA пройден: точность ${result.acc}%, время ${L.fmtSec(result.sec)}.`;
+    const url = 'https://cabina-app.ru/';
+    if (navigator.share) {
+      try { await navigator.share({ title: 'CABINA', text, url }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Текст скопирован — вставьте его в сообщение'); } catch { toast('Не получилось поделиться', { error: true }); }
   }
   async function quit() {
     if (phase === 'end' || !run.answers.length) { closeLayer(el); return; }
@@ -214,6 +217,7 @@ export function playLesson({ title, kicker, questions, finish, onClose, onReport
     } else if (a === 'check') check();
     else if (a === 'next') next();
     else if (a === 'report' && phase === 'fb' && curQ) onReport?.(curQ);
+    else if (a === 'share' && phase === 'end') share();
     else if (a === 'close') closeLayer(el);
   });
   // клавиатура: 1–4 — вариант, Enter — проверить / дальше
