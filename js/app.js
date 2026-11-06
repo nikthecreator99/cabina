@@ -42,7 +42,7 @@ import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, s
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
 
-export const VERSION = '2.24.0';
+export const VERSION = '2.24.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -248,7 +248,7 @@ function renderHome() {
   ].filter(Boolean);
   const linesHtml = lines.length ? `<div class="hero-lines">${lines.map(([k, l, v]) => `<div class="hl hl-${k}"><span>${l}:</span> <b>${v}</b></div>`).join('')}</div>` : '';
   let payHtml = '';
-  if (pay && pay.net > 0) payHtml = `<div class="hero-pay">${small(I.wallet, 16)} Заработано: <b class="money">${fmtRub(pay.net)}</b>${pay.shiftTest ? '<span class="test-tag" title="Тестовый режим: оплата по сменам">тест</span>' : ''}${eyeBtn()}</div>`;
+  if (pay && pay.net > 0) payHtml = `<div class="hero-pay"><span class="pay-sum">${small(I.wallet, 16)} Заработано:</span> <span class="pay-sum"><b class="money">${fmtRub(pay.net)}</b>${pay.shiftTest ? '<span class="test-tag" title="Тестовый режим: оплата по сменам">тест</span>' : ''}${eyeBtn()}</span></div>`;
   else if (!payCtx && (sum.monthTrips.length || isCurrent)) payHtml = `<button class="hero-pay set" data-act="set-rate">${small(I.wallet, 16)} Указать ставку ›</button>`;
 
   const absCount = sum.monthAbs.length;
@@ -278,13 +278,13 @@ function renderHome() {
         <div class="hero-left">
           <div class="big num ${Math.floor(Math.round(sum.work) / 60) >= 100 ? 'long' : ''}">${bigDur(sum.work)}</div>
           ${normHtml}
+          ${payHtml}
         </div>
         <div class="hero-right">${ring(sum.normMin === 0 ? null : pct)}${remainHtml}</div>
-        ${payHtml || linesHtml ? `<div class="hero-foot">${payHtml}${linesHtml}</div>` : ''}
+        <div class="hero-foot"><div class="hero-row">${linesHtml}<button class="btn btn-ghost hero-abs" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${small(I.vacation, 20)}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button></div></div>
       </section>
     </div>
     ${moveNag()}
-    <button class="btn btn-ghost" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${I.vacation}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button>
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${pend ? `<div class="banner-row"><button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn('yavka', statsOf(pend).start, 'Напомнить о явке в календаре')}</div>` : ''}
     ${departBanner(lt && !pend ? lt : null, now)}

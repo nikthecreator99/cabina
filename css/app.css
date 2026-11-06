@@ -170,10 +170,17 @@ body .home-top.on-sky .round-btn, body .home-top.on-sky .chip-btn, body .home-to
 .hero-link { font-size: calc(13px * var(--fs)); font-weight: 700; color: var(--text-2); white-space: nowrap; }
 .hero-right { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .hero-foot { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
-.hero-pay { display: flex; align-items: center; gap: 6px; font-size: calc(16px * var(--fs)); color: var(--text-2); }
+/* «Заработано» — под нормой, выше линии (2.24.1, по фото Никиты); узко — сумма переносится строкой ниже */
+.hero-pay { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; margin-top: 8px; font-size: calc(16px * var(--fs)); color: var(--text-2); }
+.hero-pay .pay-sum { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .hero-pay svg { color: var(--ok); }
 .hero-pay b { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
-button.hero-pay.set { color: var(--ok); font-weight: 700; align-self: flex-start; min-height: 32px; }
+button.hero-pay.set { display: inline-flex; color: var(--ok); font-weight: 700; min-height: 32px; }
+/* «Отвлечения» — в карточке месяца справа внизу, на одной строке с «Ночные» (2.24.1, по фото Никиты) */
+.hero-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px 10px; }
+.hero-row .hero-lines { flex: 1 1 130px; min-width: 0; align-self: center; }
+.btn.hero-abs { width: auto; flex: none; margin-left: auto; min-height: 44px; padding: 0 14px; gap: 8px; border-radius: 14px; font-size: calc(15px * var(--fs)); }
+.btn.hero-abs .count { min-width: 22px; height: 22px; font-size: calc(12px * var(--fs)); }
 .hero-lines { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: calc(13px * var(--fs)); color: var(--muted); line-height: 1.35; }
 .hero-lines b { color: var(--text-2); font-weight: 700; font-variant-numeric: tabular-nums; }
 .hl-night span { color: var(--night); } .hl-holiday span { color: var(--holiday); } .hl-over span { color: var(--warn); }
