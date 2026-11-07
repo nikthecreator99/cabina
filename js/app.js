@@ -42,7 +42,7 @@ import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, s
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
 
-export const VERSION = '2.24.4';
+export const VERSION = '2.24.5';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -589,7 +589,7 @@ function render({ still = false } = {}) {
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
   else if (V.tab === 'learn') app.innerHTML = `<div class="screen lr-hub">${renderLearn()}</div>`; // «Обучение» — своя вкладка (2.23.0)
   else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()) || signupTeaserHtml())}</div>`;
-  learnAfter(p, V.tab);
+  learnAfter(p, V.tab, still);
   renderTabbar();
   scheduleTours();
   checkAccountAward();
@@ -637,10 +637,12 @@ function go(name) {
   if (name === 'invites') loadInvites({ force: true });
   if (name === 'ideas') loadIdeas({ force: true });
   V.pages.push(name);
-  render();
+  // наверх — до отрисовки (2.24.5): новый экран может сам прокрутиться к нужному месту (дорога курса — к своему уроку),
+  // и тогда первый кадр сразу правильный, без мелькания верха экрана
   window.scrollTo(0, 0);
+  render();
 }
-function back() { V.pages.pop(); render(); window.scrollTo(0, 0); }
+function back() { V.pages.pop(); window.scrollTo(0, 0); render(); }
 // «Открыть» из «Помощи»: прокрутить к нужной строке и ненадолго подсветить её
 function showSpot(sel) {
   setTimeout(() => {
@@ -730,8 +732,8 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
   const resume = V.tab !== 'learn' && b.dataset.tab === 'learn';
   V.tab = b.dataset.tab;
   V.pages = resume ? learnResume() : [];
+  window.scrollTo(0, 0); // до отрисовки — см. go()
   render();
-  window.scrollTo(0, 0);
 });
 
 // ---------------------------------------------------------------- действия

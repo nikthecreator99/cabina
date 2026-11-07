@@ -17,7 +17,19 @@ import { legalReady } from './legal.js';
 import { sendIdea, IDEA_MAX } from './ideas.js';
 
 let ctx = { rerender: () => {}, go: () => {} };
-export function initLearn(c) { ctx = { ...ctx, ...c }; }
+export function initLearn(c) { ctx = { ...ctx, ...c }; warmCovers(); }
+// Картинки курсов загружаем и расшифровываем заранее (2.24.5, Никита: «при переходе в „Обучение“ на доли секунды мелькает
+// другой экран»): иначе карточка курса на миг показывалась без электровоза, и он «впрыгивал» следующим кадром.
+const warm = [];
+function warmCovers() {
+  if (warm.length) return;
+  for (const src of Object.values(COVERS)) {
+    const im = new Image();
+    im.src = src;
+    im.decode?.().catch(() => {});
+    warm.push(im);
+  }
+}
 
 const today = () => dateKeyOf(nowLocal());
 // черновики уроков видны только проверяющему (и автотестам): localStorage 'cabina-learn-drafts' = '1'
@@ -134,7 +146,7 @@ export function renderLearn() {
     ${noteHtml(s)}
     ${repairHtml(s)}
     <div class="lr-course">
-      ${cover ? `<img class="lr-cover" src="${cover}" alt="" width="658" height="485" decoding="async" draggable="false">` : ''}
+      ${cover ? `<img class="lr-cover" src="${cover}" alt="" width="658" height="485" decoding="sync" draggable="false">` : ''}
       <button class="lr-course-main" data-act="lr-road" aria-label="${esc(go)}">
         <span class="lr-course-txt"><span class="lr-kicker">Твой курс</span><span class="lr-title">${esc(c.title)}</span><span class="lr-sub">${esc(c.name)}</span></span>
       </button>
@@ -152,7 +164,8 @@ export function renderLearn() {
 // модули — щиты поперёк пути, темы — синие таблички-станции, уроки — «шайбы» на рельсах (пройден — зелёная, текущий — красная
 // с книгой, впереди — с замком), сундуки с монетами — в конце модулей и примерно через каждые 6 уроков. Темы, где уроков ещё нет, —
 // «путь строится»: шпалы без рельсов. Наверху всегда видно: курс, серия, монеты, опыт и модуль, по которому сейчас едем.
-let road = { target: null, pop: null, just: null, count: null };
+// y — где была дорога, когда с неё ушли на другой экран (профиль обучения): «Назад» вернёт туда же (2.24.5)
+let road = { target: null, pop: null, just: null, count: null, y: null };
 const DX = [0, 56, 84, 56, 0, -56, -84, -56];
 function nodeHtml(x, i) {
   const { lesson, state } = x;
@@ -343,7 +356,9 @@ function topLabel() {
   document.getElementById('rd-mc-n').textContent = lessonsText(+d.done, +d.total);
 }
 let scrollRaf = 0;
-window.addEventListener('scroll', () => { if (!scrollRaf && document.getElementById('rd')) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; topLabel(); }); }, { passive: true });
+window.addEventListener('scroll', () => {
+  if (!scrollRaf && document.getElementById('rd')) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; if (document.getElementById('rd')) road.y = window.scrollY; topLabel(); });
+}, { passive: true });
 let resizeT = 0;
 window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { const el = document.getElementById('rd'); if (el) { closePop(); drawTrack(el); } }, 150); });
 
@@ -378,9 +393,26 @@ function fitStats() {
     if ([...row.querySelectorAll('.lr-st b')].some((b) => b.scrollWidth > b.clientWidth + 1)) row.classList.add('tight');
   }
 }
-export function learnAfter(p, tab) {
+// Прокрутка дороги к своему уроку (или к теме из «Всех модулей»). Сразу, до первого кадра (2.24.5): раньше прокрутка ждала
+// следующего шага, и на доли секунды был виден верх дороги — «другой экран», потом прыжок к уроку. Поэтому app.js теперь
+// прокручивает наверх ДО отрисовки, а не после.
+function roadScroll(el, target) {
+  const cur = el.querySelector('.rd-node.is-current') || el.querySelector('.rd-chest.is-ready') || el.querySelector('.rd-build') || el.querySelector('.rd-end') || [...el.querySelectorAll('.rd-node')].pop();
+  const t = target === 'current' || target === 'next' ? cur : document.getElementById(`rd-${target}`);
+  if (!t) return;
+  const r = t.getBoundingClientRect();
+  const head = document.querySelector('.rd-top')?.getBoundingClientRect().bottom || 0;
+  const y = window.scrollY + r.top - head - (window.innerHeight - head) * (target === 'current' || target === 'next' ? 0.36 : 0.12);
+  // после урока — плавно и только если следующий урок не виден
+  if (target === 'next') { if (r.top < head || r.bottom > window.innerHeight - 80) window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' }); }
+  else window.scrollTo(0, Math.max(0, y));
+}
+// still — перерисовка того же экрана (rerender в app.js сам возвращает прокрутку)
+// Шрифты ещё грузятся? Смотрим после разметки: она и запрашивает шрифты. Обычно они уже в телефоне — тогда второй раз не рисуем.
+const fontsLate = () => !!document.fonts && document.fonts.status !== 'loaded';
+export function learnAfter(p, tab, still = false) {
   fitStats();
-  document.fonts?.ready?.then(fitStats);
+  if (fontsLate()) document.fonts.ready.then(fitStats);
   if (tab === 'learn' && !p) rememberView('hub');
   if (tab === 'learn' && p === 'learn-road') rememberView('road');
   if (p !== 'learn-road') { road.pop = null; countUp(); return; }
@@ -388,25 +420,18 @@ export function learnAfter(p, tab) {
   if (!el) return;
   road.pop = null;
   drawTrack(el);
-  document.fonts?.ready?.then(() => { if (document.getElementById('rd') === el) drawTrack(el); });
+  if (fontsLate()) document.fonts.ready.then(() => { if (document.getElementById('rd') === el) drawTrack(el); });
   const target = road.target;
   road.target = null;
-  if (target) {
-    setTimeout(() => {
-      const cur = () => el.querySelector('.rd-node.is-current') || el.querySelector('.rd-chest.is-ready') || el.querySelector('.rd-build') || el.querySelector('.rd-end') || [...el.querySelectorAll('.rd-node')].pop();
-      const t = target === 'current' || target === 'next' ? cur() : document.getElementById(`rd-${target}`);
-      if (t) {
-        const r = t.getBoundingClientRect();
-        const head = document.querySelector('.rd-top')?.getBoundingClientRect().bottom || 0;
-        const y = window.scrollY + r.top - head - (window.innerHeight - head) * (target === 'current' || target === 'next' ? 0.36 : 0.12);
-        // после урока — плавно и только если следующий урок не виден
-        if (target === 'next') { if (r.top < head || r.bottom > window.innerHeight - 80) window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' }); }
-        else window.scrollTo(0, Math.max(0, y));
-      }
-      topLabel();
-      countUp();
-    }, 0);
-  } else { topLabel(); countUp(); }
+  if (target === 'next') {
+    // после урока: rerender сначала вернёт прежнюю прокрутку, а уже потом — плавно к следующему уроку
+    setTimeout(() => { roadScroll(el, target); topLabel(); countUp(); }, 0);
+  } else {
+    if (target) roadScroll(el, target);
+    else if (!still && road.y != null) window.scrollTo(0, road.y); // «Назад» на дорогу — туда, где были
+    topLabel();
+    countUp();
+  }
   if (road.just) setTimeout(() => { road.just = null; }, 1200);
 }
 
