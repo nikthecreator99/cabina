@@ -12,6 +12,8 @@ import { normPhone } from './phones.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { hasAvatar, avatarRights } from './avatar-edit.js';
 import { awardsStripHtml } from './awards.js';
+import { isGuest } from './auth.js';
+import { guestProfileHtml } from './guest.js';
 
 const CLASSES = ['3', '2', '1'];
 // Должность в профиле: для расчёта заработка важны только помощник и машинист, «Другая» — для поиска коллег
@@ -29,8 +31,9 @@ export function privacyOf(p = S.profile) {
   return { find: false, status: false, depot: false, avatar: photo === true, phone: false, ...pv };
 }
 
+// Гость (2.26): персонаж — с аккаунтом. Он не стирается, просто не показывается до входа.
 export function avatarHtml(p = S.profile, size = 96) {
-  if (hasAvatar(p)) return avatarSvg(normalizeAvatar(p.avatar, avatarRights()), { size, cls: 'ava-svg' });
+  if (hasAvatar(p) && !isGuest()) return avatarSvg(normalizeAvatar(p.avatar, avatarRights()), { size, cls: 'ava-svg' });
   return safePhoto(p.photo) ? `<img src="${esc(p.photo)}" alt="" width="${size}" height="${size}">`
     : initials(p.name) ? `<span class="ava-txt">${esc(initials(p.name))}</span>` : I.user;
 }
@@ -98,7 +101,9 @@ function statusHtml(st) {
 // Свои часы и поездки здесь не показываем (просьба Никиты, 2.19.1): они на главной и в статистике.
 // 2.22 (пример Никиты): персонаж слева, справа имя с ✎, должность, депо и стаж, телефон; статус — во всю ширину карточки.
 // Ниже — «Коллеги» и «Награды». Строки «Приватность профиля» с 2.21.2 нет (просьба Никиты: она есть в Настройках).
+// 2.26: без аккаунта — профиль гостя (guest.js): что даёт аккаунт и кнопки «Зарегистрироваться» / «Войти».
 export function renderProfile(colleagues = '') {
+  if (isGuest()) return guestProfileHtml();
   const p = S.profile;
   const st = profileStatus();
   const t = totalTenure(careerOf(p));
@@ -139,12 +144,13 @@ export function normDepot(v) {
 
 export function renderProfileEdit() {
   const p = S.profile;
-  return `${pageHead('Редактировать профиль', { back: true })}
-    <section class="profile-card">
+  const guest = isGuest(); // гостю — без персонажа (2.26): он с аккаунтом
+  return `${pageHead(guest ? 'Мои данные' : 'Редактировать профиль', { back: true })}
+    ${guest ? (p.photo ? '<button class="link-btn" data-act="photo-del">Удалить старое фото</button>' : '') : `<section class="profile-card">
       <button class="avatar big" id="pr-avatar" data-act="av-open" aria-label="${hasAvatar(p) ? 'Изменить персонажа' : 'Создать персонажа'}">${avatarHtml(p, 132)}<span class="ava-cam">${hasAvatar(p) ? I.edit : I.plus}</span></button>
       <div class="hint">${hasAvatar(p) ? 'Нажмите, чтобы изменить персонажа' : 'Создайте своего персонажа вместо фото'}</div>
       ${p.photo ? `<button class="link-btn" data-act="photo-del">${hasAvatar(p) ? 'Удалить старое фото' : 'Удалить фото'}</button>` : ''}
-    </section>
+    </section>`}
     <div class="panel pay-panel">
       <div class="pay-field"><label for="pr-name">Имя</label><input class="input" id="pr-name" maxlength="60" autocomplete="name" placeholder="Например, Иван" value="${esc(p.name)}"></div>
       <div class="pay-field"><div class="label">Должность</div>

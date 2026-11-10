@@ -249,22 +249,21 @@ test('администратор: «Идеи пользователей» без
   await context.close();
 });
 
-test('плашка «Кто из коллег сейчас в пути?» без аккаунта: от 5 поездок; «Не сейчас»; «Больше не показывать» убирает и строку в профиле', async () => {
-  const { context, page, errors } = await openApp(env);
-  await seed(page, { trips: trips(4) });
+test('плашка для гостя: с 3 поездок; зовёт наградами; «Зарегистрироваться» — сразу форма; «Не сейчас»; «Больше не показывать»', async () => {
+  const { context, page, errors } = await openApp(env, { guest: true });
+  await seed(page, { trips: trips(2) });
   await page.reload(); await page.waitForSelector('.screen');
   assert.equal(await page.locator('#signup-nag').count(), 0, 'мало поездок — не показываем');
-  // строка в профиле ведёт к аккаунту
-  await tab(page, 'profile');
-  assert.match(await text(page, '#col-teaser'), /Кто из коллег в пути\?/);
-  await page.locator('#col-teaser').click();
-  await page.waitForSelector('.screen[data-page=account]');
-  assert.match(await text(page, '.screen'), /видно, кто из коллег в пути или на отдыхе[\s\S]*пригласить коллег и предложить идею/);
-  await seed(page, { trips: trips(6).slice(4) });
-  await tab(page, 'home');
+  await seed(page, { trips: trips(4).slice(2) });
+  await tab(page, 'profile'); await tab(page, 'home');
   await page.locator('#signup-nag').waitFor();
-  assert.match(await text(page, '#signup-nag'), /Кто из коллег сейчас в пути\?[\s\S]*если коллеги сами показывают вам статус[\s\S]*Записи остаются в телефоне/);
+  // с 2.26: награды уже есть («Первая поездка» и др.) — зовём ими
+  assert.match(await text(page, '#signup-nag'), /У вас уже \d+ наград[аы]?[\s\S]*жд(ёт|ут) вас в аккаунте[\s\S]*поездки остаются в телефоне/);
   assert.ok(await fits(page));
+  await page.locator('[data-act=nag-signup]').click();
+  await page.waitForSelector('.screen[data-page=account] #acc-invite');
+  assert.match(await text(page, '.screen'), /Код приглашения · если есть/);
+  await page.locator('[data-act=back]').click();
   await page.locator('[data-act=nag-snooze]').click();
   await page.waitForFunction(() => !document.querySelector('#signup-nag'));
   await page.reload(); await page.waitForSelector('.screen');
@@ -279,8 +278,6 @@ test('плашка «Кто из коллег сейчас в пути?» без
   await page.locator('#signup-nag').waitFor();
   await page.locator('[data-act=nag-off]').click();
   await page.waitForFunction(() => !document.querySelector('#signup-nag'));
-  await tab(page, 'profile');
-  assert.equal(await page.locator('#col-teaser').count(), 0);
   assert.deepEqual(errors, []);
   await context.close();
 });

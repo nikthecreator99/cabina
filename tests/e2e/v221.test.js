@@ -261,7 +261,7 @@ test('вещи за приглашения: без аккаунта «Отпра
   await page.locator('[data-k=bg][data-v=beam]').click();
   await page.locator('.av-rwnote [data-act=av-invite]').click();
   await page.locator('.screen[data-page=invites]').waitFor();
-  assert.match(await text(page, '.screen'), /Нужен аккаунт CABINA/);
+  assert.match(await text(page, '.screen'), /Отправьте коллеге ссылку на CABINA[\s\S]*Вещи для персонажа за приглашения[\s\S]*с аккаунтом/);
   assert.deepEqual(errors, []);
   await context.close();
 });

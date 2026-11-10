@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, waitNoLayers, seed } from './helpers.js';
-import { ME, ANNA, OLEG, ready, openPrivacy, chooseAccess, openTeam, CUR } from './mock-colleagues.js';
+import { ME, ANNA, OLEG, ready, openPrivacy, chooseAccess, openTeam, CUR , passGate } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -46,6 +46,7 @@ test('Настройки аккаунта — вверху Настроек; в 
   // поиск: должность — любая, машинист или помощник
   await page.locator('.tab[data-tab=profile]').click();
   await page.locator('#col-find').click();
+  await passGate(page);
   assert.deepEqual(await page.locator('[data-act=col-role]').allInnerTexts(), ['Любая', 'Машинист', 'Помощник']);
   assert.deepEqual(realErrors(errors), []);
   await context.close();

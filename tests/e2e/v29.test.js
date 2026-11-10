@@ -155,9 +155,7 @@ test('регистрация: проверки формы, согласие, п�
   assert.equal(await page.locator('#acc-pass').getAttribute('type'), 'text');
   await page.locator('[data-act=acc-eye]').click();
   assert.equal(await page.locator('#acc-pass').getAttribute('type'), 'password');
-  await page.locator('#acc-submit').click();
-  assert.match(await errBox(page).innerText(), /Введите код приглашения/);
-  await page.locator('#acc-invite').fill('bad-code');
+  // 2.26: код приглашения — по желанию (SIGNUP_OPEN): без него форма не спорит
   await page.locator('#acc-submit').click();
   assert.match(await errBox(page).innerText(), /Отметьте согласие/);
   assert.equal(log.length, 0, 'пока форма не заполнена, на сервер ничего не уходит');
@@ -168,6 +166,10 @@ test('регистрация: проверки формы, согласие, п�
   assert.match(await errBox(page).innerText(), /ознакомились с политикой/);
   assert.equal(log.length, 0, 'без второй галочки на сервер ничего не уходит');
   await page.locator('#acc-policy-ok').check();
+  // сервер пока пускает только по приглашению — без кода честно говорим, где его взять
+  await page.locator('#acc-submit').click();
+  await page.waitForFunction(() => /только по приглашению\. Попросите код у коллеги/.test(document.getElementById('acc-err')?.innerText || ''));
+  await page.locator('#acc-invite').fill('bad-code');
   await page.locator('#acc-submit').click();
   await page.waitForFunction(() => /Код приглашения неверный/.test(document.getElementById('acc-err')?.innerText || ''));
   assert.equal(await page.locator('#acc-pass').inputValue(), 'Probnyj-parol-1', 'после ошибки сервера пароль не стирается');
@@ -175,7 +177,7 @@ test('регистрация: проверки формы, согласие, п�
   await page.locator('#acc-submit').click();
   await page.locator('.screen', { hasText: 'Мы отправили код на ivan@example.com' }).waitFor();
   const sent = log.filter((r) => r.path === '/auth/v1/signup');
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
   const last = sent.at(-1);
   assert.deepEqual(Object.keys(last.body).sort(), ['data', 'email', 'password']);
   assert.deepEqual(last.body.data, { consent: CONSENT_VERSION, invite: 'GOODCODE01', platform: 'web', version: VERSION });

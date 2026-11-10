@@ -228,3 +228,23 @@ test('функции приложения защищены от подмены �
     assert.equal(anon, 'f', `${name}: недоступна без входа`);
   }
 });
+
+// Шаг 8 (2.26): регистрацию можно открыть для всех — код приглашения тогда по желанию, но засчитывается пригласившему
+test('открытая регистрация: без кода можно, вписанный живой код погашается, чужой код не мешает', () => {
+  q(`update private.config set value = 'false' where key = 'invite_only'`);
+  try {
+    const a = signup('open1@example.test', { consent: CONSENT, platform: 'web' });
+    assert.ok(a.ok, a.err);
+    assert.deepEqual(q(`select document from public.consents where user_id = '${a.rows[0]}'`), [CONSENT]);
+    assert.ok(signup('open2@example.test', { consent: CONSENT, invite: 'NOSUCHCODE' }).ok, 'неверный код — не повод отказать');
+    const code = invite();
+    const b = signup('open3@example.test', { consent: CONSENT, invite: code });
+    assert.ok(b.ok, b.err);
+    assert.deepEqual(q(`select used_by from private.invites where code_hash = private.hash_code('${code}')`), [b.rows[0]], 'приглашение засчитано');
+    assert.deepEqual(q(`select raw_user_meta_data from auth.users where id = '${b.rows[0]}'`), ['{}'], 'код не хранится');
+    assert.match(signup('open4@example.test', { invite: invite() }).err, /consent required/, 'согласие обязательно и здесь');
+  } finally {
+    q(`update private.config set value = 'true' where key = 'invite_only'`);
+  }
+  assert.match(signup('open5@example.test', { consent: CONSENT }).err, /invite required/, 'закрыли — снова только по приглашению');
+});

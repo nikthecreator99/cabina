@@ -278,3 +278,13 @@ export async function chooseAccess(page, item, mode, names = []) {
   for (const n of names) await sh.locator('.pick-row', { hasText: n }).click();
   await sh.locator('[data-act=access-save]').click();
 }
+
+// 2.26: поиск коллег закрыт, пока человека самого нельзя найти. Пройти: «Меня можно найти» + отдельное согласие → форма поиска
+export async function passGate(page) {
+  await page.locator('#col-gate').waitFor();
+  await page.locator('#col-gate-rows [data-k=find]').click();
+  const s = page.locator('#layers .layer:not(.closing)').last();
+  await s.locator('#col-agree').check();
+  await s.locator('[data-act=col-agree-ok]').click();
+  await page.locator('#col-form').waitFor();
+}

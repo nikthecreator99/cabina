@@ -1,10 +1,10 @@
-// Экран «Настройки аккаунта» (Профиль → Настройки → «Настройки аккаунта»): регистрация по приглашению с согласием, вход, сброс пароля,
+// Экран «Настройки аккаунта» (Профиль → Настройки → «Настройки аккаунта»): регистрация (с 2.26 — для всех, код приглашения по желанию; SIGNUP_OPEN) с согласием, вход, сброс пароля,
 // «Мои данные на сервере» (посмотреть и скачать файлом), выход и удаление аккаунта; для администратора — статистика (только числа).
 // Аккаунт не обязателен: без него CABINA работает как раньше, записи из телефона на сервер не уходят.
 // С аккаунтом можно включить «Коллеги» (colleagues.js): тогда на сервер уходят карточка и статус — только по выбору человека.
 // Группа «Коллеги» (Приватность, «Выйти из „Коллег“») приходит из colleagues.js через app.js — без круговых импортов.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
-import { legalReady, consentHtml, policyHtml, APP_URL } from './legal.js';
+import { legalReady, consentHtml, policyHtml, APP_URL, SIGNUP_OPEN } from './legal.js';
 import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
   emailOk, normInvite, PASS_MIN, linkErrorText, savedInvite, forgetInvite } from './auth.js';
 import { notePremium } from './avatar-edit.js';
@@ -36,6 +36,8 @@ function pending() {
 
 // Открыли ссылку-приглашение (2.20): сразу форма «Создать аккаунт» с кодом из ссылки
 export function startSignup(code) { A.mode = 'signup'; A.invite = code; A.note = ''; A.keep = true; }
+// Кнопки «Зарегистрироваться» и «Войти» в профиле гостя и в напоминаниях (2.26): сразу нужная форма
+export function startAccount(mode) { if (session()) return; A.mode = mode === 'login' ? 'login' : 'signup'; A.note = ''; A.keep = true; setPending(false); }
 
 export function accountEnter() {
   if (A.keep) A.keep = false;
@@ -101,7 +103,7 @@ function formHtml() {
     case 'signup': return `<form class="panel pay-panel" id="acc-form" novalidate>
         ${field('acc-email', 'Почта', emailInput(), 'На неё придёт письмо для подтверждения. Лучше российская почта (Яндекс, Mail.ru).')}
         ${field('acc-pass', 'Придумайте пароль', passInput('new-password'), `Не меньше ${PASS_MIN} символов. Не берите пароль от почты или Госуслуг.`)}
-        ${field('acc-invite', 'Код приглашения', `<input class="input" id="acc-invite" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32" placeholder="Например, 7F3A9C21B4" value="${esc(A.invite || savedInvite())}">`, 'Сейчас идёт закрытое испытание: аккаунт создаётся только по приглашению. Код — в приглашении от коллеги.')}
+        ${field('acc-invite', SIGNUP_OPEN ? 'Код приглашения <span class="hint">· если есть</span>' : 'Код приглашения', `<input class="input" id="acc-invite" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32" placeholder="Например, 7F3A9C21B4" value="${esc(A.invite || savedInvite())}">`, SIGNUP_OPEN ? 'Если есть — коллеге, который пригласил, засчитается приглашение. Нет кода — оставьте пустым.' : 'Сейчас аккаунт создаётся только по приглашению. Код — в приглашении от коллеги.')}
         ${consentBox('acc-consent', 'Мне исполнилось 18 лет. Даю согласие на обработку моих персональных данных.', 'acc-consent-doc', I.shield, 'Прочитать согласие')}
         ${consentBox('acc-policy-ok', 'Я ознакомлен(а) с политикой обработки персональных данных CABINA.', 'acc-policy', I.book, 'Прочитать политику')}
       </form>${errBox}${submitBtn('Создать аккаунт')}${modeBtn('login', 'У меня уже есть аккаунт')}`;
@@ -128,7 +130,7 @@ function formHtml() {
       <div class="acc-docs"><button class="link-btn" data-act="acc-resend">Отправить код ещё раз</button>${modeBtn('login', 'Ко входу')}</div>`;
     default: return `${localNote}
       <div class="panel"><div class="row"><span class="ico" style="--c:var(--night)">${I.info}</span><div class="grow"><div class="t1">Зачем аккаунт</div>
-        <div class="t2">С аккаунтом видно, кто из коллег в пути или на отдыхе (если они сами вам показывают), можно пригласить коллег и предложить идею. Сейчас идёт закрытое испытание — по приглашению.</div></div></div></div>
+        <div class="t2">С аккаунтом видно, кто из коллег в пути или на отдыхе (если они сами вам показывают), можно пригласить коллег и предложить идею. Персонаж и награды — тоже с аккаунтом.${SIGNUP_OPEN ? '' : ' Сейчас — по приглашению коллеги.'}</div></div></div></div>
       <div class="acc-btns"><button class="btn btn-primary" data-act="acc-mode" data-mode="signup">Создать аккаунт</button>
         <button class="btn btn-ghost" data-act="acc-mode" data-mode="login">Войти</button></div>
       ${docsBtns}`;
@@ -215,6 +217,12 @@ function showMyData(data, ctx) {
 export async function accountClick(act, b, ctx) {
   if (!act.startsWith('acc-')) return false;
   switch (act) {
+    // «Зарегистрироваться» / «Войти» из профиля гостя и напоминаний (2.26)
+    case 'acc-start':
+      startAccount(b.dataset.mode);
+      ctx.go('account');
+      setTimeout(() => document.getElementById('acc-email')?.focus({ preventScroll: true }), 50);
+      break;
     case 'acc-mode':
       A.mode = b.dataset.mode; A.note = ''; setPending(false);
       ctx.rerender(); window.scrollTo(0, 0);
@@ -304,7 +312,7 @@ export async function accountSubmit(e, ctx) {
   if (A.mode === 'login' && !pass) { showError('Введите пароль.', 'acc-pass'); return true; }
   if (A.mode === 'signup') {
     A.invite = normInvite(val('acc-invite'));
-    if (!A.invite) { showError('Введите код приглашения.', 'acc-invite'); return true; }
+    if (!A.invite && !SIGNUP_OPEN) { showError('Введите код приглашения.', 'acc-invite'); return true; }
     if (!document.getElementById('acc-consent')?.checked) { showError('Отметьте согласие: без него аккаунт создать нельзя.'); document.getElementById('acc-consent')?.focus(); return true; }
     if (!document.getElementById('acc-policy-ok')?.checked) { showError('Отметьте, что ознакомились с политикой обработки данных.'); document.getElementById('acc-policy-ok')?.focus(); return true; }
   }
@@ -326,10 +334,15 @@ export async function accountSubmit(e, ctx) {
   if (!r) return true;
   if (!r.ok) {
     if (A.mode === 'login' && r.code === 'email_not_confirmed') { A.mode = 'sent'; A.note = 'Почта ещё не подтверждена.'; setPending(true); ctx.rerender(); return true; }
-    showError(r.error, A.mode === 'signup' && /приглашени/.test(r.error) ? 'acc-invite' : null);
+    // без кода, а сервер пускает только по приглашению (invite_only) — объясняем, где взять код
+    const noCode = A.mode === 'signup' && !A.invite && /приглашени/.test(r.error);
+    showError(noCode ? 'Сейчас аккаунт создаётся только по приглашению. Попросите код у коллеги, у которого есть CABINA.' : r.error,
+      A.mode === 'signup' && /приглашени/.test(r.error) ? 'acc-invite' : null);
     return true;
   }
   const signedIn = (text) => { A.mode = 'menu'; A.note = ''; setPending(false); toast(text); ctx.rerender(); window.scrollTo(0, 0); return accountEnter(); };
+  // только что создали аккаунт и вошли (2.26): app.js спросит «Показывать коллегам…?»
+  const fresh = (A.mode === 'signup' && r.signedIn) || A.mode === 'sent';
   if (A.mode === 'signup') { A.invite = ''; forgetInvite(); A.mode = r.signedIn ? 'menu' : 'sent'; }
   else if (A.mode === 'login') await signedIn('Вы вошли в аккаунт');
   else if (A.mode === 'reset') A.mode = 'reset-sent';
@@ -337,6 +350,7 @@ export async function accountSubmit(e, ctx) {
   else if (A.mode === 'newpass' || A.mode === 'reset-sent') await signedIn('Пароль изменён. Вы вошли в аккаунт');
   setPending(A.mode === 'sent' || A.mode === 'reset-sent');
   ctx.rerender(); window.scrollTo(0, 0);
+  if (fresh && session()) document.dispatchEvent(new CustomEvent('cabina:signed-up'));
   return true;
 }
 

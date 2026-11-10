@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, waitNoLayers, text } from './helpers.js';
-import { ME, ANNA, OLEG, mockServer, setProfile, ready, openPrivacy, openTeam, chooseAccess, CUR } from './mock-colleagues.js';
+import { ME, ANNA, OLEG, mockServer, setProfile, ready, openPrivacy, openTeam, chooseAccess, CUR, passGate } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -41,7 +41,7 @@ test('коллеги: новая редакция согласия, поиск, 
 
   // поиск
   await page.locator('.col-search').click();
-  await page.locator('#col-form').waitFor();
+  await passGate(page); // 2.26: искать может тот, кого самого можно найти
   await page.locator('#col-name').fill('ан');
   await page.locator('#col-submit').click();
   await page.locator('#col-err').getByText('не меньше 3 букв').waitFor();
@@ -63,7 +63,7 @@ test('коллеги: новая редакция согласия, поиск, 
   await toastHas(page, /Предложение отправлено/);
   await found.getByText('Ждёт ответа').waitFor();
   const card = srv.calls('save_card')[0].body;
-  assert.deepEqual(card, { p_name: 'Иван Тестовый', p_role: 'assistant', p_depot: null, p_avatar: null, p_searchable: false }, 'депо и персонаж не разрешены — не уходят');
+  assert.deepEqual(card, { p_name: 'Иван Тестовый', p_role: 'assistant', p_depot: null, p_avatar: null, p_searchable: true }, 'депо и персонаж не разрешены — не уходят');
   assert.deepEqual(srv.calls('offer_colleague')[0].body, { p_to: ANNA });
   const everything = JSON.stringify(srv.log);
   for (const secret of ['900', '111-22', '355', '2ЭС5К', '2402', 'Сосновка-депо']) assert.ok(!everything.includes(secret), `«${secret}» не ушло на сервер`);
@@ -210,14 +210,14 @@ test('«Меня можно найти»: отдельное согласие н
 });
 
 test('без аккаунта раздела нет и на сервер ничего не уходит; «Меня можно найти» просит аккаунт', async () => {
-  const { context, page, errors } = await openApp(env);
+  const { context, page, errors } = await openApp(env, { guest: true });
   const srv = await mockServer(context);
   await setProfile(page, { name: 'Иван Тестовый' });
   await tab(page, 'profile');
   await page.waitForTimeout(300);
   assert.equal(await page.locator('#col-entry').count(), 0, 'без аккаунта строки «Мои коллеги» нет');
-  assert.equal(await page.locator('.screen [data-page=account]:not(#col-teaser)').count(), 0, 'строки аккаунта в профиле больше нет');
-  assert.match(await text(page, '#col-teaser'), /Кто из коллег в пути\?/, 'вместо «Коллег» без аккаунта — одна строка-приглашение (2.20)');
+  assert.equal(await page.locator('.screen [data-page=account]').count(), 0, 'строки аккаунта в профиле больше нет');
+  assert.match(await text(page, '#gp-hero'), /Зарегистрироваться/, 'без аккаунта — профиль гостя (2.26)');
   await page.locator('[data-page=profile-edit]').click();
   assert.equal(await page.locator('#pr-privacy').count(), 0, 'приватность — не в профиле, а в настройках аккаунта');
   await page.locator('[data-act=back]').click();
@@ -285,6 +285,7 @@ test('экраны «Коллег» помещаются на 320 px в тёмн
     await waitNoLayers(page);
     await page.locator('[data-act=back]').click();
     await page.locator('#col-find').click();
+    if (await page.locator('#col-gate').count()) { assert.ok(await fits(), `поиск закрыт, ${theme}`); await passGate(page); }
     await page.locator('#col-name').fill('Анна');
     await page.locator('#col-submit').click();
     await page.locator('#col-found').waitFor();
