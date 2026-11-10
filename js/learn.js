@@ -259,7 +259,7 @@ const BIG = [['rd-s-lamp', 70, 110], ['rd-s-trees', 80, 84], ['rd-s-signal', 60,
 const SMALL = [['rd-s-bush', 56, 30], ['rd-s-rock', 48, 30], ['rd-s-grass', 30, 16], ['rd-s-bush', 56, 30], ['rd-s-grass', 30, 16], ['rd-s-rock', 48, 30]];
 function decosOf(el, box, W) {
   let out = '';
-  const put = (id, x, y, w, h) => { out += `<use href="#${id}" x="${x.toFixed(0)}" y="${y.toFixed(0)}" width="${w}" height="${h}"/>`; };
+  const put = (id, x, y, w, h) => { out += `<use href="#${id}"${id === 'rd-s-flag' ? ' class="rd-flag-use"' : ''} x="${x.toFixed(0)}" y="${y.toFixed(0)}" width="${w}" height="${h}"/>`; };
   const HALF = 56; // половина подставки «шайбы»
   const spots = [...el.querySelectorAll('.rd-row')].map((row) => row.querySelector('[data-rd-pt]')).filter(Boolean).map((b) => {
     const r = b.getBoundingClientRect();

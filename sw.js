@@ -1,6 +1,6 @@
 // Service worker CABINA: приложение работает без интернета после первого открытия.
 // Пользовательские данные (IndexedDB) service worker не трогает.
-const VERSION = 'cabina-v2.24.6';
+const VERSION = 'cabina-v2.24.7';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/boot.js', 'js/app.js', 'js/ui.js', 'js/store.js', 'js/db.js', 'js/calc.js', 'js/checks.js', 'js/remind.js', 'js/depot.js', 'js/table.js', 'js/calendar.js', 'js/forms.js', 'js/docs.js', 'js/backup.js', 'js/sun.js', 'js/tour.js', 'js/tours.js',
@@ -8,6 +8,7 @@ const SHELL = [
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-192.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png',
   'icons/awards/first.webp', 'icons/awards/s50.webp', 'icons/awards/s300.webp', 'icons/awards/s1000.webp', 'icons/awards/iron.webp', 'icons/awards/rocket.webp', 'icons/awards/heavy.webp', 'icons/awards/loco.webp', 'icons/awards/k10.webp', 'icons/awards/earth.webp', 'icons/awards/k100.webp', 'icons/awards/moon.webp', 'icons/awards/hours.webp', 'icons/awards/owl.webp', 'icons/awards/lark.webp', 'icons/awards/cabin.webp', 'icons/awards/wait.webp', 'icons/awards/pass.webp', 'icons/awards/newyear.webp', 'icons/awards/holiday.webp', 'icons/awards/account.webp', 'icons/awards/mentor.webp', 'icons/awards/idea.webp',
   'icons/learn/pte-course.webp',
+  'icons/learn/road-bg.webp',
   'data/calendar.json', 'fonts/onest.woff', 'fonts/unbounded.woff',
 ];
 

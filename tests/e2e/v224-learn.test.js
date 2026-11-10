@@ -356,24 +356,26 @@ test('экран «Обучение» без «Следующего урока»
   await context.close();
 });
 
-test('«Урок завершён!»: опыт, точность, время и монеты набегают от нуля примерно за полторы секунды; «Уменьшить движение» — сразу итог', async () => {
+test('«Урок завершён!»: опыт, точность и время набегают по очереди, светофор — красный, жёлтый, зелёный к концу времени; «Уменьшить движение» — сразу итог', async () => {
   const { context, page, errors } = await openApp(env);
   // как меняются числа итога: каждое новое значение и когда числа встали на место
   const record = () => page.evaluate(() => {
-    const seq = { xp: [], acc: [], time: [], coins: [], days: [], t0: 0, t1: 0, busy: false };
+    const seq = { xp: [], acc: [], time: [], coins: [], days: [], light: [], at: {}, t0: 0, t1: 0, busy: false };
     window.__seq = seq;
     const pick = { xp: '.lp-t-xp .lp-cnt', acc: '.lp-t-acc .lp-cnt', time: '.lp-t-time .lp-cnt', coins: '.lp-c-coin .lp-cnt', days: '.lp-c-fire .lp-cnt' };
     const mo = new MutationObserver(() => {
       const end = document.querySelector('.lp-end');
       if (!end || seq.t1) return;
       if (!seq.t0) { seq.t0 = performance.now(); seq.busy = end.getAttribute('aria-busy') === 'true'; }
+      const lg = end.dataset.light;
+      if (lg && seq.light[seq.light.length - 1] !== lg) { seq.light.push(lg); seq.at[lg] = performance.now(); }
       for (const [k, sel] of Object.entries(pick)) {
         const v = document.querySelector(sel)?.textContent;
-        if (v != null && seq[k][seq[k].length - 1] !== v) seq[k].push(v);
+        if (v != null && seq[k][seq[k].length - 1] !== v) { seq[k].push(v); if (seq[k].length === 2) seq.at[k + 'Start'] = performance.now(); }
       }
       if (end.classList.contains('is-counted')) { seq.t1 = performance.now(); mo.disconnect(); }
     });
-    mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+    mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'data-light'] });
   });
   await openLearn(page);
   await openRoad(page);
@@ -399,7 +401,14 @@ test('«Урок завершён!»: опыт, точность, время и 
   for (const k of ['xp', 'acc', 'time', 'coins']) assert.ok(rising(seq[k]), `${k} только растёт`);
   assert.ok(seq.busy, 'пока числа бегут, экран помечен «занят» для экранного диктора');
   const ms = seq.t1 - seq.t0;
-  assert.ok(ms >= 1100 && ms <= 2600, `итоги набегают за ${Math.round(ms)} мс`);
+  assert.ok(ms >= 2000 && ms <= 3700, `итоги набегают за ${Math.round(ms)} мс`);
+  // по очереди: опыт добежал — пошла точность, точность добежала — пошло время; светофор: красный → жёлтый → зелёный
+  assert.deepEqual(seq.light, ['red', 'yellow', 'green']);
+  assert.ok(seq.at.accStart >= seq.at.yellow - 40 && seq.at.yellow >= seq.at.xpStart + 300, 'жёлтый — когда опыт добежал, начинается точность');
+  assert.ok(seq.at.timeStart >= seq.at.accStart + 500, 'время идёт после точности');
+  assert.ok(seq.at.green >= seq.at.timeStart + 400, 'зелёный — когда время досчиталось');
+  assert.ok(seq.at.green >= seq.t1 - 700, 'зелёный горит к концу счёта');
+  assert.equal(await page.locator('.lp-end').getAttribute('data-light'), 'green');
   assert.equal(await page.locator('.lp-end').getAttribute('aria-busy'), null);
   assert.equal(await page.locator('.lp-end .lp-hit').count(), 5, 'каждое число в конце «щёлкает»');
   // в телефоне включено «Уменьшить движение» — сразу итог, без анимации
@@ -414,6 +423,7 @@ test('«Урок завершён!»: опыт, точность, время и 
   seq = await page.evaluate(() => window.__seq);
   assert.deepEqual([seq.xp, seq.acc, seq.coins], [['+15'], ['100%'], ['+15']]);
   assert.equal(seq.busy, false);
+  assert.deepEqual(seq.light, ['green'], 'без анимации — сразу зелёный');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -497,4 +507,35 @@ test('переход с 2.23.0 и резервная копия: опыт за �
   assert.equal(await two.page.evaluate(() => window.__pwned), undefined);
   assert.deepEqual(two.errors, []);
   await two.context.close();
+});
+
+test('дорога курса: в тёмной теме земля — картинка (ёлки, фонари по краям), в светлой — прежние рисунки; картинка грузится', async () => {
+  const { context, page, errors } = await openApp(env);
+  await seedLearn(page, { days: ['2026-10-19'], best: 1 }, 4);
+  for (const [theme, w] of [['dark', 390], ['dark', 320], ['light', 390]]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.evaluate(async (theme) => { const s = await import('./js/store.js'); await s.saveSettings({ theme }); }, theme);
+    await page.reload(); await page.waitForSelector('.screen');
+    await openLearn(page);
+    if (await page.locator('.lr-course-main').count()) await openRoad(page);
+    await page.waitForSelector('.rd-node.is-current');
+    const info = await page.evaluate(async () => {
+      const rd = document.querySelector('#rd');
+      const bg = getComputedStyle(rd).backgroundImage;
+      const shown = [...rd.querySelectorAll('.rd-decos use')].filter((u) => getComputedStyle(u).display !== 'none').map((u) => u.getAttribute('href'));
+      const ok = await new Promise((res) => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = 'icons/learn/road-bg.webp'; });
+      return { bg, shown, ok };
+    });
+    assert.equal(info.ok, 852, 'картинка фона грузится');
+    if (theme === 'dark') {
+      assert.match(info.bg, /road-bg\.webp/, `${theme} ${w}: фон-картинка`);
+      assert.deepEqual([...new Set(info.shown)], ['#rd-s-flag'], 'от рисунков — только флажок у начала пути');
+    } else {
+      assert.doesNotMatch(info.bg, /road-bg\.webp/);
+      assert.ok(info.shown.length > 5, 'в светлой теме рисунки на месте');
+    }
+    assert.ok(await fits(page), `${theme} ${w}: ничего не уезжает вбок`);
+  }
+  assert.deepEqual(errors, []);
+  await context.close();
 });

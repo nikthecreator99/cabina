@@ -58,18 +58,25 @@ export const PTE_BOOK = (w = 56) => svg('0 0 60 66', w, Math.round(w * 1.1), `<g
     <path class="bk-rail" d="M26.5 33v13M35.5 33v13M23.5 36h15M23.5 40h15M23.5 44h15"/>
   </g>`, 'pte-book');
 
-// ---------------------------------------------------------------- конец урока: путь уходит вдаль, светофор — зелёный
+// ---------------------------------------------------------------- конец урока: путь уходит вдаль, светофор: красный → жёлтый → зелёный
+// Какой огонь горит, решает атрибут data-light у .lp-end (red / yellow / green): learn-play.js меняет его, пока набегают числа.
 export const END_SCENE = svg('0 0 240 156', 240, 156, `
-  <defs><radialGradient id="es-glow"><stop offset="0" stop-color="#3ee06a" stop-opacity=".75"/><stop offset="1" stop-color="#3ee06a" stop-opacity="0"/></radialGradient></defs>
+  <defs>
+    <radialGradient id="es-glow-r"><stop offset="0" stop-color="#ff453a" stop-opacity=".75"/><stop offset="1" stop-color="#ff453a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="es-glow-y"><stop offset="0" stop-color="#ffc83a" stop-opacity=".75"/><stop offset="1" stop-color="#ffc83a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="es-glow-g"><stop offset="0" stop-color="#3ee06a" stop-opacity=".75"/><stop offset="1" stop-color="#3ee06a" stop-opacity="0"/></radialGradient>
+  </defs>
   <path class="es-hz" d="M24 104h66M138 104h80"/>
   <path class="es-tree" d="M58 104 66 84h-4l8-14h-3l7-12 7 12h-3l8 14h-4l8 20z"/>
   <path class="es-tree" d="M84 104l5-12h-3l5-8h-2l5-8 5 8h-2l5 8h-3l5 12z"/>
   <path class="es-sleep" d="M104 108h32M100 114h40M95 121h50M89 130h62M82 141h76"/>
   <path class="es-rail" d="M113 104 76 154M127 104l37 50"/>
   <path class="es-mast" d="M180 104V82"/><rect class="es-base" x="172" y="100" width="16" height="8" rx="1.5"/>
-  <circle class="es-glow" cx="180" cy="62" r="22"/>
+  <circle class="es-glow gl-r" cx="180" cy="26" r="22" fill="url(#es-glow-r)"/>
+  <circle class="es-glow gl-y" cx="180" cy="44" r="22" fill="url(#es-glow-y)"/>
+  <circle class="es-glow gl-g" cx="180" cy="62" r="22" fill="url(#es-glow-g)"/>
   <rect class="es-head" x="163" y="10" width="34" height="66" rx="11"/>
-  <circle class="es-off" cx="180" cy="26" r="8"/><circle class="es-off" cx="180" cy="44" r="8"/><circle class="es-on" cx="180" cy="62" r="8.4"/>
+  <circle class="es-lamp es-r" cx="180" cy="26" r="8.4"/><circle class="es-lamp es-y" cx="180" cy="44" r="8.4"/><circle class="es-lamp es-g" cx="180" cy="62" r="8.4"/>
 `, 'lp-scene');
 
 // ---------------------------------------------------------------- дорога: украшения по сторонам (символы для <use>)

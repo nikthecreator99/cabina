@@ -15,10 +15,13 @@ const OK_WORDS = ['Верно!', 'Правильно!', 'Точно!'];
 const QUOTE_KEY = 'cabina-learn-quote';
 const quoteOpen = () => { try { return localStorage.getItem(QUOTE_KEY) !== '0'; } catch { return true; } };
 const rememberQuote = (open) => { try { localStorage.setItem(QUOTE_KEY, open ? '1' : '0'); } catch { /* хранилище недоступно — не страшно */ } };
-// Итоги урока набегают: каждое [data-count] — от data-from до data-count за COUNT_MS (чуть быстрее в начале, мягко к концу —
-// счёт виден всё время), начиная через data-delay мс; дошло — короткий «щелчок» (.lp-hit). Всё вместе — около полутора секунд.
-// Когда числа на месте, у экрана появляется .is-counted. В телефоне включено «Уменьшить движение» — сразу итог, без анимации.
+// Итоги урока набегают по очереди (просьба Никиты 10.11.2026): сначала опыт, дошёл — точность, дошла — время. Каждое [data-count]
+// растёт от data-from до data-count за data-dur мс (чуть быстрее в начале, мягко к концу — счёт виден всё время), начиная через
+// data-delay мс; дошло — короткий «щелчок» (.lp-hit). Светофор: красный горит с начала, у числа с data-lit (первое из трёх) на
+// финише — жёлтый, у последнего (время) — зелёный. Когда числа на месте, у экрана появляется .is-counted. В телефоне включено
+// «Уменьшить движение» — сразу итог и зелёный свет, без анимации.
 const COUNT_MS = 1250;
+const SEQ = { start: 350, dur: 650, gap: 120 }; // начало счёта, длительность одного числа, пауза между числами (мс)
 const COUNT_FMT = {
   plus: (n) => `+${n}`,
   pct: (n) => `${n}%`,
@@ -28,12 +31,14 @@ const COUNT_FMT = {
 function countUp(root) {
   if (!root) return;
   const items = [...root.querySelectorAll('[data-count]')].map((el) => ({
-    el, from: +el.dataset.from || 0, to: +el.dataset.count || 0, delay: +el.dataset.delay || 0, fmt: COUNT_FMT[el.dataset.fmt] || String, shown: null, end: false,
+    el, from: +el.dataset.from || 0, to: +el.dataset.count || 0, delay: +el.dataset.delay || 0, dur: +el.dataset.dur || COUNT_MS,
+    lit: el.dataset.lit || '', fmt: COUNT_FMT[el.dataset.fmt] || String, shown: null, end: false,
   }));
+  const light = (c) => { if (c) root.dataset.light = c; };
   const done = () => { root.classList.add('is-counted'); root.removeAttribute('aria-busy'); };
   let still = false;
   try { still = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* нет такой настройки — с анимацией */ }
-  if (still || !items.length) { items.forEach((x) => { x.el.textContent = x.fmt(x.to); }); done(); return; }
+  if (still || !items.length) { items.forEach((x) => { x.el.textContent = x.fmt(x.to); }); light('green'); done(); return; }
   root.setAttribute('aria-busy', 'true');
   const t0 = performance.now();
   const step = (t) => {
@@ -41,10 +46,10 @@ function countUp(root) {
     let left = 0;
     for (const x of items) {
       if (x.end) continue;
-      const k = Math.min(1, Math.max(0, (t - t0 - x.delay) / COUNT_MS));
+      const k = Math.min(1, Math.max(0, (t - t0 - x.delay) / x.dur));
       const v = Math.round(x.from + (x.to - x.from) * (1 - (1 - k) ** 2));
       if (v !== x.shown) { x.shown = v; x.el.textContent = x.fmt(v); }
-      if (k >= 1) { x.end = true; x.el.classList.add('lp-hit'); } else left++;
+      if (k >= 1) { x.end = true; x.el.classList.add('lp-hit'); light(x.lit); } else left++;
     }
     if (left) requestAnimationFrame(step); else done();
   };
@@ -203,25 +208,32 @@ export function playLesson({ title, kicker, course = '', questions, finish, onCl
     const dd = (n) => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
     // число, которое набегает: от from до to, через delay мс после появления экрана
     // ширина — по итоговому числу, чтобы значок рядом не «ездил», пока число растёт
-    const cnt = (to, fmt, delay, from = 0) => `<b class="num lp-cnt" style="min-width:${COUNT_FMT[fmt](to).length}ch" data-from="${from}" data-count="${to}" data-fmt="${fmt}" data-delay="${delay}">${COUNT_FMT[fmt](from)}</b>`;
+    const cnt = (to, fmt, delay, from = 0, dur = SEQ.dur, lit = '') => `<b class="num lp-cnt" style="min-width:${COUNT_FMT[fmt](to).length}ch" data-from="${from}" data-count="${to}" data-fmt="${fmt}" data-delay="${delay}" data-dur="${dur}"${lit ? ` data-lit="${lit}"` : ''}>${COUNT_FMT[fmt](from)}</b>`;
+    // очередь: опыт (если урок сохранился) → точность → время; плитка появляется чуть раньше своего числа
+    const order = xp != null ? ['xp', 'acc', 'time'] : ['acc', 'time'];
+    const at = (k) => SEQ.start + order.indexOf(k) * (SEQ.dur + SEQ.gap);
+    const lit = (k) => (k === order[0] ? 'yellow' : k === 'time' ? 'green' : '');
+    const timeEnd = at('time') + SEQ.dur;
+    const appear = (k) => Math.max(0, at(k) - 250);
+    const chipAt = at('time'); // монеты и серия — одновременно со временем, чтобы к зелёному свету всё было на месте
     const chips = [];
-    if (coins > 0) chips.push(`<li class="lp-c-coin">${ART.nut(20)}<span>Монеты ${cnt(coins, 'plus', 200)}</span></li>`);
+    if (coins > 0) chips.push(`<li class="lp-c-coin">${ART.nut(20)}<span>Монеты ${cnt(coins, 'plus', chipAt, 0, 600)}</span></li>`);
     if (news?.restored) chips.push(`<li class="lp-c-fire on">${ART.flame(20)}<span>Серия вернулась: ${dd(news.streak)}!</span></li>`);
     else if (news) {
       const from = news.extended ? Math.max(0, Math.min(news.streak, news.streakBefore || 0)) : news.streak;
-      chips.push(`<li class="lp-c-fire${news.streak ? ' on' : ''}">${ART.flame(20)}<span>Серия: ${cnt(news.streak, 'days', 200, from)}${news.extended ? ' <em>+1</em>' : ''}</span></li>`);
+      chips.push(`<li class="lp-c-fire${news.streak ? ' on' : ''}">${ART.flame(20)}<span>Серия: ${cnt(news.streak, 'days', chipAt, from, 600)}${news.extended ? ' <em>+1</em>' : ''}</span></li>`);
     }
     if (news?.topicDone) chips.push(`<li class="lp-c-ok">${small(I.check, 18)}<span>Тема «${esc(title)}» пройдена</span></li>`);
     if (news?.freezesGot) chips.push(`<li class="lp-c-ice">${ART.snow(18)}<span>+${news.freezesGot} ${plural(news.freezesGot, 'заморозка', 'заморозки', 'заморозок')} за серию · в запасе ${news.freezes}</span></li>`);
-    const tile = (cls, label, icon, value, extra = '') => `<div class="lp-tile ${cls}"><small>${label}</small><span class="lp-tile-v">${icon}${value}</span>${extra}</div>`;
-    main.innerHTML = `<div class="lp-end">
+    const tile = (cls, k, label, icon, value, extra = '') => `<div class="lp-tile ${cls}" style="--t:${appear(k)}ms"><small>${label}</small><span class="lp-tile-v">${icon}${value}</span>${extra}</div>`;
+    main.innerHTML = `<div class="lp-end" data-light="red" style="--chip:${chipAt}ms;--rec:${timeEnd + 100}ms">
       ${END_SCENE}
       <h2>Урок завершён!</h2>
       <p class="lp-end-sub">${sub}</p>
       <div class="lp-tiles${xp != null ? '' : ' two'}">
-        ${xp != null ? tile('lp-t-xp', 'Очки опыта', ART.bolt(26), cnt(xp, 'plus', 0)) : ''}
-        ${tile('lp-t-acc', 'Точность', ART.target(26), cnt(acc, 'pct', 120))}
-        ${tile('lp-t-time', 'Время', ART.watch(26), cnt(sec, 'time', 240), news?.record ? '<span class="lp-rec">Рекорд!</span>' : '')}
+        ${xp != null ? tile('lp-t-xp', 'xp', 'Очки опыта', ART.bolt(26), cnt(xp, 'plus', at('xp'), 0, SEQ.dur, lit('xp'))) : ''}
+        ${tile('lp-t-acc', 'acc', 'Точность', ART.target(26), cnt(acc, 'pct', at('acc'), 0, SEQ.dur, lit('acc')))}
+        ${tile('lp-t-time', 'time', 'Время', ART.watch(26), cnt(sec, 'time', at('time'), 0, SEQ.dur, lit('time')), news?.record ? '<span class="lp-rec">Рекорд!</span>' : '')}
       </div>
       ${chips.length ? `<ul class="lp-chips">${chips.map((c, i) => c.replace('<li ', `<li style="--i:${i}" `)).join('')}</ul>` : ''}
       ${news ? '' : '<p class="hint warn">Не удалось сохранить прогресс в телефоне. Попробуйте пройти урок ещё раз.</p>'}
