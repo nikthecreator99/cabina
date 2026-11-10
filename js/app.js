@@ -1,6 +1,6 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, attachReorder, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
-import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo, EXTRA_KEYS, extraOrder, TEXT_SIZES, textSize } from './store.js';
+import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, tripNow, refreshLive, myPay, overRestByTrip, saveBackupInfo, EXTRA_KEYS, extraOrder, TEXT_SIZES, textSize } from './store.js';
 import { monthSummary, normSoFar, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData, normWeek } from './calendar.js';
 import { openTripForm, openDayOffEdit, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
@@ -43,7 +43,7 @@ import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, s
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
 
-export const VERSION = '2.26.1';
+export const VERSION = '2.26.2';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -256,8 +256,10 @@ function renderHome() {
   const absCount = sum.monthAbs.length;
   const rest = isCurrent ? currentRest(now) : null;
   const turn = isCurrent ? turnaroundNow(now) : null; // отдых в пункте оборота: положенный → 100 % → переотдых (2.24.8)
-  const lt = isCurrent ? liveTrip() : null;
-  const pend = lt && isPending(lt, now) ? lt : null;
+  // поездка важнее отдыха (2.26.2): идёт или скоро явка — плашки отдыха после прошлой поездки нет (currentRest и turnaroundNow — null)
+  const cur = isCurrent ? tripNow(now) : null;
+  const lt = cur?.trip || null;
+  const pend = cur?.soon ? lt : null;
   const trips = [...sum.monthTrips].sort((a, b) => (isLive(b) - isLive(a)) || statsOf(b).start - statsOf(a).start);
   const mk = sum.mk;
 

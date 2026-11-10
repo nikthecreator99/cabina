@@ -1,5 +1,5 @@
 // Отдых: дома отдыха, отдых в пункте оборота, «На очередь», полный (домашний) отдых.
-import { S, statsOf, isLive, legEnds, stationKey, sameSt } from './store.js';
+import { S, statsOf, isLive, legEnds, stationKey, sameSt, tripNow } from './store.js';
 import { MIN, turnaroundRest, homeRestMulti, tripStats, legsOf } from './calc.js';
 
 export { stationKey, sameSt };
@@ -108,9 +108,11 @@ export function chosenRest(trip, pool = S.trips) {
   return { kind: 'turnaround', label: 'Отдых в пункте оборота', house, until: r.until, rest: r.rest };
 }
 
-// Последняя законченная поездка, если нет поездки «в пути» и «ждёт явки»
-function lastFinished(now) {
-  if (S.trips.some(isLive)) return null;
+// Последняя законченная поездка, если нет поездки «в пути», «ждёт явки» и записанной заранее (tripNow):
+// поездка важнее отдыха после прошлой (2.26.2, просьба Никиты). Выбор отдыха прошлой поездки не стирается —
+// после новой поездки действует отдых, выбранный уже после неё.
+export function lastFinished(now) {
+  if (tripNow(now)) return null;
   let last = null;
   let lastEnd = -Infinity;
   for (const t of S.trips) { const st = statsOf(t); if (st.end <= now && st.end > lastEnd) { last = t; lastEnd = st.end; } }
@@ -148,12 +150,16 @@ export function turnaroundNow(now) {
 }
 
 // Выходные (выбор «Пойти на выходной» после поездки): [{ trip, s, e }] в мс — для календаря и статуса
+// Вызвали раньше — выходной заканчивается с явкой на следующую поездку (2.26.2: поездка важнее выходного).
 export function dayOffIntervals(pool = S.trips) {
   const out = [];
   for (const t of pool) {
     if (t.restType !== 'home' || t.homeChoice !== 'dayOff' || isLive(t)) continue;
     const st = statsOf(t);
-    if (Number.isFinite(st.end)) out.push({ trip: t, s: st.end, e: dayOffUntil(st.end, t) });
+    if (!Number.isFinite(st.end)) continue;
+    let e = dayOffUntil(st.end, t);
+    for (const o of pool) { const s = statsOf(o).start; if (o !== t && s >= st.end && s < e) e = s; }
+    if (e > st.end) out.push({ trip: t, s: st.end, e });
   }
   return out;
 }

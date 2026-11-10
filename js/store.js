@@ -1,6 +1,6 @@
 // Состояние приложения в памяти + сохранение в IndexedDB.
 import * as db from './db.js';
-import { tripStats, parseLocal, MIN, legsOf, hasLegs } from './calc.js';
+import { tripStats, parseLocal, MIN, legsOf, hasLegs, PENDING_MAX } from './calc.js';
 import { payCfg, overRestIntervals } from './pay.js';
 import { emptyLearn, normalizeLearn } from './learn-state.js';
 import { setNormWeek, normWeekOf } from './calendar.js';
@@ -80,6 +80,22 @@ export function overRestByTrip() {
 export const liveTrip = () => S.trips.find(isLive) || null;
 // Поездка без окончания, начало которой ещё не наступило: «Ждёт явки»
 export const isPending = (t, now = nowLocal()) => isLive(t) && parseLocal(t.start) > now;
+
+// Поездка, которая идёт сейчас или вот-вот начнётся (2.26.2, просьба Никиты: статус поездки важнее любого отдыха).
+// Кроме «в пути» и «ждёт явки» — и поездка, записанная сразу с окончанием: идёт сейчас (явка прошла, окончание впереди)
+// или явка в ближайшие 3 суток. { trip, soon } или null; soon — явка ещё впереди.
+export function tripNow(now = nowLocal()) {
+  const live = liveTrip();
+  if (live) return { trip: live, soon: isPending(live, now) };
+  let next = null;
+  for (const t of S.trips) {
+    const st = statsOf(t);
+    if (!Number.isFinite(st.start) || !Number.isFinite(st.end)) continue;
+    if (st.start <= now && now < st.end) return { trip: t, soon: false };
+    if (st.start > now && st.start - now <= PENDING_MAX * MIN && (!next || st.start < statsOf(next).start)) next = t;
+  }
+  return next ? { trip: next, soon: true } : null;
+}
 
 // Статистика поездки. Поездка «в пути» пересчитывается раз в минуту до текущего момента.
 export function statsOf(t) {

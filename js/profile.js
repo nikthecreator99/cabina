@@ -3,10 +3,10 @@
 // «Приватность» с 2.16 — в Настройках аккаунта (colleagues.js): там же и кому из коллег что видно.
 // С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
 import { I, esc, small, pageHead, toast, confirmDialog, infoDialog, whenShort, dayMonth } from './ui.js';
-import { S, saveProfile, nowLocal, liveTrip, isPending, statsOf, routeOf, legAt, legEnds, legRoute } from './store.js';
+import { S, saveProfile, nowLocal, tripNow, statsOf, routeOf, legAt, legEnds, legRoute } from './store.js';
 import { dateKeyOf, parseLocal, hasLegs } from './calc.js';
 import { ROLES, OVERREST_MAX } from './pay.js';
-import { currentRest, dayOffIntervals, chosenRest, routeEnds } from './rest.js';
+import { currentRest, lastFinished, chosenRest, routeEnds } from './rest.js';
 import { careerOf, careerSub, totalTenure, tenureText } from './career.js';
 import { normPhone } from './phones.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
@@ -44,25 +44,27 @@ const roleLine = (p) => (ROLES[p.role] ? ROLES[p.role] + (p.role === 'driver' &&
 // statusFacts — что происходит (без текста); из этого строится строка в профиле и то, что увидят коллеги (colleagues.js).
 // null — пока нечего показать. Причину отвлечения статус не называет: больничный — это сведения о здоровье.
 export function statusFacts(now = nowLocal()) {
-  const live = liveTrip();
-  if (live && isPending(live, now)) return { kind: 'soon', trip: live, start: statsOf(live).start };
+  // поездка важнее любого отдыха (2.26.2, просьба Никиты): «Скоро явка» и «В пути» — и у поездки, записанной сразу с окончанием
+  const cur = tripNow(now);
+  if (cur?.soon) return { kind: 'soon', trip: cur.trip, start: statsOf(cur.trip).start };
   // сменили локомотив — показываем плечо, по которому едут сейчас (2.19.7)
-  if (live) return { kind: 'trip', trip: live, start: statsOf(live).start, leg: legAt(live, now) };
+  if (cur) return { kind: 'trip', trip: cur.trip, start: statsOf(cur.trip).start, leg: legAt(cur.trip, now) };
   const today = dateKeyOf(now);
   const abs = S.absences.find((a) => a.start <= today && a.end >= today);
-  if (abs) return { kind: 'abs', end: abs.end };
-  const off = dayOffIntervals().find((x) => x.s <= now && now < x.e);
-  if (off) return { kind: 'dayoff', until: off.e, tripId: off.trip.id };
-  if (!S.trips.length) return null;
-  // после поездки с отдыхом в пункте оборота: «На отдыхе», а когда отдых вышел — «Жду явку» (до 48 ч)
-  let last = null;
-  for (const t of S.trips) { const st = statsOf(t); if (st.end <= now && (!last || st.end > statsOf(last).end)) last = t; }
-  if (last?.restType === 'turnaround') {
+  // после поездки с отдыхом в пункте оборота: «На отдыхе», а когда отдых вышел — «Жду явку» (до 48 ч).
+  // Это тоже статус поездки: он важнее выходного и полного отдыха после прошлых поездок, а отвлечения —
+  // если поездка была уже во время него (2.26.2)
+  const last = lastFinished(now);
+  if (last?.restType === 'turnaround' && (!abs || dateKeyOf(statsOf(last).end) >= abs.start)) {
     const r = chosenRest(last);
     if (r && now < r.until) return { kind: 'rest', house: r.house || '', until: r.until };
     if (r && now - statsOf(last).end <= OVERREST_MAX) return { kind: 'wait', house: r.house || '' };
   }
+  if (abs) return { kind: 'abs', end: abs.end };
+  // отдых после последней поездки (выходной, на очереди, полный); у прошлых поездок он уже не действует
   const rest = currentRest(now);
+  if (rest?.kind === 'dayOff') return { kind: 'dayoff', until: rest.until, tripId: rest.trip.id };
+  if (!S.trips.length) return null;
   // полный отдых (2.21.2) — как выходной: нажатием можно поправить окончание
   const fullId = rest && (rest.kind === 'full' || rest.kind === 'fullOff') ? rest.trip.id : null;
   return { kind: 'between', rest: rest ? { kind: rest.kind, label: rest.label, until: rest.until } : null, ...(fullId ? { tripId: fullId } : {}) };
