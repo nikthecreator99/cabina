@@ -1,8 +1,9 @@
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
-import { I, esc, openLayer, closeLayer, sheet, confirmDialog, infoDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe } from './ui.js';
+import { I, esc, openLayer, closeLayer, sheet, confirmDialog, infoDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe, plural, small } from './ui.js';
 import {
   S, statsOf, nowLocal, routeText, routeOf, knownTypes, notesFor, locoKey, locoLabel, normNum, isLive, isPending, myPay, onChange, offChange,
   saveTrip, deleteTrip, saveAbsence, deleteAbsence, saveRoute, deleteRoute, saveNote, deleteNote, timeNorms, legEnds, stationsOf, locosOf, usesRoute,
+  legRoute, segOf, isWhole, stationsList, sectionText, saveSection, legKm, STATIONS_MAX,
 } from './store.js';
 import {
   tripStats, validateTrip, parseLocal, fmtLocal, fmtDur, fmtHours, turnaroundRest,
@@ -12,11 +13,11 @@ import { normDay } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restEndOf, HOME_PICKS } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub, vacationPay, VAC_MIN_MONTHS } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
-import { openReceive } from './share.js';
+import { openReceive, sectionFor } from './share.js';
 import { openRemind } from './remind.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
 import { tripOverlap, tripAbsences, absenceTrips, tripLength, LONG_TRIP_MIN } from './checks.js';
-import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour } from './tours.js';
+import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour, sectionPickTour } from './tours.js';
 
 export { computeHomeRest };
 
@@ -202,6 +203,7 @@ export function openTripForm(tripId) {
   const F = {
     routeId: base.routeId && S.routes.some((r) => r.id === base.routeId) ? base.routeId : null,
     routeLabel: base.routeLabel || '',
+    stFrom: base.stFrom || '', stTo: base.stTo || '', // часть участка (2.25)
     sd: base.start ? base.start.slice(0, 10) : today,
     st: base.start ? base.start.slice(11, 16) : '',
     ed: base.end ? base.end.slice(0, 10) : (base.start ? base.start.slice(0, 10) : today),
@@ -216,6 +218,7 @@ export function openTripForm(tripId) {
     legs: (Array.isArray(base.legs) ? base.legs : []).slice(0, LEGS_MAX).map((l) => ({
       id: l.id || uid(), sd: String(l.start || '').slice(0, 10), st: String(l.start || '').slice(11, 16),
       routeId: l.routeId && S.routes.some((r) => r.id === l.routeId) ? l.routeId : null, routeLabel: l.routeLabel || '',
+      stFrom: l.stFrom || '', stTo: l.stTo || '',
       locoType: l.locoType || '', locoNumber: l.locoNumber || '',
       weight: l.weight ? String(l.weight) : '', axles: l.axles ? String(l.axles) : '', length: l.length ? String(l.length) : '', trainOpen: !!hasTrain(l),
     })),
@@ -241,7 +244,7 @@ export function openTripForm(tripId) {
     const d = {
       ...base,
       dayOffMin: dayOff,
-      routeId: F.routeId, routeLabel: F.routeId ? routeText(S.routes.find((r) => r.id === F.routeId)) : F.routeLabel,
+      ...secFields(F),
       start: at(F.sd, F.st),
       end,
       // пассажиром без окончания: пока поездка «в пути», едут сейчас; у законченной поездки — до её окончания
@@ -254,7 +257,7 @@ export function openTripForm(tripId) {
       }),
       legs: F.legs.map((l) => ({
         id: l.id, start: at(l.sd, l.st),
-        routeId: l.routeId, routeLabel: l.routeId ? routeText(S.routes.find((r) => r.id === l.routeId)) : l.routeLabel,
+        ...secFields(l),
         locoType: l.locoType.trim(), locoNumber: normNum(l.locoNumber),
         weight: posInt(l.weight, 20000), axles: posInt(l.axles, 2000), length: posInt(l.length, 1000),
       })),
@@ -266,6 +269,8 @@ export function openTripForm(tripId) {
       restType: F.restType, homeRest, homeChoice,
     };
     if (!d.legs.length) delete d.legs;
+    if (!d.stFrom) { delete d.stFrom; delete d.stTo; }
+    for (const l of d.legs || []) if (!l.stFrom) { delete l.stFrom; delete l.stTo; }
     // своё окончание полного отдыха (2.21.2) живёт, пока выбор отдыха и поездки для расчёта те же
     if (homeChoice !== base.homeChoice || !['full', 'fullOff'].includes(homeChoice) || JSON.stringify(homeRest?.ids || []) !== JSON.stringify(base.homeRest?.ids || [])) delete d.restEndMin;
     return d;
@@ -301,9 +306,8 @@ export function openTripForm(tripId) {
   const body = `
     ${existing ? '<div class="summary-top" id="tf-summary"></div>' : `<button class="btn btn-ghost btn-sm recv-btn" type="button" data-act="tf-receive">${I.qr} Получить поездки от напарника</button>`}
     <div class="field">
-      <div class="label" id="tf-route-cap">Маршрут <span class="opt">· необязательно</span></div>
+      <div class="label" id="tf-route-cap">Участок <span class="opt">· необязательно</span></div>
       <button class="pick" type="button" data-act="pick-route">${I.route}<span class="grow" id="tf-route-label"></span>${I.right}</button>
-      <div class="quick" id="tf-route-quick"></div>
     </div>
     <div class="field">
       <label for="tf-sd">Начало поездки</label>
@@ -382,12 +386,8 @@ export function openTripForm(tripId) {
   $(el, '#tf-rn').value = F.routeNo;
 
   function renderRoute() {
-    const r = F.routeId && S.routes.find((x) => x.id === F.routeId);
-    const label = r ? routeText(r) : F.routeLabel;
-    $(el, '#tf-route-label').innerHTML = label ? esc(label) : '<span class="ph">Выберите маршрут</span>';
-    const recent = recentRoutes(5);
-    $(el, '#tf-route-quick').innerHTML = recent.map((x) => `<button type="button" class="qchip" data-route="${esc(x.id)}" aria-pressed="${x.id === F.routeId}">${esc(routeText(x))}</button>`).join('');
-    $(el, '#tf-route-quick').hidden = !recent.length;
+    // 2.25 (Никита): участок выбирается только в окне — без «последних» под полем
+    $(el, '#tf-route-label').innerHTML = pickLabelHtml(F);
     renderLegsParts(); // подсказки маршрута второго локомотива зависят от первого
   }
   function renderEndHint() {
@@ -423,20 +423,17 @@ export function openTripForm(tripId) {
     if (!box.querySelector('#tf-weight')) setHTML(box, `<div class="train-row">${f('weight', 'Вес, т', '6000', 6)}${f('axles', 'Оси', '280', 4)}${f('length', 'Длина, усл. ваг.', '71', 4)}</div>`);
   }
   // ---- смена локомотива (2.19.7): карточки «Второй локомотив», «Третий…» ----
-  const legRouteText = (l) => { const r = l.routeId && S.routes.find((x) => x.id === l.routeId); return r ? routeText(r) : l.routeLabel; };
-  // откуда и куда ехал предыдущий локомотив — от этого подсказки маршрута следующего
-  const prevEnds = (i) => legEnds(i ? F.legs[i - 1] : { routeId: F.routeId, routeLabel: F.routeLabel });
+  // откуда и куда ехал предыдущий локомотив — от этого подсказка «обратно» у следующего
+  const prevLeg = (i) => (i ? F.legs[i - 1] : F);
+  const prevEnds = (i) => legEnds(prevLeg(i));
+  // 2.25: под полем участка — только «Обратно: Б → А» (тот же участок в обратную сторону), без «последних»
   function legQuick(i) {
     const prev = prevEnds(i);
-    const out = [];
-    if (prev) {
-      // маршруты от станции, где сменили локомотив; обратный — первым, а если его ещё нет — предлагаем создать
-      const from = S.routes.filter((r) => sameSt(r.from, prev.to)).sort((a, b) => Number(sameSt(b.to, prev.from)) - Number(sameSt(a.to, prev.from)));
-      if (!from.some((r) => sameSt(r.to, prev.from)) && !sameSt(prev.from, prev.to)) out.push({ rev: true, label: `${prev.to} → ${prev.from}` });
-      for (const r of from) out.push({ id: r.id, label: routeText(r) });
-    }
-    for (const r of recentRoutes(6)) if (!out.some((x) => x.id === r.id)) out.push({ id: r.id, label: routeText(r) });
-    return out.slice(0, 5);
+    const l = F.legs[i];
+    if (!prev || sameSt(prev.from, prev.to)) return [];
+    const cur = legEnds(l);
+    if (cur && sameSt(cur.from, prev.to) && sameSt(cur.to, prev.from)) return [];
+    return [{ rev: true, label: `Обратно: ${prev.to} → ${prev.from}` }];
   }
   const legTypes = types.slice(0, 6);
   const trainField = (k, label, ph, max, i, v) => `<div><label for="tf-${k}-${i}" class="mini-label">${label}</label><input class="input" id="tf-${k}-${i}" data-lf="${k}" inputmode="numeric" maxlength="${max}" autocomplete="off" placeholder="${ph}" value="${esc(v)}"></div>`;
@@ -446,7 +443,7 @@ export function openTripForm(tripId) {
         <button type="button" class="icon-btn danger" data-act="del-leg" aria-label="Убрать: ${LEG_NAMES[i].toLowerCase()} локомотив">${I.trash}</button></div>
       <div class="mini-label">Когда сменили локомотив</div>
       <div class="dt"><input type="date" class="input" data-lf="sd" value="${esc(l.sd)}" aria-label="Дата смены локомотива"><input type="time" class="input" data-lf="st" value="${esc(l.st)}" aria-label="Время смены локомотива"></div>
-      <div class="mini-label">Маршрут <span class="opt">· необязательно</span></div>
+      <div class="mini-label">Участок <span class="opt">· необязательно</span></div>
       <button class="pick" type="button" data-act="leg-route">${I.route}<span class="grow" data-leg-route></span>${I.right}</button>
       <div class="quick" data-leg-quick></div>
       <div class="two leg-loco">
@@ -463,12 +460,10 @@ export function openTripForm(tripId) {
   function renderLegParts(i) {
     const card = legCard(i); const l = F.legs[i];
     if (!card || !l) return;
-    const label = legRouteText(l);
-    card.querySelector('[data-leg-route]').innerHTML = label ? esc(label) : '<span class="ph">Выберите маршрут</span>';
+    card.querySelector('[data-leg-route]').innerHTML = pickLabelHtml(l);
     const q = legQuick(i);
     const qb = card.querySelector('[data-leg-quick]');
-    setHTML(qb, q.map((x) => (x.rev ? `<button type="button" class="qchip" data-lrev="1">+ ${esc(x.label)}</button>`
-      : `<button type="button" class="qchip" data-lroute="${esc(x.id)}" aria-pressed="${x.id === l.routeId}">${esc(x.label)}</button>`)).join(''));
+    setHTML(qb, q.map((x) => `<button type="button" class="qchip" data-lrev="1">${esc(x.label)}</button>`).join(''));
     qb.hidden = !q.length;
     card.querySelectorAll('[data-ltype]').forEach((b) => b.setAttribute('aria-pressed', String(locoKey(b.dataset.ltype, '') === locoKey(l.locoType, ''))));
     const notes = l.locoType.trim() && normNum(l.locoNumber) ? notesFor(l.locoType, l.locoNumber).filter((n) => n.tripId !== base.id) : [];
@@ -483,7 +478,7 @@ export function openTripForm(tripId) {
   // с карточками подписи первого локомотива уточняются: «Тип первого локомотива»
   function renderLegLabels() {
     const many = F.legs.length > 0;
-    setHTML($(el, '#tf-route-cap'), `${many ? 'Маршрут первого локомотива' : 'Маршрут'} <span class="opt">· необязательно</span>`);
+    setHTML($(el, '#tf-route-cap'), `${many ? 'Участок первого локомотива' : 'Участок'} <span class="opt">· необязательно</span>`);
     $(el, '#tf-lt-cap').textContent = many ? 'Тип первого локомотива' : 'Тип локомотива';
     $(el, '#tf-ln-cap').textContent = many ? 'Номер первого локомотива' : 'Номер локомотива';
   }
@@ -508,25 +503,25 @@ export function openTripForm(tripId) {
     const l = F.legs[i];
     if (!l) return;
     const changed = () => { renderLegsParts(); refreshAll(); };
-    if (b.dataset.lroute) { l.routeId = b.dataset.lroute; l.routeLabel = ''; changed(); return; }
     if (b.dataset.lrev) {
-      // обратный маршрут: создаём с тем же расстоянием (нормы веса и длины у обратного свои — не копируем)
+      // обратно (2.25): тот же участок в обратную сторону; без участка — свой участок с этими станциями или новый
       const p = prevEnds(i);
       if (!p) return;
-      let r = S.routes.find((x) => sameSt(x.from, p.to) && sameSt(x.to, p.from));
-      if (!r) {
-        const src = S.routes.find((x) => x.id === (i ? F.legs[i - 1].routeId : F.routeId));
-        r = { id: uid(), from: p.to, to: p.from, distanceKm: src?.distanceKm || null, createdAt: Date.now() };
+      const pl = prevLeg(i);
+      let f = pl.routeId && S.routes.some((x) => x.id === pl.routeId) ? { routeId: pl.routeId, stFrom: p.to, stTo: p.from } : sectionFor(p.to, p.from);
+      if (!f) {
+        const r = { id: uid(), from: p.to, to: p.from, distanceKm: null, createdAt: Date.now() };
         await saveRoute(r);
+        f = { routeId: r.id };
       }
-      l.routeId = r.id; l.routeLabel = ''; changed(); return;
+      setSec(l, f); changed(); return;
     }
     if (b.dataset.ltype) { l.locoType = b.dataset.ltype; card.querySelector('[data-lf=locoType]').value = l.locoType; renderLegParts(i); return; }
     const act = b.dataset.act;
     if (act === 'del-leg') { F.legs.splice(i, 1); renderLegs(); refreshAll(); }
     else if (act === 'leg-route') {
-      const res = await pickRoute(l.routeId);
-      if (res !== undefined) { l.routeId = res; if (!res) l.routeLabel = ''; changed(); }
+      const res = await pickRoute(l);
+      if (res !== undefined) { setSec(l, res); changed(); }
     } else if (act === 'leg-train') { l.trainOpen = true; renderLegParts(i); card.querySelector('[data-lf=weight]')?.focus(); }
     else if (act === 'leg-notes') openLocoNotesSheet(l.locoType, l.locoNumber, base.id);
   }
@@ -800,7 +795,6 @@ export function openTripForm(tripId) {
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
     const legEl = b.closest('#tf-legs [data-lid]');
     if (legEl) { await onLegClick(b, legEl); return; }
-    if (b.dataset.route) { F.routeId = b.dataset.route; renderRoute(); refreshAll(); return; }
     if (b.dataset.type) { F.locoType = b.dataset.type; $(el, '#tf-lt').value = b.dataset.type; refreshAll(); return; }
     if (b.dataset.rest) { if (!F.et) return; F.restType = b.dataset.rest; refreshAll(); return; }
     if (b.dataset.kind) { F.kind = b.dataset.kind; F.kindOpen = false; renderKind(); renderTrain(); renderLegsParts(); refreshAll(); return; }
@@ -815,15 +809,15 @@ export function openTripForm(tripId) {
     if (act === 'tf-receive') { closeLayer(el); openReceive(); return; }
     if (act === 'pick-kind') { F.kindOpen = !F.kindOpen; renderKind(); return; }
     if (act === 'pick-route') {
-      const res = await pickRoute(F.routeId);
-      if (res !== undefined) { F.routeId = res; if (!res) F.routeLabel = ''; renderRoute(); refreshAll(); }
+      const res = await pickRoute(F);
+      if (res !== undefined) { setSec(F, res); renderRoute(); refreshAll(); }
     } else if (act === 'add-leg') {
       if (F.legs.length >= LEGS_MAX) return;
       // поездка идёт — значит, сменили только что: время «сейчас» (можно поправить)
       const nowMs = nowLocal();
       const n = fmtLocal(nowMs);
       const going = !F.et && F.sd && F.st && parseLocal(`${F.sd}T${F.st}`) < nowMs;
-      F.legs.push({ id: uid(), sd: going ? n.slice(0, 10) : F.sd || today, st: going ? n.slice(11, 16) : '', routeId: null, routeLabel: '', locoType: '', locoNumber: '', weight: '', axles: '', length: '', trainOpen: false });
+      F.legs.push({ id: uid(), sd: going ? n.slice(0, 10) : F.sd || today, st: going ? n.slice(11, 16) : '', routeId: null, routeLabel: '', stFrom: '', stTo: '', locoType: '', locoNumber: '', weight: '', axles: '', length: '', trainOpen: false });
       renderLegs(); refreshAll();
       legCard(F.legs.length - 1)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else if (act === 'add-note') {
@@ -924,38 +918,102 @@ function recentRoutes(n) {
   return [...S.routes].sort((a, b) => (used.get(b.id) || b.createdAt / 1e3 || 0) - (used.get(a.id) || a.createdAt / 1e3 || 0)).slice(0, n);
 }
 
-// Выбор маршрута. Возвращает id, null (без маршрута) или undefined (отмена).
-function pickRoute(current) {
+// ---- Участок и его часть в форме поездки (2.25) ----
+// x — поездка или локомотив в форме: { routeId, routeLabel, stFrom, stTo }. Поля для сохранения:
+// весь участок от А к Б — без stFrom/stTo; станции, которых на участке уже нет, — как были (не угадываем).
+function secFields(x) {
+  const r = x.routeId && S.routes.find((y) => y.id === x.routeId);
+  if (!r) return { routeId: null, routeLabel: x.routeLabel || '', stFrom: '', stTo: '' };
+  if (x.stFrom && x.stTo && !isWhole(r, x.stFrom, x.stTo)) return { routeId: r.id, routeLabel: `${x.stFrom} → ${x.stTo}`, stFrom: x.stFrom, stTo: x.stTo };
+  return { routeId: r.id, routeLabel: routeText(r), stFrom: '', stTo: '' };
+}
+// Выбор из окна: null — без участка, { routeId, stFrom?, stTo? }
+function setSec(x, res) {
+  x.routeId = res?.routeId || null;
+  x.stFrom = res?.stFrom || ''; x.stTo = res?.stTo || '';
+  if (!res) x.routeLabel = '';
+}
+function pickLabelHtml(x) {
+  const r = x.routeId && S.routes.find((y) => y.id === x.routeId);
+  if (!r) return x.routeLabel ? esc(x.routeLabel) : '<span class="ph">Выберите участок</span>';
+  const e = legEnds(x);
+  const part = !isWhole(r, e.from, e.to);
+  const km = legKm(x);
+  const sub = [part ? `участок ${sectionText(r)}` : '', km ? `${String(km).replace('.', ',')} км` : ''].filter(Boolean).join(' · ');
+  return `${esc(`${e.from} → ${e.to}`)}${sub ? `<span class="pick-sub">${esc(sub)}</span>` : ''}`;
+}
+
+// Окно «Участок»: участок целиком — нажатием на строку (от начала к концу), часть — стрелкой ▾ и двумя станциями
+// (откуда, потом куда; в любую сторону). Возвращает { routeId, stFrom?, stTo? }, null (без участка) или undefined (отмена).
+function pickRoute(cur) {
   return new Promise((resolve) => {
     let result;
-    const routes = recentRoutes(1000);
+    let open = cur?.routeId && S.routes.some((r) => r.id === cur.routeId) && cur.stFrom ? cur.routeId : null; // открытый участок
+    let first = null; // выбранная станция «откуда» в открытом участке (номер)
+    const curEnds = cur?.routeId ? legEnds(cur) : null;
+    const routes = () => recentRoutes(1000);
+    const stationsHtml = (r) => {
+      const list = stationsList(r);
+      const ends = cur?.routeId === r.id && curEnds ? segOf(r, curEnds.from, curEnds.to) : null;
+      const lo = ends ? Math.min(ends.i, ends.j) : -1; const hi = ends ? Math.max(ends.i, ends.j) : -1;
+      return `<div class="sec-st" id="sec-st-${esc(r.id)}">
+        <div class="sec-help" aria-live="polite">${first == null ? 'Нажмите станцию, <b>откуда</b> ехали, потом — <b>куда</b>.' : `Откуда: <b>${esc(list[first])}</b>. Теперь нажмите, <b>куда</b>.`}</div>
+        <ol class="st-line">${list.map((n, i) => {
+          const mark = first != null ? (i === first ? 'from' : '') : ends ? (i === ends.i ? 'from' : i === ends.j ? 'to' : i > lo && i < hi ? 'mid' : '') : '';
+          const tag = mark === 'from' ? 'откуда' : mark === 'to' ? 'куда' : '';
+          const run = first == null && ends ? `${i > lo && i <= hi ? ' up' : ''}${i >= lo && i < hi ? ' dn' : ''}` : '';
+          return `<li class="${mark}${run}"><button type="button" class="st-btn" data-st="${i}" aria-pressed="${mark === 'from' || mark === 'to'}"><span class="st-dot" aria-hidden="true"></span><span class="grow">${esc(n)}</span>${tag ? `<span class="st-tag">${tag}</span>` : ''}</button></li>`;
+        }).join('')}</ol>
+        ${list.length === 2 ? '<div class="hint">Промежуточные станции добавляются в ☰ «Настройки работы» → «Участки».</div>' : ''}
+      </div>`;
+    };
+    const listHtml = () => {
+      const rs = routes();
+      if (!rs.length) return '<div class="hint">Сохранённых участков пока нет. Создайте первый — он сохранится в ☰ «Настройки работы» → «Участки».</div>';
+      return `<div class="list sec-list">${rs.map((r) => {
+        const n = stationsList(r).length;
+        const whole = cur?.routeId === r.id && !cur.stFrom;
+        const part = cur?.routeId === r.id && !!cur.stFrom;
+        const meta = [r.distanceKm ? `${String(r.distanceKm).replace('.', ',')} км` : '', n > 2 ? `${n} ${plural(n, 'станция', 'станции', 'станций')}` : ''].filter(Boolean).join(' · ');
+        return `<div class="sec${open === r.id ? ' is-open' : ''}">
+          <div class="sec-row">
+            <button type="button" class="radio-row sec-pick" data-rid="${esc(r.id)}" aria-pressed="${whole || part}"><span class="dot"></span><span class="grow">${esc(sectionText(r))}${part ? `<span class="pick-sub">${esc(`${curEnds.from} → ${curEnds.to}`)}</span>` : meta ? `<span class="pick-sub">${esc(meta)}</span>` : ''}</span></button>
+            <button type="button" class="sec-more" data-more="${esc(r.id)}" aria-expanded="${open === r.id}" aria-controls="sec-st-${esc(r.id)}" aria-label="Станции участка ${esc(sectionText(r))}">${I.down}</button>
+          </div>
+          ${open === r.id ? stationsHtml(r) : ''}
+        </div>`;
+      }).join('')}
+      <button type="button" class="radio-row" data-rid="" aria-pressed="${!cur?.routeId && !cur?.routeLabel}"><span class="dot"></span><span class="grow" style="color:var(--text-2)">Без участка</span><span></span></button></div>`;
+    };
     const el = openLayer(sheet({
-      title: 'Маршрут', back: true,
-      body: `
-        ${routes.length ? `<div class="list">${routes.map((r) => `<button class="radio-row" data-rid="${esc(r.id)}" aria-pressed="${r.id === current}"><span class="dot"></span><span class="grow">${esc(routeText(r))}</span><span class="hint">${r.distanceKm ? `${esc(String(r.distanceKm).replace('.', ','))} км` : ''}</span></button>`).join('')}
-          <button class="radio-row" data-rid="" aria-pressed="${!current}"><span class="dot"></span><span class="grow" style="color:var(--text-2)">Без маршрута</span><span></span></button></div>`
-        : '<div class="hint">Сохранённых маршрутов пока нет. Создайте первый ниже — он сохранится в разделе «Маршруты».</div>'}
-        <div class="field"><div class="label">${I.plus} Новый маршрут</div>
-          <div class="two"><input class="input" id="pr-from" placeholder="Откуда (А)" maxlength="60" autocomplete="off"><input class="input" id="pr-to" placeholder="Куда (Б)" maxlength="60" autocomplete="off"></div>
-          <button class="btn btn-plain btn-sm" data-act="pr-add">Добавить и выбрать</button>
-          <div data-error></div>
-        </div>`,
+      title: 'Участок', back: true,
+      body: `<div id="sec-body">${listHtml()}</div>
+        <button type="button" class="btn btn-plain" data-act="pr-new">${I.plus} Новый участок</button>`,
     }), { onClose: () => resolve(result) });
+    const redraw = () => { $(el, '#sec-body').innerHTML = listHtml(); };
+    if (open) setTimeout(() => el.querySelector('.sec.is-open')?.scrollIntoView({ block: 'nearest' }), 300);
+    if (S.routes.length) setTimeout(() => sectionPickTour(el), 500);
     el.addEventListener('click', async (e) => {
       const b = e.target.closest('button');
       if (!b) return;
       if (b.hasAttribute('data-close')) { closeLayer(el); return; }
-      if (b.dataset.rid !== undefined) { result = b.dataset.rid || null; closeLayer(el); return; }
-      if (b.dataset.act === 'pr-add') {
-        const from = $(el, '#pr-from').value.trim();
-        const to = $(el, '#pr-to').value.trim();
-        if (!from || !to) { showError(el, 'Укажите обе точки: откуда и куда.'); return; }
-        const dup = S.routes.find((r) => r.from.toLowerCase() === from.toLowerCase() && r.to.toLowerCase() === to.toLowerCase());
-        if (dup) { result = dup.id; closeLayer(el); return; }
-        const r = { id: uid(), from, to, createdAt: Date.now() };
-        await saveRoute(r);
-        result = r.id; closeLayer(el);
-        toast('Маршрут сохранён');
+      if (b.dataset.rid !== undefined) { result = b.dataset.rid ? { routeId: b.dataset.rid } : null; closeLayer(el); return; }
+      if (b.dataset.more) {
+        open = open === b.dataset.more ? null : b.dataset.more; first = null; redraw();
+        if (open) el.querySelector('.sec.is-open')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
+      if (b.dataset.st !== undefined) {
+        const r = S.routes.find((x) => x.id === open);
+        const i = Number(b.dataset.st);
+        if (!r) return;
+        if (first == null || first === i) { first = first === i ? null : i; redraw(); el.querySelector(`#sec-st-${CSS.escape(r.id)} [data-st="${i}"]`)?.focus(); return; }
+        const list = stationsList(r);
+        result = isWhole(r, list[first], list[i]) ? { routeId: r.id } : { routeId: r.id, stFrom: list[first], stTo: list[i] };
+        closeLayer(el); return;
+      }
+      if (b.dataset.act === 'pr-new') {
+        openRouteForm(null, null, { onSaved: (r) => { result = { routeId: r.id }; closeLayer(el); } });
       }
     });
   });
@@ -1180,18 +1238,24 @@ export function endNormsHtml(trip, row) {
   return row('От окончания сдачи до окончания работы', mins(n.walk));
 }
 
-export function openRouteForm(id, preset) {
+// Участок (до 2.25 — «маршрут»): начало и конец, станции по порядку (свёрнуты, когда добавлены), длина, нормы, нормативное время.
+// opts.onSaved(r) — после сохранения (новый участок из окна выбора в поездке).
+export function openRouteForm(id, preset, opts = {}) {
   const existing = id ? S.routes.find((r) => r.id === id) : null;
   const used = existing ? S.trips.filter((t) => usesRoute(t, id)).length : 0;
+  // станции: у каждой строки своя метка, чтобы переименование дошло до поездок
+  let rows = (existing?.stations || preset?.stations || []).map((n) => ({ k: uid(), orig: existing ? n : null, name: n }));
+  let stOpen = false;
   const el = openLayer(sheet({
-    title: existing ? 'Маршрут' : 'Новый маршрут',
-    headRight: existing ? `<button class="icon-btn danger" data-act="del-route" aria-label="Удалить маршрут">${I.trash}</button>` : '',
+    title: existing ? 'Участок' : 'Новый участок',
+    headRight: existing ? `<button class="icon-btn danger" data-act="del-route" aria-label="Удалить участок">${I.trash}</button>` : '',
     body: `
-      <div class="field"><label for="rf-from">Точка А — откуда</label><input class="input" id="rf-from" placeholder="Например, Москва" maxlength="60" autocomplete="off"></div>
-      <div class="field"><label for="rf-to">Точка Б — куда</label><input class="input" id="rf-to" placeholder="Например, Рязань" maxlength="60" autocomplete="off"></div>
-      <div class="field"><label for="rf-km">Расстояние <span class="opt">· км, необязательно</span></label>
+      <div class="field"><label for="rf-from">Начало участка</label><input class="input" id="rf-from" placeholder="Например, Малошуйка" maxlength="60" autocomplete="off"></div>
+      <div class="field"><label for="rf-to">Конец участка</label><input class="input" id="rf-to" placeholder="Например, Обозерская" maxlength="60" autocomplete="off"></div>
+      <div class="field" id="rf-st"></div>
+      <div class="field"><label for="rf-km">Длина участка <span class="opt">· км, необязательно</span></label>
         <div class="input-unit"><input class="input" id="rf-km" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Например, 198"><span>км</span></div>
-        <div class="hint">Длина плеча между точками А и Б.</div></div>
+        <div class="hint" id="rf-km-hint">От начала до конца участка.</div></div>
       <div class="field" id="rf-norms"><div class="label">Для расчёта зарплаты <span class="opt">· необязательно</span></div>
         <div class="two">
           <div><label for="rf-wn" class="mini-label">Норма веса</label><div class="input-unit"><input class="input" id="rf-wn" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="5199"><span>т</span></div></div>
@@ -1204,7 +1268,7 @@ export function openRouteForm(id, preset) {
           ${tnInput('depart', 'Всего от явки до отправления', '90')}
           ${tnInput('walk', 'От окончания сдачи до окончания работы', '15')}
         </div></div>
-      ${existing ? `<div class="hint">Используется в ${used} ${used % 10 === 1 && used % 100 !== 11 ? 'поездке' : 'поездках'}. Изменение названия обновит все эти поездки.</div>` : ''}
+      ${existing ? `<div class="hint">Используется в ${used} ${used % 10 === 1 && used % 100 !== 11 ? 'поездке' : 'поездках'}. Изменение названий обновит все эти поездки.</div>` : ''}
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="save-route">${I.check} Сохранить</button>`,
   }));
@@ -1215,25 +1279,113 @@ export function openRouteForm(id, preset) {
   $(el, '#rf-wn').value = existing?.weightNorm ? String(existing.weightNorm) : '';
   $(el, '#rf-ln').value = existing?.lengthNorm ? String(existing.lengthNorm) : '';
   for (const k of TN_KEYS) $(el, `#rf-${k}`).value = existing?.[`${k}Min`] ? String(existing[`${k}Min`]) : '';
+
+  // ---- станции на участке ----
+  const endName = (sel, ph) => $(el, sel).value.trim() || ph;
+  const named = () => rows.filter((r) => r.name.trim());
+  function kmHint() {
+    const n = named().length + 1;
+    const km = Number($(el, '#rf-km').value.replace(',', '.'));
+    $(el, '#rf-km-hint').textContent = n > 1 && km > 0
+      ? `От начала до конца участка. Перегонов: ${n} — один перегон ≈ ${String(Math.round((km / n) * 10) / 10).replace('.', ',')} км.`
+      : 'От начала до конца участка.';
+  }
+  function renderSt() {
+    const box = $(el, '#rf-st');
+    const list = named();
+    if (!stOpen) {
+      box.innerHTML = list.length
+        ? `<div class="label">Станции на участке</div>
+          <button type="button" class="pick st-sum" data-act="st-open" aria-expanded="false">${I.route}<span class="grow">${list.length + 2} ${plural(list.length + 2, 'станция', 'станции', 'станций')}<span class="pick-sub">${esc([endName('#rf-from', 'Начало'), ...list.map((r) => r.name.trim()), endName('#rf-to', 'Конец')].join(' — '))}</span></span>${I.right}</button>`
+        : `<button type="button" class="add-btn" data-act="st-open" id="rf-st-add">${I.plus} Добавить станции на участке</button>
+          <div class="hint">Станции между началом и концом — по порядку. Тогда в поездке можно выбрать часть участка.</div>`;
+      kmHint();
+      return;
+    }
+    box.innerHTML = `<div class="label">Станции на участке <span class="opt">· по порядку</span></div>
+      <div class="st-edit">
+        <div class="st-end"><span class="st-dot" aria-hidden="true"></span>${esc(endName('#rf-from', 'Начало участка'))}</div>
+        ${rows.map((r, i) => `<div class="st-item" data-k="${esc(r.k)}">
+          <span class="st-dot" aria-hidden="true"></span>
+          <input class="input" data-st-name value="${esc(r.name)}" maxlength="60" autocomplete="off" placeholder="Станция ${i + 1}" aria-label="Станция ${i + 1}">
+          <button type="button" class="icon-btn" data-act="st-up" ${i ? '' : 'disabled'} aria-label="Выше">${small(I.up, 18)}</button>
+          <button type="button" class="icon-btn danger" data-act="st-del" aria-label="Убрать станцию">${small(I.x, 18)}</button>
+        </div>`).join('')}
+        <div class="st-end"><span class="st-dot" aria-hidden="true"></span>${esc(endName('#rf-to', 'Конец участка'))}</div>
+      </div>
+      ${rows.length < STATIONS_MAX ? `<button type="button" class="add-btn" data-act="st-add">${I.plus} Станция</button>` : ''}
+      <div class="hint">Можно вставить сразу весь список через тире или запятую — он разложится по строкам.</div>
+      <button type="button" class="btn btn-plain btn-sm" data-act="st-done">Готово — свернуть</button>`;
+    kmHint();
+  }
+  const rowOf = (t) => rows.find((r) => r.k === t.closest('[data-k]')?.dataset.k);
+  const focusRow = (k) => setTimeout(() => el.querySelector(`[data-k="${CSS.escape(k)}"] input`)?.focus(), 0);
+  // «Нименга - Шастинский - Поньга» → по строкам (дефис внутри названия без пробелов не делит)
+  const SPLIT = /\s+[-–—]\s+|\s*[—–,;\n]\s*/;
+  el.addEventListener('input', (e) => {
+    const t = e.target;
+    if (t.id === 'rf-km') { kmHint(); return; }
+    if (!t.hasAttribute('data-st-name')) return;
+    const r = rowOf(t);
+    if (!r) return;
+    if (!SPLIT.test(t.value)) { r.name = t.value; kmHint(); return; }
+    const parts = t.value.split(SPLIT).map((x) => x.trim());
+    const tail = parts[parts.length - 1] === '';
+    const names = parts.filter(Boolean);
+    r.name = names.shift() || '';
+    const at = rows.indexOf(r) + 1;
+    const add = names.map((n) => ({ k: uid(), orig: null, name: n.slice(0, 60) }));
+    if (tail) add.push({ k: uid(), orig: null, name: '' });
+    rows.splice(at, 0, ...add.slice(0, Math.max(0, STATIONS_MAX - rows.length)));
+    renderSt();
+    focusRow((add.length ? add[add.length - 1] : r).k);
+  });
+  el.addEventListener('change', (e) => { if (e.target.id === 'rf-from' || e.target.id === 'rf-to') renderSt(); });
+  renderSt();
   if (!existing) setTimeout(() => $(el, '#rf-from').focus(), 250);
   else setTimeout(() => routeNormsTour(el), 450);
+
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
-    if (b.dataset.act === 'save-route') {
+    const act = b.dataset.act;
+    if (act === 'st-open') {
+      stOpen = true;
+      if (!rows.length) rows.push({ k: uid(), orig: null, name: '' });
+      renderSt();
+      if (!named().length) focusRow(rows[0].k);
+      return;
+    }
+    if (act === 'st-add') { const r = { k: uid(), orig: null, name: '' }; rows.push(r); renderSt(); focusRow(r.k); return; }
+    if (act === 'st-del' || act === 'st-up') {
+      const r = rowOf(b); const i = rows.indexOf(r);
+      if (i < 0) return;
+      if (act === 'st-del') rows.splice(i, 1);
+      else if (i > 0) [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]];
+      renderSt(); return;
+    }
+    if (act === 'st-done') { rows = rows.filter((r) => r.name.trim()); stOpen = false; renderSt(); return; }
+    if (act === 'save-route') {
       const from = $(el, '#rf-from').value.trim();
       const to = $(el, '#rf-to').value.trim();
-      if (!from) { showError(el, 'Укажите точку А — откуда отправление.'); return; }
-      if (!to) { showError(el, 'Укажите точку Б — куда прибытие.'); return; }
-      const dup = S.routes.find((r) => r.id !== id && r.from.toLowerCase() === from.toLowerCase() && r.to.toLowerCase() === to.toLowerCase());
-      if (dup) { showError(el, 'Такой маршрут уже сохранён.'); return; }
+      if (!from) { showError(el, 'Укажите начало участка.'); return; }
+      if (!to) { showError(el, 'Укажите конец участка.'); return; }
+      if (sameSt(from, to)) { showError(el, 'Начало и конец участка должны быть разными станциями.'); return; }
+      const dup = S.routes.find((r) => r.id !== id && sameSt(r.from, from) && sameSt(r.to, to));
+      if (dup) { showError(el, 'Такой участок уже сохранён.'); return; }
+      const list = named().map((r) => ({ ...r, name: r.name.trim().replace(/\s+/g, ' ') }));
+      const seen = [from, to];
+      for (const r of list) {
+        if (seen.some((x) => sameSt(x, r.name))) { stOpen = true; renderSt(); showError(el, `Станция «${r.name}» указана дважды.`); return; }
+        seen.push(r.name);
+      }
       const kmRaw = $(el, '#rf-km').value.trim().replace(',', '.');
       let distanceKm = null;
       if (kmRaw !== '') {
         distanceKm = Number(kmRaw);
-        if (!Number.isFinite(distanceKm) || distanceKm < 0) { showError(el, 'Расстояние должно быть числом не меньше нуля.'); return; }
-        if (distanceKm > 20000) { showError(el, 'Проверьте расстояние — слишком большое значение.'); return; }
+        if (!Number.isFinite(distanceKm) || distanceKm < 0) { showError(el, 'Длина должна быть числом не меньше нуля.'); return; }
+        if (distanceKm > 20000) { showError(el, 'Проверьте длину — слишком большое значение.'); return; }
         distanceKm = Math.round(distanceKm * 10) / 10;
       }
       // нормы веса и длины участка: целые, пусто — доплаты за тяжёлый поезд нет
@@ -1252,13 +1404,26 @@ export function openRouteForm(id, preset) {
         times[`${k}Min`] = norm(`#rf-${k}`, 600);
         if (Number.isNaN(times[`${k}Min`])) { showError(el, 'Нормативное время — целое число минут, не больше 600.'); return; }
       }
+      // переименования доходят до поездок; убранная станция, по которой ездили, — спросить
+      const renames = [];
+      if (existing && !sameSt(existing.from, from)) renames.push([existing.from, from]);
+      if (existing && !sameSt(existing.to, to)) renames.push([existing.to, to]);
+      for (const r of list) if (r.orig && r.name !== r.orig) renames.push([r.orig, r.name]);
+      if (existing) {
+        const keep = [existing.from, existing.to, ...list.map((r) => r.orig).filter(Boolean)];
+        const gone = (existing.stations || []).filter((n) => !keep.some((x) => sameSt(x, n)));
+        const hit = gone.filter((n) => S.trips.some((t) => legsOf(t).some((l) => l.routeId === id && [l.stFrom, l.stTo].some((x) => sameSt(x, n)))));
+        if (hit.length && !(await confirmDialog({ title: 'Убрать станцию?', text: `${hit.join(', ')} — есть в ваших поездках. Они сохранят названия станций, но километры по ним считаться не будут.`, ok: 'Убрать', cancel: 'Отмена' }))) return;
+      }
       const { handMin, ...base } = existing || { id: uid(), createdAt: Date.now() }; // сдачу после прибытия больше не храним (2.11.1)
-      await saveRoute({ ...base, from, to, distanceKm, weightNorm, lengthNorm, ...times, updatedAt: Date.now() });
-      closeLayer(el); toast(existing ? 'Маршрут изменён' : 'Маршрут сохранён');
-    } else if (b.dataset.act === 'del-route') {
-      const ok = await confirmDialog({ title: 'Удалить маршрут?', text: used ? 'Поездки с этим маршрутом сохранят его название.' : 'Маршрут будет удалён из списка.' });
+      const r = { ...base, from, to, stations: list.map((x) => x.name), distanceKm, weightNorm, lengthNorm, ...times, updatedAt: Date.now() };
+      await saveSection(r, renames);
+      closeLayer(el); toast(existing ? 'Участок изменён' : 'Участок сохранён');
+      opts.onSaved?.(r);
+    } else if (act === 'del-route') {
+      const ok = await confirmDialog({ title: 'Удалить участок?', text: used ? 'Поездки по нему сохранят названия станций, но без километров.' : 'Участок будет удалён из списка.' });
       if (!ok) return;
-      await deleteRoute(id); closeLayer(el); toast('Маршрут удалён');
+      await deleteRoute(id); closeLayer(el); toast('Участок удалён');
     }
   });
 }

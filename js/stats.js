@@ -1,7 +1,7 @@
 // Статистика: поездная и заработная плата за месяц, квартал, год или всё время.
 // Показываются только блоки, где есть данные.
 import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, MONTHS_PREP, plural, sheet, openLayer, closeLayer, hm } from './ui.js';
-import { S, statsOf, nowLocal, routeOf, locoLabel, normType, normNum, myPay, refreshLive, isPending, overRestByTrip, legRoute, locosOf } from './store.js';
+import { S, statsOf, nowLocal, routeOf, locoLabel, normType, normNum, myPay, refreshLive, isPending, overRestByTrip, legRoute, locosOf, legKm } from './store.js';
 import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN, legsOf } from './calc.js';
 import { dayInfo } from './calendar.js';
 import { payMonth, payTotal, overRestIntervals, hasRate, isAvg, rateOn, fmtRub, fmtH } from './pay.js';
@@ -115,8 +115,7 @@ function collect(p) {
   // у поездки со сменой локомотива каждое плечо — своё: свои километры и своя строка в «Плечах»
   for (const t of trips) {
     for (const l of legsOf(t)) {
-      const r = l.routeId && S.routes.find((x) => x.id === l.routeId);
-      if (r?.distanceKm) R.km += r.distanceKm;
+      R.km += legKm(l); // часть участка — по перегонам (2.25)
       const label = legRoute(l);
       if (label) arms.set(label, (arms.get(label) || 0) + 1);
     }

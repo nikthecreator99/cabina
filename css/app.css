@@ -468,6 +468,44 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .pick .grow { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick .ph { color: var(--muted); font-weight: 500; }
 .pick[aria-expanded="true"] > svg:last-child { transform: rotate(90deg); }
+/* 2.25: участки со станциями — подпись под выбранным, список участков со стрелкой, линия станций, редактор станций */
+.pick-sub, .radio-row .pick-sub { display: block; font-size: calc(12.5px * var(--fs)); font-weight: 500; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.st-sum .grow .pick-sub { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sec-list { gap: 8px; }
+.sec { border-radius: 14px; }
+.sec-row { display: grid; grid-template-columns: minmax(0, 1fr) 52px; gap: 8px; align-items: stretch; }
+.sec-pick .grow { white-space: normal; overflow-wrap: anywhere; }
+.sec-pick .grow .pick-sub { white-space: normal; }
+.sec-more { min-height: 48px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); color: var(--accent); display: grid; place-items: center; }
+.sec-more svg { width: 22px; height: 22px; transition: transform .2s; }
+.sec-more[aria-expanded="true"] { border-color: var(--accent); }
+.sec-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+.sec-st { margin: 8px 0 4px; padding: 10px 10px 6px; border-radius: 14px; background: var(--card-2); border: 1px solid var(--line); }
+.sec-help { font-size: calc(14px * var(--fs)); color: var(--text-2); margin: 0 4px 6px; }
+.st-line { list-style: none; margin: 0; padding: 0; position: relative; }
+.st-line li { position: relative; }
+.st-line li::before, .st-line li::after { content: ""; position: absolute; left: 19px; width: 3px; background: var(--line-2); }
+.st-line li::before { top: 0; height: 50%; }
+.st-line li::after { top: 50%; bottom: 0; }
+.st-line li:first-child::before, .st-line li:last-child::after { display: none; }
+.st-line li.up::before, .st-line li.dn::after { background: var(--accent); }
+.st-btn { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 46px; padding: 6px 8px 6px 10px; border-radius: 12px; text-align: left; color: var(--text); font-weight: 600; background: none; border: 0; }
+.st-btn .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.st-btn:active { background: var(--field); }
+.st-dot { flex: none; width: 21px; height: 21px; border-radius: 50%; background: var(--card-solid); border: 3px solid var(--line-2); position: relative; z-index: 1; }
+.st-line li.mid .st-dot { border-color: var(--accent); }
+.st-line li.from .st-dot, .st-line li.to .st-dot { border: 7px solid var(--accent); }
+.st-line li.from .st-btn, .st-line li.to .st-btn { font-weight: 800; }
+.st-tag { flex: none; font-size: calc(12px * var(--fs)); font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; }
+.st-edit { display: flex; flex-direction: column; gap: 6px; position: relative; }
+.st-edit::before { content: ""; position: absolute; left: 9px; top: 18px; bottom: 18px; width: 3px; background: var(--line-2); }
+.st-end { display: flex; align-items: center; gap: 12px; min-height: 36px; font-weight: 800; padding-left: 0; overflow-wrap: anywhere; }
+.st-end .st-dot { border: 6px solid var(--accent); }
+.st-item { display: grid; grid-template-columns: 21px minmax(0, 1fr) 44px 44px; gap: 8px; align-items: center; }
+.st-item .input { min-width: 0; }
+.st-item .icon-btn[disabled] { opacity: .35; }
+.st-edit + .add-btn { margin-top: 8px; }
+#rf-st .btn-sm { margin-top: 8px; }
 .kind-list, .choice-list { display: grid; gap: 6px; margin-top: 8px; }
 .choice-list .choice { min-height: 50px; }
 .kind-list .choice { min-height: 50px; }

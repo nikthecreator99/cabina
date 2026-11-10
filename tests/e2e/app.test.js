@@ -163,36 +163,56 @@ test('удаление поездки свайпом влево и подтве�
   await context.close();
 });
 
-test('маршруты: добавить, создать обратный, выбрать в поездке', async () => {
+test('участки: добавить со станциями, выбрать часть участка в поездке', async () => {
   const { context, page } = await openApp(env);
   await workPage(page, 'routes');
   await page.locator('[data-act=add-route]').click();
   let f = sheet(page);
   await f.locator('#rf-from').fill('Малошуйка');
-  await f.locator('#rf-to').fill('Сумский Посад');
-  await f.locator('#rf-km').fill('98.5');
+  await f.locator('#rf-to').fill('Обозерская');
+  await f.locator('#rf-km').fill('100');
+  await f.locator('[data-act=st-open]').click();
+  // список одной строкой — раскладывается по строкам
+  await f.locator('[data-st-name]').first().fill('Нименга - Шастинский - Поньга');
+  assert.equal(await f.locator('[data-st-name]').count(), 3);
+  await f.locator('[data-act=st-done]').click();
+  assert.match(await f.locator('#rf-st').innerText(), /5 станций[\s\S]*Малошуйка — Нименга — Шастинский — Поньга — Обозерская/);
+  assert.match(await f.locator('#rf-km-hint').innerText(), /Перегонов: 4 — один перегон ≈ 25 км/);
   await f.locator('[data-act=save-route]').click();
   await waitNoLayers(page);
-  assert.match(await text(page, '.screen'), /Малошуйка[\s\S]*Сумский Посад/);
-  assert.match(await text(page, '.screen'), /98,5 км/);
-  await page.locator('[data-act=route-reverse]').first().click();
-  f = sheet(page);
-  assert.equal(await f.locator('#rf-from').inputValue(), 'Сумский Посад');
-  assert.equal(await f.locator('#rf-to').inputValue(), 'Малошуйка');
-  await f.locator('[data-act=save-route]').click();
-  await waitNoLayers(page);
-  assert.equal(await page.locator('[data-act=route-reverse]').count(), 0, 'у обоих маршрутов уже есть обратный');
+  assert.match(await text(page, '.screen'), /Малошуйка[\s\S]*Обозерская/);
+  assert.match(await text(page, '.screen'), /100 км · 5 станций/);
 
   await tab(page, 'home');
   await page.locator('[data-act=add-trip]').click();
   f = sheet(page);
-  await f.locator('#tf-route-quick .qchip').filter({ hasText: 'Малошуйка → Сумский Посад' }).click();
+  assert.equal(await f.locator('#tf-route-quick').count(), 0, 'без «последних» под полем');
+  await f.locator('[data-act=pick-route]').click();
+  const pick = page.locator('.layer').last();
+  await pick.locator('.sec-more').first().click();
+  await pick.locator('.st-btn', { hasText: 'Шастинский' }).click();
+  assert.match(await pick.locator('.sec-help').innerText(), /Откуда: Шастинский/);
+  await pick.locator('.st-btn', { hasText: 'Малошуйка' }).click();
+  await f.locator('#tf-route-label', { hasText: 'Шастинский → Малошуйка' }).waitFor();
+  assert.match(await f.locator('#tf-route-label').innerText(), /участок Малошуйка — Обозерская · 50 км/);
   await f.locator('#tf-st').fill('08:00');
   await f.locator('#tf-et').fill('11:00');
   await f.locator('[data-rest=turnaround]').click();
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
-  assert.match(await text(page, '.trip'), /Малошуйка → Сумский Посад/);
+  assert.match(await text(page, '.trip'), /Шастинский → Малошуйка/);
+  const t = await page.evaluate(async () => JSON.parse(JSON.stringify((await import('./js/store.js')).S.trips[0])));
+  assert.deepEqual([t.stFrom, t.stTo, t.routeLabel], ['Шастинский', 'Малошуйка', 'Шастинский → Малошуйка']);
+  // открыли снова — окно выбора сразу раскрыто на этом участке и показывает путь
+  await page.locator('.trip').first().click();
+  f = sheet(page);
+  await f.locator('[data-act=pick-route]').click();
+  const p2 = page.locator('.layer').last();
+  assert.match(await p2.locator('.st-line li.from').innerText(), /Шастинский\s+откуда/i);
+  assert.match(await p2.locator('.st-line li.to').innerText(), /Малошуйка\s+куда/i);
+  // весь участок — нажатием на строку
+  await p2.locator('.sec-pick').click();
+  await f.locator('#tf-route-label', { hasText: 'Малошуйка → Обозерская' }).waitFor();
   await context.close();
 });
 
@@ -204,7 +224,9 @@ test('полный отдых по поездке туда и обратно', a
   });
   await page.locator('[data-act=add-trip]').click();
   const f = sheet(page);
-  await f.locator('#tf-route-quick .qchip').filter({ hasText: 'Б → А' }).click();
+  await f.locator('[data-act=pick-route]').click();
+  await page.locator('.layer').last().locator('[data-rid=r2]').click();
+  await f.locator('#tf-route-label', { hasText: 'Б → А' }).waitFor();
   await f.locator('#tf-sd').fill('2026-10-19');
   await f.locator('#tf-st').fill('20:00');
   await f.locator('#tf-et').fill('02:00');

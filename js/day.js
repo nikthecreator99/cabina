@@ -45,7 +45,7 @@ function tripCard(t, key, ctx) {
   const trainsOf = (x) => [...new Set((x.passenger || []).map((p) => String(p?.train || '').slice(0, 8)).filter(Boolean))].join(', ');
   const kv = (label, value) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
   return `<section class="day-trip">
-    <div class="day-trip-head">${small(I.route, 16)}<b>${route ? esc(route) : 'Маршрут не указан'}</b><span class="chip">${esc(kind.label)}</span></div>
+    <div class="day-trip-head">${small(I.route, 16)}<b>${route ? esc(route) : 'Участок не указан'}</b><span class="chip">${esc(kind.label)}</span></div>
     <div class="kv-grid">
       ${kv('Явка', at(st.start, key))}
       ${kv('Окончание', st.end ? at(st.end, key) : 'в пути')}

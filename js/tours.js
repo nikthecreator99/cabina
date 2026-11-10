@@ -9,7 +9,7 @@ const nudge = (el) => { el.classList.add('nudge'); setTimeout(() => el.classList
 
 export function homeTour() {
   runTour('home2', [
-    { target: '[data-page=work]', title: 'Меню ☰', text: '<b>Настройки работы</b>: маршруты, тарифные ставки, дома отдыха и выходной.' },
+    { target: '[data-page=work]', title: 'Меню ☰', text: '<b>Настройки работы</b>: участки, тарифные ставки, дома отдыха и выходной.' },
     { target: '.hero', title: 'Ваш месяц', text: 'Часы, <b>норма</b> по производственному календарю и <b>заработок на руки</b>. <b>Нажмите на карточку</b> — откроется статистика.' },
   ]);
 }
@@ -33,9 +33,10 @@ export function workTour() {
   ]);
 }
 
-export function routesTour() {
-  runTour('routes3', [
-    { target: '[data-act=route-reverse]', title: 'Обратный маршрут', text: 'Эта кнопка сразу создаёт маршрут в обратную сторону — не нужно вписывать заново.' },
+// 2.25: выбор участка в поездке — стрелка открывает станции участка (без подсказки её легко не заметить)
+export function sectionPickTour(el) {
+  runTour('sectionPick', [
+    { target: q(el, '.sec-more'), title: 'Станции участка', text: 'Ехали не весь участок? <b>Нажмите стрелку</b> и выберите две станции: откуда и куда.' },
   ]);
 }
 

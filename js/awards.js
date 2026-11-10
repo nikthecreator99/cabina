@@ -2,7 +2,7 @@
 // Два вида (со слов Никиты): со ступенями — бронза, серебро, золото, собирать долго; и повторяемые — без ступеней,
 // даются каждый раз и копятся счётчиком «×N» (Новый год в поездке, поездка от 12 часов…). Закрытые — тёмные силуэты.
 // Награда — состояние, а не запись: её всегда можно пересчитать из поездок (в резервную копию отдельно не попадает).
-import { S, statsOf, isLive, myPay, routeOf, locoKey, normNum, saveProfile, locosOf, legRoute } from './store.js';
+import { S, statsOf, isLive, myPay, routeOf, locoKey, normNum, saveProfile, locosOf, legKm, legKey } from './store.js';
 import { parseLocal, MIN, DAY, monthKeyOf, dateKeyOf, fmtDur, hasLegs, legsOf } from './calc.js';
 import { isHoliday } from './calendar.js';
 import { heavyCount } from './pay.js';
@@ -11,7 +11,7 @@ import { I, esc, small, pageHead, openLayer, closeLayer, sheet, plural, dayMonth
 const IRON_MIN = 12 * 60; // «Железная пятая точка»: поездка от 12 часов (согласовано с Никитой)
 const WAIT_MIN = 4 * 60; // «Ждём-с»: ожидание следования за одну поездку
 const CABIN_MIN = 200 * 60; // «Рвач» (до 2.19.8 — «Живу в кабине»): часов работы за месяц
-const FAST_RATIO = 0.85; // «Ракета»: на 15% быстрее обычного по этому маршруту
+const FAST_RATIO = 0.85; // «Ракета»: на 15% быстрее обычного по этому пути (участок или его часть)
 const FAST_MIN_TRIPS = 3; // ...если до неё по маршруту уже было хотя бы 3 поездки
 const H = 60;
 
@@ -33,10 +33,10 @@ export const AWARDS = [
   { id: 'first', g: 'trips', color: 'special', name: 'Добро пожаловать в кабину', how: 'Первая записанная поездка', fun: 'Ключ от кабины ваш. Дальше — только вперёд.', key: 'trips', goals: [1], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
   { id: 'trips', g: 'trips', art: ['s50', 's300', 's1000'], name: 'Маршрутные листы', how: 'Записанные поездки', fun: 'Маршрутными листами уже можно обклеить кабину.', key: 'trips', goals: [50, 300, 1000], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
   { id: 'iron', g: 'trips', color: 'repeat', name: 'Железная пятая точка', how: 'Поездка 12 часов и дольше. Даётся за каждую такую поездку.', fun: '12 часов в кресле машиниста — тут любая точка станет железной.', key: 'iron', repeat: true, goals: [1] },
-  { id: 'rocket', g: 'trips', color: 'repeat', name: 'Ракета', how: 'Поездка на 15% быстрее обычного по этому маршруту (когда по нему уже есть 3 поездки). Даётся каждый раз.', fun: 'Пролетели участок быстрее обычного.', key: 'rocket', repeat: true, goals: [1] },
-  { id: 'heavy', g: 'trips', name: 'Тяжеловес', how: 'Поезда тяжелее или длиннее нормы участка (норма — в маршруте)', fun: 'Локомотив кряхтел, но вёз.', key: 'heavy', goals: [10, 50, 200], unit: (n) => plural(n, 'поезд', 'поезда', 'поездов') },
+  { id: 'rocket', g: 'trips', color: 'repeat', name: 'Ракета', how: 'Поездка на 15% быстрее обычного между этими станциями (когда так уже ездили 3 раза). Даётся каждый раз.', fun: 'Пролетели участок быстрее обычного.', key: 'rocket', repeat: true, goals: [1] },
+  { id: 'heavy', g: 'trips', name: 'Тяжеловес', how: 'Поезда тяжелее или длиннее нормы участка (норма — в настройках участка)', fun: 'Локомотив кряхтел, но вёз.', key: 'heavy', goals: [10, 50, 200], unit: (n) => plural(n, 'поезд', 'поезда', 'поездов') },
   { id: 'loco', g: 'trips', name: 'Знаток техники', how: 'Разные локомотивы — по серии и номеру', fun: 'У каждого локомотива свой характер, и вы с ними знакомы.', key: 'locos', goals: [10, 50, 150], unit: (n) => plural(n, 'локомотив', 'локомотива', 'локомотивов') },
-  { id: 'km', g: 'km', art: ['k10', 'earth', 'k100'], name: 'Вёрсты', how: 'Пройденный путь по расстояниям маршрутов', fun: 'Километр к километру — и вот уже тысячи.', key: 'km', kind: 'km', goals: [10000, 40075, 100000], notes: ['', 'вокруг Земли', ''] },
+  { id: 'km', g: 'km', art: ['k10', 'earth', 'k100'], name: 'Вёрсты', how: 'Пройденный путь по длине участков', fun: 'Километр к километру — и вот уже тысячи.', key: 'km', kind: 'km', goals: [10000, 40075, 100000], notes: ['', 'вокруг Земли', ''] },
   { id: 'moon', g: 'km', color: 'legend', name: 'До Луны', how: '384 400 км — среднее расстояние до Луны', fun: 'Приехали! Дальше рельсы не проложены.', key: 'km', kind: 'km', goals: [384400] },
   { id: 'hours', g: 'time', name: 'Часы в кабине', how: 'Всё отработанное время', fun: 'Чай в подстаканнике — лучший напарник.', key: 'work', kind: 'dur', goals: [500 * H, 2000 * H, 10000 * H] },
   { id: 'owl', g: 'time', name: 'Ночная сова', how: 'Ночные часы — с 22:00 до 6:00', fun: 'Совы завидуют.', key: 'night', kind: 'dur', goals: [100 * H, 500 * H, 1000 * H] },
@@ -77,7 +77,8 @@ const tierName = (a, tier) => (a.goals.length > 1 && tier > 0 ? TIER_NAMES[tier 
 const median = (a) => { const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
 const insertSorted = (a, v) => { let lo = 0; let hi = a.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] <= v) lo = mid + 1; else hi = mid; } a.splice(lo, 0, v); };
 // у поездки со сменой локомотива — свой «маршрут» из всех плеч: её время с обычной поездкой по одному плечу не сравниваем
-const routeKey = (t) => (hasLegs(t) ? legsOf(t).map((l) => l.routeId || legRoute(l).toLowerCase()).join('+') : t.routeId || routeOf(t).toLowerCase());
+// участок и его часть (2.25): Малошуйка → Поньга и весь участок — разные пути
+const routeKey = (t) => (hasLegs(t) ? legsOf(t).map(legKey).join('+') : legKey(legsOf(t)[0]) || routeOf(t).toLowerCase());
 
 // trips — список поездок (по умолчанию все записанные).
 // Возвращает { c: итоги, aw: { id: { tier — сколько ступеней, n — сколько раз (у повторяемых), days — день каждой ступени, last } }, records }.
@@ -85,7 +86,6 @@ export function computeAwards(trips = S.trips) {
   const done = trips.filter((t) => t.end && !isLive(t) && Number.isFinite(parseLocal(t.end)))
     .map((t) => ({ t, st: statsOf(t) })).filter((x) => x.st.work > 0)
     .sort((a, b) => a.st.end - b.st.end);
-  const routes = new Map(S.routes.map((r) => [r.id, r]));
   const cfg = myPay();
   const c = { account: 0, invited: 0, ideas: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
   const aw = Object.fromEntries(AWARDS.map((a) => [a.id, { tier: 0, n: 0, days: [], last: null }]));
@@ -104,7 +104,7 @@ export function computeAwards(trips = S.trips) {
     const day = dateKeyOf(st.end);
     c.trips++;
     // километры — по маршруту каждого локомотива; если у какого-то нет расстояния — подсказка в награде
-    const dists = legsOf(t).map((l) => Number(routes.get(l.routeId)?.distanceKm) || 0);
+    const dists = legsOf(t).map(legKm);
     if (t.kind !== 'shunt') { c.km += dists.reduce((a, b) => a + b, 0); if (dists.some((x) => !(x > 0))) c.noKm++; }
     c.work += st.work;
     c.night += st.night;
@@ -295,7 +295,7 @@ export function renderRecords() {
   const body = recordsHtml(records);
   return `${pageHead('Рекорды', { back: true })}
     ${body || `<div class="empty"><div class="em-ico">${I.medal}</div><b>Рекордов пока нет</b><p>Они появятся после первой законченной поездки.</p></div>`}
-    ${body ? '<p class="lead-hint">Самая быстрая — по сравнению с обычным временем по этому маршруту, когда по нему есть хотя бы 3 поездки.</p>' : ''}`;
+    ${body ? '<p class="lead-hint">Самая быстрая — по сравнению с обычным временем между этими же станциями, когда так ездили хотя бы 3 раза.</p>' : ''}`;
 }
 export function renderAwards() {
   const { aw, records } = computeAwards();
@@ -332,7 +332,7 @@ export function openAward(id) {
     ? `${small(I.check, 16)} Получали ${s.n} ${plural(s.n, 'раз', 'раза', 'раз')} · последний ${esc(dayText(s.last))}`
     : got && a.goals.length === 1 ? `${small(I.check, 16)} Получена ${esc(dayText(s.days[0]))}` : '';
   const done = s.tier >= a.goals.length && a.goals.length > 1 ? `<p class="ok-line">${small(I.check, 16)} Все ступени собраны</p>` : '';
-  const kmHint = a.kind === 'km' && c.noKm > 0 ? `<div class="notice">${I.alert}<div>В ${c.noKm} ${plural(c.noKm, 'поездке', 'поездках', 'поездках')} у маршрута нет расстояния — они не идут в километры. Расстояние указывается в ☰ → «Маршруты».</div></div>` : '';
+  const kmHint = a.kind === 'km' && c.noKm > 0 ? `<div class="notice">${I.alert}<div>В ${c.noKm} ${plural(c.noKm, 'поездке', 'поездках', 'поездках')} у участка нет длины — они не идут в километры. Длина указывается в ☰ → «Участки».</div></div>` : '';
   const el = openLayer(sheet({
     title: 'Награда',
     body: `<div class="aw-detail ${got ? '' : 'locked'}">${pic(a, s, 120)}<h3>${esc(a.name)}</h3>

@@ -169,10 +169,12 @@ test('напарнику: смена локомотива уходит и при
   assert.deepEqual([l.start, l.locoType, l.locoNumber, l.weight, l.axles, l.length], ['2026-10-14T11:00', 'ВЛ80С', '1234', 5000, 300, 70]);
   assert.notEqual(l.id, 'l1', 'id — новые');
   await importItems(items);
-  assert.equal(S.routes.length, 2);
+  // 2.25: обратно — тот же участок в другую сторону, новый не создаётся
+  assert.equal(S.routes.length, 1);
   const saved = S.trips[0];
   assert.equal(routeOf(saved), 'Сосновка → Ольховка → Сосновка');
-  assert.equal(S.routes.find((r) => r.id === saved.legs[0].routeId).distanceKm, 121);
+  assert.deepEqual([saved.legs[0].routeId, saved.legs[0].stFrom, saved.legs[0].stTo], [saved.routeId, 'Ольховка', 'Сосновка']);
+  assert.equal(S.routes[0].distanceKm, 120);
 });
 
 test('напарнику: неверная смена локомотива — поездку не берём', async () => {

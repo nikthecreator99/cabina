@@ -24,13 +24,13 @@ test('в пути: «Добавить локомотив» — время «се
   assert.equal(await f.locator('#tf-lt-cap').innerText(), 'Тип локомотива', 'пока локомотив один — подписи прежние');
   await f.locator('#tf-add-leg').click();
   const card = f.locator('#tf-legs .leg');
-  assert.match(await card.innerText(), /Второй локомотив[\s\S]*Когда сменили локомотив[\s\S]*Маршрут[\s\S]*Тип локомотива[\s\S]*Номер/);
+  assert.match(await card.innerText(), /Второй локомотив[\s\S]*Когда сменили локомотив[\s\S]*Участок[\s\S]*Тип локомотива[\s\S]*Номер/);
   assert.equal(await card.locator('[data-lf=sd]').inputValue(), '2026-10-20');
   assert.equal(await card.locator('[data-lf=st]').inputValue(), '12:00', 'поездка идёт — сменили только что');
   assert.equal(await f.locator('#tf-lt-cap').innerText(), 'Тип первого локомотива');
-  assert.match(await f.locator('#tf-route-cap').innerText(), /Маршрут первого локомотива/);
-  // обратного маршрута ещё нет — кнопка «+ Ольховка → Сосновка» создаёт его (с тем же расстоянием, без норм веса)
-  assert.equal(await card.locator('[data-lrev]').innerText(), '+ Ольховка → Сосновка');
+  assert.match(await f.locator('#tf-route-cap').innerText(), /Участок первого локомотива/);
+  // 2.25: «Обратно» — тот же участок в другую сторону, новый не создаётся
+  assert.equal(await card.locator('[data-lrev]').innerText(), 'Обратно: Ольховка → Сосновка');
   await card.locator('[data-lf=st]').fill('10:30');
   await card.locator('[data-lrev]').click();
   await card.locator('[data-leg-route]', { hasText: 'Ольховка → Сосновка' }).waitFor();
@@ -59,8 +59,8 @@ test('в пути: «Добавить локомотив» — время «се
   assert.deepEqual(t.passenger.map((p) => [p.start, p.end]), [['2026-10-20T11:00', '']]);
   assert.equal(t.legs.length, 1);
   assert.deepEqual([t.legs[0].start, t.legs[0].locoType, t.legs[0].locoNumber, t.legs[0].weight], ['2026-10-20T10:30', 'ВЛ80С', '1234', 5000]);
-  const back = await page.evaluate(async () => (await import('./js/store.js')).S.routes.find((r) => r.from === 'Ольховка'));
-  assert.deepEqual([back.to, back.distanceKm, back.weightNorm], ['Сосновка', 120, undefined]);
+  assert.deepEqual([t.legs[0].routeId, t.legs[0].stFrom, t.legs[0].stTo], ['ab', 'Ольховка', 'Сосновка']);
+  assert.equal(await page.evaluate(async () => (await import('./js/store.js')).S.routes.length), 1);
   // главная: весь путь и оба локомотива
   const row = page.locator('.trip[data-id=v]');
   assert.match(await row.innerText(), /Сосновка → Ольховка → Сосновка/);

@@ -39,7 +39,7 @@ export function restHouses() {
     map.set(k, cur);
   };
   for (const t of S.trips) { const h = houseOf(t); if (h) add(h, 1); }
-  // станция прибытия маршрута — тоже дом отдыха, если по маршруту ещё не ездили или ездили с отдыхом в пункте оборота
+  // конец участка — тоже дом отдыха, если по участку ещё не ездили или ездили с отдыхом в пункте оборота
   const lastRoute = (t) => { const legs = legsOf(t); return legs[legs.length - 1].routeId; };
   for (const r of S.routes) {
     const ts = S.trips.filter((t) => lastRoute(t) === r.id);

@@ -160,11 +160,13 @@ test('поездки напарнику: упаковали → распаков
   assert.equal(b.trip.restType, 'home');
   assert.deepEqual([b.from, b.to, b.km], ['Ольховка', 'Сосновка', null]);
   assert.equal(a.dup, false);
-  // добавили: маршрут создан один раз на две поездки в одну сторону
+  // добавили: участок создан один раз, обратная поездка (2.25) — тот же участок в обратную сторону
   const n = await importItems(items);
   assert.equal(n, 2);
   assert.equal(S.trips.length, 2);
-  assert.equal(S.routes.length, 2);
+  assert.equal(S.routes.length, 1);
+  const back = S.trips.find((x) => x.restType === 'home');
+  assert.deepEqual([back.routeId, back.stFrom, back.stTo, back.routeLabel], [S.routes[0].id, 'Ольховка', 'Сосновка', 'Ольховка → Сосновка']);
   assert.equal(S.routes.find((r) => r.from === 'Сосновка').distanceKm, 182.5);
   // во второй раз те же поездки — «уже есть в это время»
   const again = await decodeShare(code, NOW);

@@ -129,7 +129,7 @@ test('«Настройки работы»: все пункты — один сп
   await page.locator('.home-head [data-page=work]').click();
   assert.equal(await page.locator('.screen .panel').count(), 1);
   const panel = page.locator('.screen .panel');
-  assert.match(await panel.innerText(), /Маршруты[\s\S]*Тарифные ставки[\s\S]*Дома отдыха[\s\S]*Междусменный отдых[\s\S]*16 ч[\s\S]*Выходной[\s\S]*60 ч/);
+  assert.match(await panel.innerText(), /Участки[\s\S]*Тарифные ставки[\s\S]*Дома отдыха[\s\S]*Междусменный отдых[\s\S]*16 ч[\s\S]*Выходной[\s\S]*60 ч/);
   await page.locator('[data-act=wk-toggle][data-k=shift]').click();
   assert.equal(await page.locator('.screen .panel').count(), 1);
   assert.ok(await page.locator('.panel #min-shift').count());

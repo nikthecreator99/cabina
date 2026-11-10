@@ -1,6 +1,6 @@
-// Меню ☰ «Настройки работы»: маршруты, тарифные ставки и надбавки, дома отдыха, междусменный отдых.
+// Меню ☰ «Настройки работы»: участки (до 2.25 — маршруты), тарифные ставки и надбавки, дома отдыха, междусменный отдых.
 import { I, esc, small, pageHead, stepperHtml, openLayer, closeLayer, sheet, toast, confirmDialog, infoDialog, plural, MONTHS_GEN } from './ui.js';
-import { S, nowLocal, saveSettings, deleteRoute, myPay, usesRoute } from './store.js';
+import { S, nowLocal, saveSettings, deleteRoute, myPay, usesRoute, stationsList } from './store.js';
 import { fmtDur, fmtLocal, legsOf } from './calc.js';
 import { openRouteForm } from './forms.js';
 import { restHouses, dayOffMin } from './rest.js';
@@ -24,7 +24,7 @@ export function renderWork() {
   const r = S.routes.length;
   return `${pageHead('Настройки работы', { back: true })}
     <div class="panel">
-      <button class="row" data-act="go" data-page="routes"><span class="ico" style="--c:var(--accent)">${I.route}</span><div class="grow"><div class="t1">Маршруты</div><div class="t2">${r ? `${r} ${plural(r, 'маршрут', 'маршрута', 'маршрутов')}` : 'Плечи, по которым вы ездите'}</div></div>${small(I.right, 18)}</button>
+      <button class="row" data-act="go" data-page="routes"><span class="ico" style="--c:var(--accent)">${I.route}</span><div class="grow"><div class="t1">Участки</div><div class="t2">${r ? `${r} ${plural(r, 'участок', 'участка', 'участков')}` : 'Участки и станции, по которым вы ездите'}</div></div>${small(I.right, 18)}</button>
       <button class="row" data-act="go" data-page="tariffs"><span class="ico" style="--c:var(--ok)">${I.wallet}</span><div class="grow"><div class="t1">Тарифные ставки и надбавки</div><div class="t2">${hasRate(cfg) ? `${fmtRub(rate, true)} в час${ROLES[cfg.role] ? ` · ${ROLES[cfg.role].toLowerCase()}` : ''}` : 'Ставка не указана — заработок не считается'}</div></div>${small(I.right, 18)}</button>
       <button class="row" data-act="go" data-page="houses"><span class="ico" style="--c:var(--night)">${I.bed2}</span><div class="grow"><div class="t1">Дома отдыха</div><div class="t2">${houses.length ? `${houses.length} ${plural(houses.length, 'дом отдыха', 'дома отдыха', 'домов отдыха')} · минимум ${fmtDur(S.settings.minRest ?? 240, { short: true })}` : 'Минимальный отдых в пункте оборота'}</div></div>${small(I.right, 18)}</button>
       <div class="wk-sec" id="shift-panel">
@@ -37,35 +37,35 @@ export function renderWork() {
         ${wkOpen.has('dayoff') ? `<div id="wk-dayoff"><div class="row"><div class="grow"><div class="t2"><label for="day-off">Часы выходного.</label> После поездки нажмите «Пойти на выходной» — на главном экране будет видно, когда он закончится.</div></div></div>
         <div class="row"><div class="input-unit grow"><input class="input" id="day-off" inputmode="decimal" autocomplete="off" value="${esc(numText(Math.round(dayOffMin() / 60 * 100) / 100))}" placeholder="Например, 60"><span>ч</span></div></div></div>` : ''}
       </div>
-      <button class="row" data-act="depot-share" id="depot-share"><span class="ico" style="--c:var(--accent)">${I.qr}</span><div class="grow"><div class="t1">Поделиться настройками депо</div><div class="t2">Маршруты, нормы и дома отдыха — коллеге одним QR-кодом</div></div>${small(I.right, 18)}</button>
+      <button class="row" data-act="depot-share" id="depot-share"><span class="ico" style="--c:var(--accent)">${I.qr}</span><div class="grow"><div class="t1">Поделиться настройками депо</div><div class="t2">Участки, нормы и дома отдыха — коллеге одним QR-кодом</div></div>${small(I.right, 18)}</button>
       <button class="row" data-act="depot-receive" id="depot-receive"><span class="ico" style="--c:var(--ok)">${I.camera}</span><div class="grow"><div class="t1">Получить настройки депо</div><div class="t2">Отсканируйте QR-код коллеги — выберете, что добавить</div></div>${small(I.right, 18)}</button>
     </div>
     <div class="hint">Настройками депо можно поделиться с коллегой: ставки, оклад и поездки не передаются.</div>`;
 }
 
-// ---------------------------------------------------------------- маршруты (компактные карточки)
+// ---------------------------------------------------------------- участки (до 2.25 — «маршруты»), компактные карточки
 export function renderRoutes() {
   const use = new Map();
-  // маршрут после смены локомотива тоже считается: поездка по нему была
+  // участок после смены локомотива тоже считается: поездка по нему была
   S.trips.forEach((t) => new Set(legsOf(t).map((l) => l.routeId).filter(Boolean)).forEach((id) => use.set(id, (use.get(id) || 0) + 1)));
   const list = [...S.routes].sort((a, b) => (use.get(b.id) || 0) - (use.get(a.id) || 0) || a.from.localeCompare(b.from, 'ru'));
-  return `${pageHead('Маршруты', { back: true })}
-    <div class="page-sub">${list.length ? `${list.length} ${plural(list.length, 'сохранённый маршрут', 'сохранённых маршрута', 'сохранённых маршрутов')}` : 'Сохраните маршруты, чтобы выбирать их одним касанием'}</div>
-    <button class="btn btn-primary" data-act="add-route">${I.plus} Добавить маршрут</button>
+  return `${pageHead('Участки', { back: true })}
+    <div class="page-sub">${list.length ? `${list.length} ${plural(list.length, 'сохранённый участок', 'сохранённых участка', 'сохранённых участков')}` : 'Сохраните участки, по которым ездите, — со станциями по порядку'}</div>
+    <button class="btn btn-primary" data-act="add-route">${I.plus} Добавить участок</button>
     ${list.length ? `<div class="list">${list.map((r) => {
       const n = use.get(r.id) || 0;
-      const hasReverse = S.routes.some((x) => x.from.toLowerCase() === r.to.toLowerCase() && x.to.toLowerCase() === r.from.toLowerCase());
+      const st = stationsList(r).length;
       return `<div class="swipe" data-swipe="${esc(r.id)}">
-      <button class="swipe-del" data-act="route-del" data-id="${esc(r.id)}" aria-label="Удалить маршрут" tabindex="-1">${I.trash}<span>Удалить</span></button>
+      <button class="swipe-del" data-act="route-del" data-id="${esc(r.id)}" aria-label="Удалить участок" tabindex="-1">${I.trash}<span>Удалить</span></button>
       <div class="route-card swipe-row">
-        <button class="route-pts" data-act="route" data-id="${esc(r.id)}" aria-label="Изменить маршрут ${esc(r.from)} — ${esc(r.to)}">
-          <div class="pt"><span>${esc(r.from)}</span><i aria-hidden="true">→</i><span>${esc(r.to)}</span></div>
-          <div class="route-meta">${r.distanceKm ? `<span class="km">${fmtKm(r.distanceKm)}</span> · ` : ''}${n ? `${n} ${plural(n, 'поездка', 'поездки', 'поездок')}` : 'Поездок пока нет'}</div>
+        <button class="route-pts" data-act="route" data-id="${esc(r.id)}" aria-label="Изменить участок ${esc(r.from)} — ${esc(r.to)}">
+          <div class="pt"><span>${esc(r.from)}</span><i aria-hidden="true">—</i><span>${esc(r.to)}</span></div>
+          <div class="route-meta">${r.distanceKm ? `<span class="km">${fmtKm(r.distanceKm)}</span> · ` : ''}${st > 2 ? `${st} ${plural(st, 'станция', 'станции', 'станций')} · ` : ''}${n ? `${n} ${plural(n, 'поездка', 'поездки', 'поездок')}` : 'Поездок пока нет'}</div>
         </button>
-        ${hasReverse ? '' : `<button class="icon-btn" data-act="route-reverse" data-id="${esc(r.id)}" aria-label="Создать обратный маршрут" title="Обратный маршрут">${I.swap}</button>`}
       </div></div>`;
-    }).join('')}</div>`
-      : `<div class="empty"><div class="em-ico">${I.route}</div><b>Маршрутов пока нет</b><p>Например: Малошуйка → Сумский Посад. Маршрут можно выбрать первым полем при добавлении поездки.</p></div>`}`;
+    }).join('')}</div>
+    <div class="hint">Нажмите на участок, чтобы добавить станции по порядку. Тогда в поездке можно выбрать часть участка, например «Малошуйка → Поньга», а километры посчитаются по перегонам.</div>`
+      : `<div class="empty"><div class="em-ico">${I.route}</div><b>Участков пока нет</b><p>Например: Малошуйка — Обозерская, а внутри — станции по порядку. Участок выбирается первым полем при добавлении поездки.</p></div>`}`;
 }
 
 // ---------------------------------------------------------------- тарифные ставки и надбавки
@@ -200,10 +200,10 @@ export function renderHouses() {
     <div class="group-title">Ваши дома отдыха</div>
     ${houses.length ? `<div class="panel">${houses.map((h) => `<button class="row" data-act="house" data-key="${esc(h.key)}">
         <span class="ico" style="--c:var(--night)">${I.home2}</span>
-        <div class="grow"><div class="t1">${esc(h.name)}</div><div class="t2">${h.count ? `Отдыхали ${h.count} ${plural(h.count, 'раз', 'раза', 'раз')}` : 'Станция прибытия маршрута'}</div></div>
+        <div class="grow"><div class="t1">${esc(h.name)}</div><div class="t2">${h.count ? `Отдыхали ${h.count} ${plural(h.count, 'раз', 'раза', 'раз')}` : 'Конец участка'}</div></div>
         <span class="house-min ${h.minRest != null ? 'own' : ''}">${fmtDur(h.minRest ?? gen, { short: true })}${h.minRest != null ? '' : '<small>общий</small>'}</span>${small(I.right, 18)}</button>`).join('')}</div>
-      <div class="hint">Дом отдыха — станция прибытия поездки с отдыхом в пункте оборота. Список собирается сам из ваших маршрутов.</div>`
-      : `<div class="empty"><div class="em-ico">${I.home2}</div><b>Домов отдыха пока нет</b><p>Они появятся сами: дом отдыха — станция прибытия маршрута, где вы отдыхаете в пункте оборота. Например, маршрут «Малошуйка → Сумский Посад» даст дом отдыха «Сумский Посад».</p></div>`}`;
+      <div class="hint">Дом отдыха — станция прибытия поездки с отдыхом в пункте оборота. Список собирается сам из ваших поездок и участков.</div>`
+      : `<div class="empty"><div class="em-ico">${I.home2}</div><b>Домов отдыха пока нет</b><p>Они появятся сами: дом отдыха — станция прибытия поездки, после которой вы отдыхаете в пункте оборота. Например, поездка «Малошуйка → Сумский Посад» даст дом отдыха «Сумский Посад».</p></div>`}`;
 }
 
 function openHouse(key) {
@@ -256,13 +256,8 @@ export async function workClick(act, b, ctx) {
       const r = S.routes.find((x) => x.id === b.dataset.id);
       if (!r) return true;
       const used = S.trips.filter((t) => usesRoute(t, r.id)).length;
-      const ok = await confirmDialog({ title: 'Вы действительно хотите удалить маршрут?', text: `${r.from} → ${r.to}${used ? '. Поездки с этим маршрутом сохранят его название.' : ''}`, ok: 'Да', cancel: 'Нет' });
-      if (ok) { await deleteRoute(r.id); toast('Маршрут удалён'); } else ctx.closeSwipes();
-      return true;
-    }
-    case 'route-reverse': {
-      const r = S.routes.find((x) => x.id === b.dataset.id);
-      if (r) openRouteForm(null, { from: r.to, to: r.from, distanceKm: r.distanceKm });
+      const ok = await confirmDialog({ title: 'Вы действительно хотите удалить участок?', text: `${r.from} — ${r.to}${used ? '. Поездки по нему сохранят названия станций, но без километров.' : ''}`, ok: 'Да', cancel: 'Нет' });
+      if (ok) { await deleteRoute(r.id); toast('Участок удалён'); } else ctx.closeSwipes();
       return true;
     }
     case 'avg-info': infoDialog({ title: 'Средний заработок за час', text: AVG_INFO }); return true;

@@ -2,7 +2,7 @@
 // часы, ночные, километры, любимый локомотив, награды и рекорды; внизу адрес сайта и QR-код на cabina-app.ru.
 // Без сумм, имени, депо, станций и номеров локомотивов. Рисуется в телефоне, никуда не отправляется.
 import { I, small, toast, openLayer, closeLayer, sheet, saveToDevice, plural, MONTHS, esc } from './ui.js';
-import { S, statsOf, isPending, isLive, locosOf, normType, normNum, locoKey } from './store.js';
+import { S, statsOf, isPending, isLive, locosOf, normType, normNum, locoKey, legKm } from './store.js';
 import { monthSummary, parseLocal, legsOf, fmtDur } from './calc.js';
 import { computeAwards, AWARDS, TIER_NAMES, awardImg, awardColors } from './awards.js';
 import { drawSky, fit, roundRect, loadFonts, DISPLAY, BODY } from './recap.js';
@@ -45,9 +45,8 @@ export function yearData(y) {
     if (s.work > 0 && (!best || s.work > best.min)) best = { m, min: s.work };
   }
   // километры — по маршруту каждого локомотива, манёвры не считаем (как в наградах)
-  const routes = new Map(S.routes.map((r) => [r.id, r]));
   let km = 0;
-  for (const t of trips) if (t.kind !== 'shunt') for (const l of legsOf(t)) km += Number(routes.get(l.routeId)?.distanceKm) || 0;
+  for (const t of trips) if (t.kind !== 'shunt') for (const l of legsOf(t)) km += legKm(l);
   // локомотивы: любимая серия (сколько поездок на ней) и сколько разных машин. Номер на картинку не попадает.
   const series = new Map(); const machines = new Set();
   for (const t of trips) {
