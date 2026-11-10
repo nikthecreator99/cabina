@@ -7,6 +7,7 @@ import { parseLocal, MIN, DAY, monthKeyOf, dateKeyOf, fmtDur, hasLegs, legsOf } 
 import { isHoliday } from './calendar.js';
 import { heavyCount } from './pay.js';
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, plural, dayMonth, toast, MONTHS } from './ui.js';
+import { isGuest } from './auth.js';
 
 const IRON_MIN = 12 * 60; // «Железная пятая точка»: поездка от 12 часов (согласовано с Никитой)
 const WAIT_MIN = 4 * 60; // «Ждём-с»: ожидание следования за одну поездку
@@ -47,7 +48,7 @@ export const AWARDS = [
   { id: 'newyear', g: 'holidays', color: 'repeat', name: 'Дед Мороз', how: 'Встретить Новый год в поездке. Даётся за каждый такой Новый год.', fun: 'С праздником, коллега!', key: 'newyear', repeat: true, goals: [1] },
   { id: 'holiday', g: 'holidays', color: 'repeat', name: 'Праздник в кабине', how: 'Работа в официальный праздничный день. Даётся за каждый такой день.', fun: 'Пока все отдыхали, вы работали.', key: 'holiday', repeat: true, goals: [1] },
   // 2.19.4, просьба Никиты: за аккаунт CABINA. flag — «да или нет», без счёта и полоски прогресса
-  { id: 'account', g: 'special', color: 'special', name: 'Свой человек', how: 'Создать аккаунт CABINA. Сейчас — по приглашению.', fun: 'Пропуск выдан — добро пожаловать в команду!', key: 'account', flag: true, goals: [1] },
+  { id: 'account', g: 'special', color: 'special', name: 'Свой человек', how: 'Создать аккаунт CABINA.', fun: 'Пропуск выдан — добро пожаловать в команду!', key: 'account', flag: true, goals: [1] },
   // 2.20: числа с сервера (засчитанные приглашения, принятые идеи) хранятся в телефоне и только растут — полученное не отбираем
   { id: 'mentor', g: 'special', name: 'Наставник', how: 'Коллеги, пришедшие по вашему личному приглашению: подтвердили почту и заходили в CABINA в 3 разных дня', fun: 'Вы привели коллег — теперь вы наставник.', key: 'invited', goals: [1, 5, 10], unit: (n) => plural(n, 'коллега', 'коллеги', 'коллег') },
   { id: 'idea', g: 'special', name: 'Идейный', how: 'Ваши идеи, которые приняли в CABINA («Ещё» → «Предложить идею»)', fun: 'Ваша идея сделала CABINA лучше.', key: 'ideas', goals: [1, 3, 10], unit: (n) => plural(n, 'идея', 'идеи', 'идей') },
@@ -225,6 +226,7 @@ const timesText = (n) => `×${n}`;
 export function celebrate(news) {
   if (!news) return;
   try { if (localStorage.getItem('cabina-awards-quiet')) return; } catch { /* без хранилища — поздравляем как обычно */ } // для автотестов
+  if (isGuest()) { guestNudge(news); return; }
   const repeats = news.repeats || [];
   if (!news.fresh.length && !news.record) {
     if (repeats.length) toast(`Награда: ${repeats.map((x) => `${x.a.name} ${timesText(x.n)}`).join(', ')}`);
@@ -242,6 +244,29 @@ export function celebrate(news) {
     <div class="btns"><button class="btn btn-plain btn-sm" data-act="aw-later">Позже</button><button class="btn btn-primary btn-sm" data-act="aw-see">Награды</button></div></div>`, { kind: 'dialog' });
   el.querySelector('[data-act=aw-later]').onclick = () => closeLayer(el);
   el.querySelector('[data-act=aw-see]').onclick = () => { closeLayer(el); document.dispatchEvent(new CustomEvent('cabina:go', { detail: 'awards' })); };
+}
+
+// Гость (2.26, просьба Никиты): награда заработана, но видна с аккаунтом. Окно — не чаще раза в 3 дня
+// (сначала «Позже» → следующее только через 3 дня), в остальное время — короткое сообщение внизу. Какая именно награда — не говорим.
+const NUDGE_KEY = 'cabina-guest-award';
+export const NUDGE_EVERY = 3 * DAY;
+function guestNudge(news) {
+  let last = 0;
+  try { last = Number(localStorage.getItem(NUDGE_KEY)) || 0; } catch {}
+  const now = Date.now();
+  const big = news.fresh.length || news.record;
+  if (!big || now - last < NUDGE_EVERY) { toast(news.record && !news.fresh.length ? 'Новый рекорд — он ждёт вас в аккаунте' : 'Новая награда — она ждёт вас в аккаунте', { ms: 4000 }); return; }
+  try { localStorage.setItem(NUDGE_KEY, String(now)); } catch {}
+  const x = news.fresh[0];
+  const many = news.fresh.length > 1;
+  const title = x ? (many ? 'Новые награды!' : 'Новая награда!') : 'Новый рекорд!';
+  const el = openLayer(`<div class="dialog aw-dialog gp-nudge" role="dialog" aria-modal="true" aria-label="${title}">
+    <div class="aw-row"><span class="gp-blur" aria-hidden="true">${x ? awardArt(x.a.id, 96, x.tier) : `<span class="gp-rec">${I.medal}</span>`}</span><span class="gp-lock-badge">${small(I.lock, 18)}</span></div>
+    <h3>${title}</h3>
+    <p>${!x ? 'Он ждёт' : many ? 'Они ждут' : 'Она ждёт'} вас в аккаунте. Зарегистрируйтесь бесплатно — и увидите.</p>
+    <div class="btns"><button class="btn btn-plain btn-sm" data-act="aw-later">Позже</button><button class="btn btn-primary btn-sm" data-act="aw-signup">Зарегистрироваться</button></div></div>`, { kind: 'dialog' });
+  el.querySelector('[data-act=aw-later]').onclick = () => closeLayer(el);
+  el.querySelector('[data-act=aw-signup]').onclick = () => { closeLayer(el); document.dispatchEvent(new CustomEvent('cabina:go', { detail: 'signup' })); };
 }
 
 // ---- значок награды: рисунок ступени, «×N» у повторяемых, точки ступеней ----

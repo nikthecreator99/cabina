@@ -7,6 +7,7 @@ import { monthSummary, parseLocal, legsOf, fmtDur } from './calc.js';
 import { computeAwards, AWARDS, TIER_NAMES, awardImg, awardColors } from './awards.js';
 import { drawSky, fit, roundRect, loadFonts, DISPLAY, BODY } from './recap.js';
 import { qrMatrix } from './share.js';
+import { isGuest } from './auth.js';
 
 export const SITE = 'https://cabina-app.ru/';
 export const YEAR_MIN_TRIPS = 10; // плашка на главной — от 10 законченных поездок за год
@@ -124,7 +125,8 @@ export function yearSlides(d) {
       d.machines > 1 ? `всего ${fmtN(d.machines)} разных ${plural(d.machines, 'локомотив', 'локомотива', 'локомотивов')}` : '',
     ].filter(Boolean) });
   }
-  if (d.awards.length) s.push({ kind: 'awards', awards: d.awards.slice(0, 6), more: Math.max(0, d.awards.length - 6), total: d.awards.length });
+  // гость (2.26): награды — с аккаунтом, картинку с ними не рисуем
+  if (d.awards.length && !isGuest()) s.push({ kind: 'awards', awards: d.awards.slice(0, 6), more: Math.max(0, d.awards.length - 6), total: d.awards.length });
   const rec = [];
   if (d.longest) rec.push(['Самая долгая поездка', fmtDur(d.longest, { short: true })]);
   if (d.best) rec.push([`Лучший месяц — ${MONTHS[d.best.m - 1].toLowerCase()}`, `${fmtN(hours(d.best.min))} ч`]);

@@ -20,7 +20,7 @@ async function openAwards(page) {
   await page.waitForSelector('.aw-grid');
 }
 
-test('без аккаунта «Свой человек» закрыт и честно пишет «по приглашению»', async () => {
+test('без аккаунта «Свой человек» закрыт и честно пишет, как его получить', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { trips: [TRIP] });
   await openAwards(page);
@@ -28,7 +28,7 @@ test('без аккаунта «Свой человек» закрыт и чес
   assert.match(await award(page).getAttribute('class'), /locked/);
   await award(page).click();
   const s = top(page);
-  assert.match(await s.innerText(), /Свой человек[\s\S]*Создать аккаунт CABINA\. Сейчас — по приглашению\.[\s\S]*Пока не получена/);
+  assert.match(await s.innerText(), /Свой человек[\s\S]*Создать аккаунт CABINA\.[\s\S]*Пока не получена/);
   assert.doesNotMatch(await s.innerText(), /0 из 1/, 'без полоски «0 из 1»');
   assert.deepEqual(errors, []);
   await context.close();

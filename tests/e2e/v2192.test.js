@@ -8,7 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startEnv, openApp, seed, text, closeTop, waitNoLayers, openSettings } from './helpers.js';
-import { ME, ANNA, OLEG, ready, openTeam, CUR } from './mock-colleagues.js';
+import { ME, ANNA, OLEG, ready, openTeam, CUR , passGate } from './mock-colleagues.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -66,7 +66,7 @@ test('профиль: ✎ у имени вместо большой кнопки
   await page.locator('[data-act=back]').click();
   // «Найти коллегу» — сразу экран поиска
   await page.locator('#col-find').click();
-  await page.locator('#col-form').waitFor();
+  await passGate(page); // 2.26: сначала «Меня можно найти»
   assert.match(await text(page, '.page-head'), /Найти коллегу/);
   await page.locator('[data-act=back]').click();
   // рекорды — на экране наград
@@ -108,7 +108,7 @@ test('«Мои коллеги»: поиск в самом верху даже п
   await sec.locator('.col-empty').waitFor();
   assert.equal(await page.locator('#team-q').count(), 0);
   await sec.locator('.col-search').click();
-  await page.locator('#col-form').waitFor();
+  await page.locator('#col-gate').waitFor(); // 2.26: поиск — после «Меня можно найти»
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });

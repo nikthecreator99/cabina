@@ -26,10 +26,11 @@ import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml 
 import { medReminder, medBannerHtml, medClick } from './med.js';
 import { yearNagHtml, yearClick } from './year.js';
 import { openRemind, restRemindKind } from './remind.js';
-import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml, startSignup } from './account.js';
-import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite } from './auth.js';
+import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedirect, setAccountVersion, accountRowHtml, startSignup, startAccount } from './account.js';
+import { guestLockHtml } from './guest.js';
+import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite, isGuest } from './auth.js';
 import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
-  colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError } from './colleagues.js';
+  colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError, openShowMe } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL, GROUPS_LIVE } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
@@ -38,11 +39,11 @@ import { checkDepotHash } from './depot.js';
 import { openTableExport, importTableFile } from './table.js';
 import { renderHelp, helpListHtml } from './help.js';
 import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, joinByCode } from './groups.js';
-import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, signupTeaserHtml, nagClick } from './invites.js';
+import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
 
-export const VERSION = '2.25.0';
+export const VERSION = '2.26.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -581,7 +582,9 @@ function renderSetAbout() {
 }
 
 // ---------------------------------------------------------------- рендер и навигация
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: renderAvatarEdit, career: renderCareer, awards: renderAwards, records: renderRecords, team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe };
+// Гость (2.26): награды, рекорды и персонаж — с аккаунтом; вместо экрана — что там будет и «Зарегистрироваться»
+const locked = (kind, fn) => () => (isGuest() ? guestLockHtml(kind) : fn());
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
@@ -589,13 +592,13 @@ let tabFace = { key: null, icon: null };
 function renderTabbar() {
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === V.tab ? 'page' : 'false'));
   // в конструкторе персонажа нижнее меню прячется: больше места и ничего не теряется случайным нажатием
-  document.body.classList.toggle('av-editing', page() === 'avatar');
+  document.body.classList.toggle('av-editing', page() === 'avatar' && !isGuest());
   const tab = document.querySelector('.tab[data-tab=profile]');
   if (!tab) return;
   const old = tab.querySelector('svg');
   if (tabFace.icon == null) tabFace.icon = old?.outerHTML || '';
   const rights = avatarRights();
-  const key = hasAvatar() ? JSON.stringify([S.profile.avatar, rights]) : '';
+  const key = hasAvatar() && !isGuest() ? JSON.stringify([S.profile.avatar, rights]) : '';
   if (key === tabFace.key) return;
   tabFace.key = key;
   const html = key ? avatarSvg(normalizeAvatar(S.profile.avatar, rights), { size: 26, crop: 'face', bg: false, cls: 'tab-face' }) : tabFace.icon;
@@ -612,7 +615,7 @@ function render({ still = false } = {}) {
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
   else if (V.tab === 'learn') app.innerHTML = `<div class="screen lr-hub">${renderLearn()}</div>`; // «Обучение» — своя вкладка (2.23.0)
-  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()) || signupTeaserHtml())}</div>`;
+  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()))}</div>`;
   learnAfter(p, V.tab, still);
   renderTabbar();
   scheduleTours();
@@ -733,7 +736,13 @@ function navTo(startStr) {
 setNavigator(navTo);
 // поездки от напарника добавлены — показать их месяц; из окна награды — экран «Награды»
 document.addEventListener('cabina:imported', (e) => navTo(e.detail));
-document.addEventListener('cabina:go', (e) => { if (e.detail === 'awards') go('awards'); });
+// Только что создали аккаунт (2.26): один вопрос — показывать ли себя коллегам (colleagues.js)
+document.addEventListener('cabina:signed-up', () => setTimeout(async () => { await loadColleagues({ force: true }); openShowMe(); }, 600));
+document.addEventListener('cabina:go', (e) => {
+  if (e.detail === 'awards') go('awards');
+  // «Зарегистрироваться» из окна награды (2.26): сразу форма создания аккаунта
+  if (e.detail === 'signup' && !session()) { startAccount('signup'); go('account'); }
+});
 
 function shiftMonth(delta) {
   let m = V.m + delta;

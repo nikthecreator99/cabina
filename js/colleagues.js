@@ -869,6 +869,62 @@ function resultsHtml() {
   return `<div class="group-title">Нашли ${n} ${plural(n, 'человека', 'человек', 'человек')}${n >= 20 ? ' — уточните имя или депо' : ''}</div><div class="panel" id="col-found">${C.results.map(resultRow).join('')}</div>`;
 }
 
+// Поиск взаимный (2.26, решение Никиты 10.11.2026): искать коллег может тот, кого самого можно найти.
+// Переключатели не включены заранее: «Меня можно найти» — с отдельным согласием на распространение (152-ФЗ, ст. 10.1),
+// статус — кому из коллег (как в «Приватности»). Выключить можно в любой момент — тогда поиск снова закрыт.
+function gateHtml() {
+  const st = C.snap ? accessMode(C.snap, 'status').mode !== 'none' : false;
+  const row = (title, sub, attrs, on) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
+    <button class="switch" role="switch" ${attrs} aria-checked="${on}" aria-label="${title}"></button></div>`;
+  return `${pageHead('Найти коллегу', { back: true })}
+    <section class="gp-hero col-gate" id="col-gate">
+      <span class="gp-lock-ico" style="--c:var(--ok)">${I.users}</span>
+      <h2>Сначала покажите себя</h2>
+      <p>Поиск взаимный: найти можно только тех, кто сам это разрешил. Разрешите — и ищите коллег.</p>
+    </section>
+    <div class="panel" id="col-gate-rows">
+      ${row('Меня можно найти', 'Коллеги найдут вас по имени', 'data-act="pr-priv" data-k="find"', false)}
+      ${row('Показывать статус коллегам', 'В пути, на отдыхе или дома — только вашим коллегам', 'data-act="col-gate-status"', st)}
+    </div>
+    <button class="btn btn-primary" data-act="col-gate-go" id="col-gate-go">Разрешить и искать</button>
+    <p class="hint">Номер поезда и точное время явки не видит никто. Выключить — в любой момент: Настройки аккаунта → «Приватность».</p>`;
+}
+
+// «Да, показывать»: «Меня можно найти» (с согласием) и статус — всем коллегам. true — если найти теперь можно.
+async function showMe({ status = true } = {}) {
+  if (!privacyOf().find) await setFind(true);
+  if (!privacyOf().find) return false;
+  const snap = C.snap || await loadColleagues({ force: true });
+  if (status && snap && accessMode(snap, 'status').mode === 'none') await setAccess('status', 'all');
+  hooks.rerender();
+  return true;
+}
+
+// Сразу после регистрации (2.26, просьба Никиты): один вопрос — показывать ли себя коллегам. «Не сейчас» — ничего не включаем.
+export function openShowMe() {
+  if (!mine() || privacyOf().find || layerCount()) return;
+  const noName = !cleanText(S.profile.name);
+  const el = openLayer(sheet({ title: 'Коллеги', body: `<div class="col-showme" id="col-showme">
+      <h3 class="sm-q">Показывать коллегам, что вы в поездке или дома?</h3>
+      <p>Так коллеги найдут вас, а вы — их. Без этого вы не найдёте коллег, а они не увидят вас.</p>
+      ${noName ? `<div class="pay-field"><label for="sm-name">Как вас зовут</label><input class="input" id="sm-name" maxlength="60" autocomplete="name" placeholder="Например, Иван Петров"><div class="hint">По имени вас узнают коллеги.</div></div>` : ''}
+      <p class="hint">Номер поезда и точное время явки не видит никто. Выключить — в любой момент в «Приватности».</p>
+      <div id="sm-err" class="acc-err" role="alert" aria-live="assertive"></div></div>`,
+  foot: '<button class="btn btn-primary" data-act="sm-yes">Да, показывать</button><button class="link-btn sm-later" data-act="sm-later">Не сейчас</button>' }));
+  el.querySelector('[data-act="sm-later"]').addEventListener('click', () => closeLayer(el));
+  el.querySelector('[data-act="sm-yes"]').addEventListener('click', async () => {
+    if (noName) {
+      const name = cleanText(el.querySelector('#sm-name')?.value || '');
+      if (!name) { el.querySelector('#sm-err').innerHTML = `<div class="error-box">${I.alert}<span>Впишите имя — по нему вас найдут.</span></div>`; el.querySelector('#sm-name')?.focus(); return; }
+      await saveProfile({ name: name.slice(0, 60) });
+    }
+    closeLayer(el);
+    if (C.busy) return;
+    C.busy = true;
+    try { if (await showMe()) toast('Готово: коллеги найдут вас, а вы — их', { ms: 4000 }); } finally { C.busy = false; }
+  });
+}
+
 export function renderColleagues() {
   if (mine()) ensureFresh();
   else {
@@ -876,6 +932,7 @@ export function renderColleagues() {
       <div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Коллеги работают через аккаунт: так предложения и статус доходят только до тех, кого вы добавили.</div></div>
       <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
   }
+  if (!privacyOf().find) return gateHtml();
   const q = C.q;
   return `${pageHead('Найти коллегу', { back: true })}
     <form class="panel pay-panel" id="col-form" novalidate role="search">
@@ -1077,6 +1134,18 @@ export async function colleaguesClick(act, b) {
   }
   if (!act.startsWith('col-')) return false;
   if (act === 'col-access') { openAccess(b.dataset.item); return true; }
+  if (act === 'col-gate-status' || act === 'col-gate-go') {
+    if (C.busy) return true;
+    C.busy = true;
+    try {
+      if (act === 'col-gate-go') await showMe();
+      else {
+        const snap = await snapOrSay();
+        if (snap) await setAccess('status', accessMode(snap, 'status').mode === 'none' ? 'all' : 'none');
+      }
+    } finally { C.busy = false; }
+    return true;
+  }
   if (act === 'col-role') {
     C.q.role = own(ROLE_NAMES, b.dataset.role) ? b.dataset.role : '';
     document.querySelectorAll('#col-role button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));

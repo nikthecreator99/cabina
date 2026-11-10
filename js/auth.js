@@ -4,7 +4,7 @@
 // С 2.20 — по действию человека: его приглашения (invites.js) и идеи (ideas.js).
 // Поездки, заработок, отвлечения, документы и телефон — никогда.
 // Вход хранится в localStorage, а не в базе приложения: так он не попадает в резервную копию.
-import { CONSENT_VERSION } from './legal.js';
+import { CONSENT_VERSION, legalReady } from './legal.js';
 
 export const API = 'https://api.cabina-app.ru';
 // Публичный ключ приложения (роль anon). Его видят все: доступ к данным ограничивают правила базы (RLS).
@@ -33,6 +33,15 @@ export function session() {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
     return s && isJwt(s.access) && typeof s.refresh === 'string' ? s : null;
   } catch { return null; }
+}
+// Гость (2.26, решение Никиты 10.11.2026): раздел аккаунта есть, а входа нет. Гостю — всё основное (поездки, часы, отдых,
+// заработок, статистика, обучение), а персонаж, награды и всё «сверху» — с аккаунтом. Записи при этом не стираются:
+// персонаж лежит в профиле, награды считаются из поездок — после входа всё на месте. Это приглашение, а не защита
+// (код открытый). Отметка cabina-test-member — только для автотестов на своём компьютере (localhost).
+export function isGuest() {
+  if (!legalReady() || typeof document === 'undefined' || session()) return false; // вне браузера (расчёты в автотестах) гостя нет
+  try { if (/^(localhost|127\.0\.0\.1)$/.test(globalThis.location?.hostname || '') && localStorage.getItem('cabina-test-member')) return false; } catch {}
+  return true;
 }
 function store(s) {
   try {

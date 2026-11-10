@@ -12,13 +12,16 @@ export async function startEnv() {
 }
 
 // Новый «телефон»: пустые данные, подсказки и поздравления с наградами выключены, приветствие закрыто.
-export async function openApp(env, { onboard = true, tours = false, awards = false, now = NOW, sw = false, userAgent } = {}) {
+// guest: true — «гость» без аккаунта (2.26): персонаж и награды закрыты. По умолчанию тесты видят приложение как с аккаунтом
+// (отметка cabina-test-member работает только на localhost), чтобы старые проверки профиля, наград и персонажа не менялись.
+export async function openApp(env, { onboard = true, tours = false, awards = false, now = NOW, sw = false, userAgent, guest = false } = {}) {
   const context = await env.browser.newContext({
     viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
     locale: 'ru-RU', timezoneId: 'Europe/Moscow', serviceWorkers: sw ? 'allow' : 'block', acceptDownloads: true,
     ...(userAgent ? { userAgent } : {}),
   });
   if (!tours) await context.addInitScript(() => { try { localStorage.setItem('cabina-tours-off', '1'); } catch {} });
+  if (!guest) await context.addInitScript(() => { try { localStorage.setItem('cabina-test-member', '1'); } catch {} });
   if (!awards) await context.addInitScript(() => { try { localStorage.setItem('cabina-awards-quiet', '1'); } catch {} });
   const page = await context.newPage();
   await page.clock.setFixedTime(new Date(now));

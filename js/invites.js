@@ -4,11 +4,13 @@
 // На сервере: хеш кода, кто создал, срок. Пригласивший видит только числа — без почты, имён и дат приглашённых.
 // Код показывается один раз, в телефоне не хранится. Число засчитанных запоминается в телефоне и только растёт.
 // Здесь же — плашки «кто из коллег сейчас в пути» для тех, кто без аккаунта: только в этом телефоне, не чаще раза в неделю.
-import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, plural, dayMonth, layerCount } from './ui.js';
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, dayMonth, layerCount } from './ui.js';
 import { S, nowLocal } from './store.js';
 import { dateKeyOf, DAY } from './calc.js';
-import { legalReady } from './legal.js';
-import { session, rpc, normInvite, inviteOk, inviteUrl, errorText } from './auth.js';
+import { legalReady, APP_URL } from './legal.js';
+import { startAccount } from './account.js';
+import { guestMedals } from './guest.js';
+import { session, rpc, normInvite, inviteOk, inviteUrl, errorText, isGuest } from './auth.js';
 import { avatarSvg, REWARDS, REWARD_TIERS, rewardReady } from './avatar.js';
 import { hasAvatar } from './avatar-edit.js';
 import { countOf, noteCount, awardSnapshot, awardNews, celebrate } from './awards.js';
@@ -103,8 +105,35 @@ function openRow(x) {
     <button class="btn btn-plain btn-sm" data-act="inv-drop" data-id="${esc(x.id)}">Отменить</button></div>`;
 }
 
-const needAccountHtml = () => `<div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Приглашать коллег можно из своего аккаунта. Без аккаунта CABINA работает как раньше: записи остаются в этом телефоне.</div></div>
-  <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
+// Без входа (2.26): ссылку на CABINA отправить можно всем; вещи за приглашения — только из аккаунта (засчитывает сервер)
+const needAccountHtml = () => `<p class="lead-hint">Отправьте коллеге ссылку на CABINA — это бесплатно.</p>
+  <button class="btn btn-primary" data-act="inv-guest" id="inv-guest-send">${small(I.share, 18)} Отправить ссылку</button>
+  ${rewardsNote()}`;
+const rewardsNote = () => `<div class="notice ok gp-gift" id="inv-guest-gift">${I.gift}<div><b>Вещи для персонажа за приглашения</b> — с аккаунтом: за 1, 3, 5 и 10 коллег. Приглашение из аккаунта засчитается вам.
+  <div class="gp-gift-btn"><button class="btn btn-primary btn-sm" data-act="acc-start" data-mode="signup">Зарегистрироваться</button></div></div></div>`;
+
+// Окно «Пригласить коллег» для гостя: QR-код и ссылка на сайт CABINA, без кода и без данных человека
+export const GUEST_SHARE_TEXT = `CABINA — учёт поездок, часов, отдыха и заработка для локомотивных бригад. Бесплатно: ${APP_URL}`;
+export async function openGuestInvite() {
+  const canShare = typeof navigator.share === 'function';
+  const el = openLayer(sheet({ title: 'Пригласить коллег', tall: true, body: `<div class="share-box">
+      <div class="qr-wrap" id="inv-qr"><div class="hint">Готовим QR-код…</div></div>
+      <p class="share-how">Покажите QR-код коллеге — он наведёт камеру телефона. Или отправьте ссылку.</p>
+      ${rewardsNote()}</div>`,
+  foot: `${canShare ? `<button class="btn btn-primary" data-act="inv-share">${small(I.share, 18)} Отправить</button>` : ''}<button class="btn ${canShare ? 'btn-plain' : 'btn-primary'}" data-act="inv-copy">Скопировать</button>` }));
+  el.querySelector('[data-act="inv-share"]')?.addEventListener('click', async () => {
+    try { await navigator.share({ title: 'CABINA', text: GUEST_SHARE_TEXT }); } catch (err) { if (err?.name !== 'AbortError') toast('Не удалось открыть «Поделиться»', { error: true }); }
+  });
+  el.querySelector('[data-act="inv-copy"]').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(GUEST_SHARE_TEXT); toast('Ссылка скопирована'); } catch { toast(`Не удалось скопировать. Адрес: ${APP_URL}`, { error: true, ms: 6000 }); }
+  });
+  // «Зарегистрироваться» внутри окна: окно закрываем и открываем форму
+  el.querySelector('[data-act="acc-start"]').addEventListener('click', () => { closeLayer(el); document.dispatchEvent(new CustomEvent('cabina:go', { detail: 'signup' })); });
+  const svg = await qrSvg(APP_URL, 'QR-код со ссылкой на CABINA').catch(() => '');
+  const box = el.querySelector('#inv-qr');
+  if (box) box.innerHTML = svg || '<div class="hint">Не удалось нарисовать QR-код — отправьте ссылку.</div>';
+  return el;
+}
 
 export function renderInvites() {
   const head = pageHead('Пригласить коллег', { back: true });
@@ -183,6 +212,7 @@ export async function inviteNow() {
 }
 
 export async function invitesClick(act, b) {
+  if (act === 'inv-guest') { await openGuestInvite(); return true; }
   if (!act.startsWith('inv-') || !['inv-new', 'inv-drop'].includes(act)) return false;
   if (N.busy) return true;
   N.busy = true;
@@ -217,7 +247,7 @@ export function inviteRowHtml() {
 const NAG_KEY = 'cabina-signup-nag';
 export const NAG_WEEK = 7 * DAY;
 export const NAG_SNOOZE = 30 * DAY;
-export const NAG_TRIPS = 5;
+export const NAG_TRIPS = 3; // с 2.26 — с 3 законченных поездок (было 5): цель — больше регистраций
 function nagState() {
   try { const x = JSON.parse(localStorage.getItem(NAG_KEY) || 'null'); return x && typeof x === 'object' ? x : {}; } catch { return {}; }
 }
@@ -228,32 +258,28 @@ export function nagDue(st, now, trips) {
   const shown = Number(st.shown) || 0;
   return !shown || now - shown < DAY || now - shown >= NAG_WEEK;
 }
-const nagOff = () => !!nagState().off;
 const finished = () => S.trips.filter((t) => t.end).length;
 
 // На главной: под карточкой месяца, если нет других плашек
 export function signupNagHtml() {
-  if (!legalReady() || session()) return '';
+  if (!isGuest()) return '';
   const st = nagState();
   const now = Date.now();
   if (!nagDue(st, now, finished())) return '';
   if (!st.shown || now - st.shown >= NAG_WEEK) saveNag({ ...st, shown: now });
-  return `<div class="nag signup-nag" role="status" id="signup-nag"><span class="ico" style="--c:var(--ok)">${I.users}</span>
-    <div class="grow"><div class="t1">Кто из коллег сейчас в пути?</div><div class="t2">С аккаунтом это видно — если коллеги сами показывают вам статус. Записи остаются в телефоне. Аккаунт — по приглашению коллеги.</div></div>
-    <div class="nag-btns"><button class="btn btn-primary btn-sm" data-act="nag-signup">Подробнее</button><button class="btn btn-ghost btn-sm" data-act="nag-snooze">Не сейчас</button>
+  // 2.26: есть заработанные награды — зовём ими (они ждут в аккаунте), иначе — коллегами
+  const n = guestMedals();
+  const [ico, c, t1, t2] = n
+    ? [I.medal, 'warn', `У вас уже ${n} ${plural(n, 'награда', 'награды', 'наград')}`, `${n === 1 ? 'Она ждёт' : 'Они ждут'} вас в аккаунте. Это бесплатно, поездки остаются в телефоне.`]
+    : [I.users, 'ok', 'Кто из коллег сейчас в пути?', 'С аккаунтом это видно — если коллеги сами показывают вам статус. Записи остаются в телефоне.'];
+  return `<div class="nag signup-nag" role="status" id="signup-nag"><span class="ico" style="--c:var(--${c})">${ico}</span>
+    <div class="grow"><div class="t1">${t1}</div><div class="t2">${t2}</div></div>
+    <div class="nag-btns"><button class="btn btn-primary btn-sm" data-act="nag-signup">Зарегистрироваться</button><button class="btn btn-ghost btn-sm" data-act="nag-snooze">Не сейчас</button>
       <button class="link-btn nag-off" data-act="nag-off">Больше не показывать</button></div></div>`;
 }
 
-// В профиле вместо группы «Коллеги» (её нет без аккаунта): строка, которая ведёт к аккаунту
-export function signupTeaserHtml() {
-  if (!legalReady() || session() || nagOff()) return '';
-  return `<div class="group" id="col-teaser-sec"><div class="group-title">Коллеги</div>
-    <div class="panel"><button class="row" data-act="go" data-page="account" id="col-teaser"><span class="ico" style="--c:var(--ok)">${I.users}</span>
-      <div class="grow"><div class="t1">Кто из коллег в пути?</div><div class="t2">Войдите в аккаунт — и увидите статус коллег, которые сами его вам покажут</div></div>${small(I.right, 18)}</button></div></div>`;
-}
-
 export function nagClick(act, ctx) {
-  if (act === 'nag-signup') { ctx.go('account'); return true; }
+  if (act === 'nag-signup') { startAccount('signup'); ctx.go('account'); return true; }
   if (act === 'nag-snooze') { saveNag({ ...nagState(), snooze: Date.now() + NAG_SNOOZE }); toast('Хорошо, напомним через месяц'); ctx.rerender(); return true; }
   if (act === 'nag-off') { saveNag({ ...nagState(), off: true }); toast('Больше не покажем. Аккаунт — в Настройках'); ctx.rerender(); return true; }
   return false;

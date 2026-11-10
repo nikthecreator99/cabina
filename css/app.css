@@ -2141,3 +2141,40 @@ button.pr-status svg { color: var(--text-2); }
 .lp-end-foot { display: flex; gap: 12px; }
 .lp-end-foot .lp-go { flex: 1; min-width: 0; }
 .lp-share { width: 56px; height: 56px; border-radius: var(--r-md); }
+
+/* ---- 2.26: профиль гостя (по макету Никиты), закрытые экраны, «сначала покажите себя», окно награды для гостя ---- */
+.gp-hero { display: flex; flex-direction: column; gap: 10px; padding: 22px 18px 16px; border-radius: var(--r-lg);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 55%), var(--card-solid); border: 1px solid var(--line-2); }
+.gp-hero h2 { margin: 0; font-size: calc(23px * var(--fs)); line-height: 1.15; font-weight: 800; letter-spacing: -.01em; }
+.gp-hero p { margin: 0; color: var(--text-2); font-size: calc(15px * var(--fs)); line-height: 1.35; }
+.gp-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.gp-btns .gp-login { background: transparent; box-shadow: none; border: 1.5px solid var(--line-2); }
+.gp-free { text-align: center; color: var(--muted); font-size: calc(13px * var(--fs)); }
+.gp-perks .row { align-items: flex-start; }
+.gp-perks .row:last-child { border-bottom: 0; }
+.gp-perks .t2.gp-hot { color: var(--ok); font-weight: 700; }
+.gp-trust b { color: var(--text); }
+.gp-lock { align-items: center; text-align: center; padding-top: 26px; }
+.gp-lock-ico { position: relative; width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; color: var(--c);
+  background: color-mix(in srgb, var(--c) 14%, transparent); }
+.gp-lock-ico > svg { width: 32px; height: 32px; }
+.gp-lock-ico i { position: absolute; right: -6px; bottom: -6px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--card-2); color: var(--text-2); border: 1px solid var(--line-2); }
+.gp-lock .gp-btns { align-self: stretch; }
+.gp-gift .gp-gift-btn { margin-top: 10px; }
+.gp-gift .gp-gift-btn .btn { width: auto; }
+.share-box .gp-gift { text-align: left; }
+.gp-nudge h3 { order: 0; }
+.gp-nudge .aw-row { position: relative; display: grid; place-items: center; }
+.gp-nudge .gp-blur { display: block; filter: blur(7px) saturate(.8); opacity: .85; }
+.gp-nudge .gp-rec { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 50%; color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.gp-nudge .gp-rec svg { width: 44px; height: 44px; }
+.gp-nudge .gp-lock-badge { position: absolute; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--card-solid); color: var(--text); border: 1px solid var(--line-2); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.gp-nudge p { margin: 0; color: var(--text-2); }
+.col-gate { align-items: center; text-align: center; }
+.col-gate + .panel .switch, #col-gate-rows .switch { flex: none; }
+.col-showme { display: flex; flex-direction: column; gap: 12px; }
+.col-showme p { margin: 0; }
+.sheet-foot .sm-later { align-self: center; flex: none; background: transparent; border: 0; color: var(--text-2); font-weight: 600; }
+.col-showme .sm-q { margin: 0; font-size: calc(21px * var(--fs)); line-height: 1.2; font-weight: 800; }
