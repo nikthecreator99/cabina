@@ -25,12 +25,14 @@ test('«Заработано» под нормой; «Отвлечения» —
   assert.ok(b.y < n.y + n.height && n.y < b.y + b.height, 'кнопка на одной строке с «Ночные»');
   assert.ok(b.x > n.x + n.width, 'кнопка справа от «Ночные»');
   assert.ok(hero.x + hero.width - (b.x + b.width) < 24, 'прижата к правому краю карточки');
-  assert.ok(b.height >= 44, 'удобно нажать пальцем');
+  // 2.24.9: кнопка компактнее (40 px), но зона нажатия по-прежнему 44 px (::before)
+  assert.ok(b.height >= 40, 'удобно нажать пальцем');
+  assert.ok(await page.locator('.hero-abs').evaluate((el) => parseFloat(getComputedStyle(el, '::before').height) >= 44), 'зона нажатия не меньше 44 px');
   // «Заработано» — под нормой, выше линии (над ночными и кнопкой)
   assert.equal(await page.locator('.hero-left .hero-pay').count(), 1);
   const pay = await page.locator('.hero-pay').boundingBox();
   const foot = await page.locator('.hero-foot').boundingBox();
-  const norm = await page.locator('.norm-line').boundingBox();
+  const norm = await page.locator('.hero .big').boundingBox(); // 2.24.9: норма — вверху карточки, под ней часы
   assert.ok(pay.y > norm.y && pay.y + pay.height <= foot.y, '«Заработано» между нормой и линией');
   // карточка ниже — «Добавить поездку»
   const add = await page.locator('[data-act=add-trip]').boundingBox();

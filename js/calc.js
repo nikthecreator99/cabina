@@ -1,7 +1,7 @@
 // Расчёты CABINA. Время хранится как «настенное» локальное время пользователя
 // в строке 'YYYY-MM-DDTHH:mm' и переводится в миллисекунды как UTC-наивное время,
 // поэтому полночь, месяц и ночные часы всегда считаются по фактическим датам.
-import { dayInfo, isHoliday, monthNorm } from './calendar.js';
+import { dayInfo, isHoliday, monthNorm, normDay } from './calendar.js';
 
 const REST_KINDS = new Set(['holiday', 'off', 'weekend']);
 
@@ -262,18 +262,19 @@ export function autoAbsenceHours(startKey, endKey) {
   const byMonth = {};
   eachDate(startKey, endKey, (k) => {
     const mk = k.slice(0, 7);
-    byMonth[mk] = (byMonth[mk] || 0) + dayInfo(k).hours;
+    byMonth[mk] = (byMonth[mk] || 0) + normDay(k).hours;
   });
   return byMonth;
 }
 
-// Расшифровка «Из нормы вычтется» для формы отвлечения: «8 + 8 + 7 + 8, выходные и праздник — 0».
+// Расшифровка «Из нормы вычтется» для формы отвлечения: «7 + 7 + 5 + 6, выходной и праздник — 0»
+// (часы дней — по той же неделе, что и норма: normDay).
 // Длинный период — сгруппированно: «20 × 8 + 1 × 7».
 export function absenceBreakdown(startKey, endKey) {
   const hours = [];
   let weekends = 0, holidays = 0;
   eachDate(startKey, endKey, (k) => {
-    const d = dayInfo(k);
+    const d = normDay(k);
     if (d.hours > 0) hours.push(d.hours);
     else if (d.kind === 'holiday') holidays++;
     else weekends++;
@@ -346,6 +347,21 @@ export function monthSummary(y, m, trips, absences) {
   const pct = normMin > 0 ? work / normMin : null;
   const overtime = normMin > 0 || work > 0 ? Math.max(0, work - normMin) : 0;
   return { mk, base, absTotal, norm, normMin, work, night, holiday, restDay, wait, pass, overtime, absByType, pct, monthTrips, monthAbs };
+}
+
+// Норма на сегодня (2.24.9, как нарастающий итог на листке в депо): часы дней с 1-го числа по `todayKey`
+// включительно, без дней отвлечений. Не больше нормы месяца с учётом отвлечений.
+export function normSoFar(y, m, todayKey, absences, monthNormH) {
+  const mk = `${y}-${p2(m)}`;
+  if (!todayKey || todayKey.slice(0, 7) !== mk) return null;
+  const absent = new Set();
+  for (const a of absences) {
+    if (!a?.start || !a?.end || a.start > todayKey || a.end < `${mk}-01`) continue;
+    eachDate(a.start < `${mk}-01` ? `${mk}-01` : a.start, a.end > todayKey ? todayKey : a.end, (k) => absent.add(k));
+  }
+  let h = 0;
+  eachDate(`${mk}-01`, todayKey, (k) => { if (!absent.has(k)) h += normDay(k).hours; });
+  return monthNormH == null ? h : Math.min(h, monthNormH);
 }
 
 // ---- Отдых ----

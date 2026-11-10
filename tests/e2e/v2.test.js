@@ -150,7 +150,7 @@ test('отвлечения списком: изменить нажатием, у
     { id: 'm', type: 'medical', start: '2026-10-15', end: '2026-10-15' },
   ] });
   assert.equal(await text(page, '[data-act=absences] .count'), '2');
-  assert.match(await text(page, '.hero-lines'), /Отпуск:\s*−16 ч[\s\S]*Медкомиссия:\s*−8 ч/);
+  assert.match(await text(page, '.hero-lines'), /Отпуск:\s*−14 ч[\s\S]*Медкомиссия:\s*−7 ч/);
   await page.locator('[data-act=absences]').click();
   const list = sheet(page);
   await swipeLeft(page, list.locator('[data-act=al-open][data-id=m]'));
@@ -317,7 +317,7 @@ test('обновление с 1.x: данные на месте, тема тём
   await page.waitForSelector('.trip');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
   assert.equal(await page.locator('.trip').count(), 2);
-  assert.match(await text(page, '.hero'), /Норма: 160 ч/);
+  assert.match(await text(page, '.hero'), /Норма 165 ч/);
   assert.match(await text(page, '.rest-banner'), /Полный отдых · до завтра, 03:12/);
   await page.locator('.trip').first().click();
   assert.equal(await sheet(page).locator('[data-choice=full]').getAttribute('aria-pressed'), 'true');

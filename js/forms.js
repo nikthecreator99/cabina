@@ -8,7 +8,7 @@ import {
   tripStats, validateTrip, parseLocal, fmtLocal, fmtDur, fmtHours, turnaroundRest,
   autoAbsenceHours, absenceBreakdown, absenceMonths, validateAbsence, monthSummary, DAY, MIN, LEGS_MAX, LEG_NAMES, legsOf,
 } from './calc.js';
-import { dayInfo } from './calendar.js';
+import { normDay } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restEndOf, HOME_PICKS } from './rest.js';
 import { tripPay, overRestIntervals, hasRate, fmtRub, vacationPay, VAC_MIN_MONTHS } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
@@ -1049,7 +1049,7 @@ export function openAbsenceForm(id, { defaultDate, stay = false, type = 'sick' }
       let work = 0, short = 0, off = 0;
       let guard = 0;
       for (let t = parseLocal(`${A.start}T00:00`); t <= parseLocal(`${A.end}T00:00`) && guard++ < 3700; t += DAY) {
-        const k = dayInfo(fmtLocal(t).slice(0, 10)).kind;
+        const k = normDay(fmtLocal(t).slice(0, 10)).kind;
         if (k === 'work') work++; else if (k === 'short') short++; else off++;
       }
       const total = Object.values(auto).reduce((s, v) => s + v, 0);
