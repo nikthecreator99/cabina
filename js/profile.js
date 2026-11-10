@@ -87,10 +87,9 @@ export function profileStatus(now = nowLocal()) {
   }
 }
 
-// Выходной (2.21): нажатием можно поправить, когда он заканчивается
+// Статус — только надпись: окончание выходного и отдыха правится на главной (с 2.24.6 в профиле не правится — просьба Никиты)
 function statusHtml(st) {
   const inner = `<span class="dot"></span><b>${st.label}</b>${st.sub ? `<small>${esc(st.sub)}</small>` : ''}`;
-  if ((st.kind === 'dayoff' || st.kind === 'between') && st.tripId) return `<button class="pr-status st-${st.kind}" id="pr-status" data-act="dayoff-edit" data-id="${esc(st.tripId)}" aria-label="${esc(`${st.label} ${st.sub}`)}. Изменить окончание ${st.kind === 'dayoff' ? 'выходного' : 'отдыха'}">${inner}${small(I.edit, 14)}</button>`;
   return `<div class="pr-status st-${st.kind}" id="pr-status">${inner}</div>`;
 }
 

@@ -91,7 +91,7 @@ test('вид движения: список из четырёх, по умолч
   await page.waitForSelector('#st-kind');
   assert.match(await text(page, '.screen'), /Резервом\s+1 поездка\s+3 ч/);
   await page.locator('#st-kind button').nth(1).click();
-  assert.match(await text(page, '.screen'), /Следование резервом[\s\S]*900/);
+  assert.match(await text(page, '.screen'), /Работа на одиночно следующем локомотиве[\s\S]*900/);
   assert.doesNotMatch(await text(page, '.screen'), /Оплата по тарифу/);
   assert.deepEqual(errors, []);
   await context.close();

@@ -142,7 +142,7 @@ function draftPay(d, st) {
 export const TRIP_KINDS = {
   freight: { label: 'Грузовой', hint: 'Грузовое движение' },
   passenger: { label: 'Пассажирский', hint: 'Пассажирское движение' },
-  reserve: { label: 'Резерв', hint: 'Следование локомотива резервом' },
+  reserve: { label: 'Резерв', hint: 'Работа на одиночно следующем локомотиве' },
   shunt: { label: 'Манёвры', hint: 'Маневровая работа' },
 };
 export const kindOf = (t) => (TRIP_KINDS[t?.kind] ? t.kind : 'freight');

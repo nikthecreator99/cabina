@@ -108,7 +108,7 @@ test('«Праздничные» в форме поездки — только �
   await context.close();
 });
 
-test('полный отдых: окончание правится нажатием на главной и в профиле; «Как по расчёту» возвращает расчёт', async () => {
+test('полный отдых: окончание правится нажатием на главной; «Как по расчёту» возвращает расчёт', async () => {
   const { context, page, errors } = await openApp(env);
   // 7 ч работы × 2,6 = 18 ч 12 мин → до 21 окт, 02:12
   await seed(page, { trips: [{ id: 'f1', routeLabel: 'Сосновка → Ольховка', start: '2026-10-20T01:00', end: '2026-10-20T08:00', restType: 'home', homeChoice: 'full', homeRest: { ids: ['f1'] } }] });
@@ -135,11 +135,11 @@ test('полный отдых: окончание правится нажати�
   assert.match(await f.locator('#tf-rest-own').innerText(), /08:00/);
   await f.locator('button[data-close]').first().click();
   await waitNoLayers(page);
-  // профиль: статус — кнопка с тем же окном; «Как по расчёту»
+  // в профиле статус — только надпись (2.24.6); «Как по расчёту» — снова с главной
   await tab(page, 'profile');
-  const st = page.locator('#pr-status');
-  assert.equal(await st.getAttribute('data-act'), 'dayoff-edit');
-  await st.click();
+  assert.equal(await page.locator('#pr-status').getAttribute('data-act'), null);
+  await tab(page, 'home');
+  await banner.click();
   f = sheet(page);
   await f.locator('[data-act=do-reset]').click();
   assert.equal(await f.locator('#do-t').inputValue(), '02:12');

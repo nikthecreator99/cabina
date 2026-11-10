@@ -24,21 +24,23 @@ async function payView(page) {
 
 test('тестовый режим «оплата по сменам»: переключатель, строки квитка, пометки «тест»; выключили — как раньше', async () => {
   const { context, page, errors } = await openApp(env);
-  // будний день 14.10 (норма 8 ч), 11 ч работы
-  await seed(page, { settings: { pay: PAY }, trips: [{ id: 'a', start: '2026-10-14T06:00', end: '2026-10-14T17:00' }] });
+  // норма октября — 176 ч; 10 смен по 20 ч = 200 ч → переработка 24 ч: 10 × 2 = 20 ч ×1,5, остальные 4 ч ×2
+  const days = ['01', '03', '05', '07', '09', '11', '13', '15', '17', '19'];
+  const list = days.map((d) => ({ id: `t${d}`, start: `2026-10-${d}T06:00`, end: `2026-10-${String(+d + 1).padStart(2, '0')}T02:00` }));
+  await seed(page, { settings: { pay: PAY }, trips: list });
   await tariffs(page);
   const sw = page.locator('#pay-shift [data-act=pay-shift]');
   assert.equal(await sw.getAttribute('aria-checked'), 'false');
-  assert.match(await text(page, '#pay-shift'), /Тестовый режим: оплата по сменам[\s\S]*первые 2 часа оплачиваются в полуторном размере, остальное — в двойном/);
+  assert.match(await text(page, '#pay-shift'), /Тестовый режим: оплата по сменам[\s\S]*на каждую смену первые 2 часа переработки оплачиваются в полуторном размере, всё остальное — в двойном/);
   await sw.click();
   await page.waitForFunction(() => document.querySelector('#pay-shift [data-act=pay-shift]')?.getAttribute('aria-checked') === 'true');
   assert.equal(await page.evaluate(async () => (await import('./js/store.js')).S.settings.pay.main.shiftTest), true);
 
   let s = await payView(page);
   assert.match(s, /Тестовый режим: оплата по сменам/);
-  assert.match(s, /Сверх нормы смены, первые 2 ч 50% 2 ч 300,00 ₽/, '2 ч × 300 × 0,5');
-  assert.match(s, /Сверх нормы смены, дальше 100% 1 ч 300,00 ₽/, '1 ч × 300');
-  assert.doesNotMatch(s, /Переработка/);
+  assert.match(s, /Переработка, первые 2 ч на смену 50% 20 ч 3 000,00 ₽/, '20 ч × 300 × 0,5');
+  assert.match(s, /Переработка сверх 2 ч на смену 100% 4 ч 1 200,00 ₽/, '4 ч × 300');
+  assert.doesNotMatch(s, /Переработка \d/);
   await tab(page, 'home');
   assert.match(await text(page, '.hero-pay'), /тест/i);
 
@@ -47,7 +49,8 @@ test('тестовый режим «оплата по сменам»: перек
   await page.locator('#pay-shift [data-act=pay-shift]').click();
   await page.waitForFunction(() => document.querySelector('#pay-shift [data-act=pay-shift]')?.getAttribute('aria-checked') === 'false');
   s = await payView(page);
-  assert.doesNotMatch(s, /Тестовый режим|Сверх нормы смены/);
+  assert.doesNotMatch(s, /Тестовый режим|на смену/);
+  assert.match(s, /Переработка/, 'обычный режим — как раньше');
   await tab(page, 'home');
   assert.doesNotMatch(await text(page, '.hero-pay'), /тест/i);
 

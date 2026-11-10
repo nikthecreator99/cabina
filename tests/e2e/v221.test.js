@@ -97,7 +97,7 @@ test('вид отдыха: обязателен у всех — и без акк
   }
 });
 
-test('выходной: нажатием на главной и в профиле можно поправить, когда он заканчивается', async () => {
+test('выходной: нажатием на главной можно поправить, когда он заканчивается; в профиле — только надпись (2.24.6)', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { trips: [{ id: 'd1', start: '2026-10-20T01:00', end: '2026-10-20T08:00', routeLabel: 'Сосновка → Ольховка', restType: 'home', homeChoice: 'dayOff', dayOffMin: 3600 }] });
   const banner = page.locator('.rest-banner[data-act=dayoff-edit]');
@@ -118,11 +118,17 @@ test('выходной: нажатием на главной и в профил�
   await waitNoLayers(page);
   assert.equal((await trips(page))[0].dayOffMin, 34 * 60);
   assert.match(await page.locator('.rest-banner').innerText(), /На выходном · до завтра, 18:00|На выходном · до 21 окт, 18:00/);
-  // профиль: статус «На выходном» — кнопка, открывает то же окно; «Как в настройках» возвращает 60 ч
+  // профиль: статус «На выходном» — только надпись, правки там нет (просьба Никиты, 2.24.6)
   await tab(page, 'profile');
   const st = page.locator('#pr-status');
-  assert.equal(await st.getAttribute('data-act'), 'dayoff-edit');
+  assert.match(await st.innerText(), /На выходном/);
+  assert.equal(await st.getAttribute('data-act'), null);
+  assert.equal(await page.locator('#pr-status button, button#pr-status').count(), 0);
   await st.click();
+  assert.equal(await page.locator('.sheet').count(), 0, 'окно не открывается');
+  // «Как в настройках» возвращает 60 ч — на главной
+  await tab(page, 'home');
+  await banner.click();
   f = sheet(page);
   await f.locator('[data-act=do-reset]').click();
   assert.equal(await f.locator('#do-t').inputValue(), '20:00');
