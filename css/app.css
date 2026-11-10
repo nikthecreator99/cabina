@@ -2186,9 +2186,10 @@ button.pr-status svg { color: var(--text-2); }
 @media (max-width: 370px) { .grp-top { grid-template-columns: 1fr; } }
 :root[data-text] .grp-top { grid-template-columns: 1fr; }
 .grp-top .btn svg { flex: none; }
-.grp-sec-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 10px; }
-.grp-sec-title h2 { margin: 0; font-family: var(--font-display); font-size: clamp(18px, 5.6vw, 22px); font-weight: 700; letter-spacing: -.01em; }
-.grp-count { color: var(--muted); font-size: calc(17px * var(--fs)); font-weight: 600; }
+.grp-sec-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 24px 2px 16px; }
+.grp-cards + .grp-sec-title { margin-top: 36px; }
+.grp-sec-title h2 { margin: 0; font-family: inherit; font-size: calc(17px * var(--fs)); font-weight: 600; letter-spacing: 0; }
+.grp-count { color: var(--muted); font-size: calc(15px * var(--fs)); font-weight: 600; }
 .grp-cards { display: flex; flex-direction: column; gap: 10px; }
 .grp-cards > .grp-row { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card-solid); padding: 14px 16px; text-align: left; width: 100%; }
 .grp-row .t1 { font-size: calc(17px * var(--fs)); font-weight: 700; }
@@ -2214,7 +2215,9 @@ button.pr-status svg { color: var(--text-2); }
 .grp-nudge .grp-arrow { flex: none; color: var(--warn); margin: 0 9px -6px 0; animation: grp-bob 1.4s ease-in-out infinite; }
 @keyframes grp-bob { 0%, 100% { transform: translateY(-3px); } 50% { transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .grp-nudge .grp-arrow { animation: none; } }
-.grp-nudge + #grp-share [data-item=status] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 55%, transparent); }
+.grp-nudge { width: 100%; text-align: left; font: inherit; cursor: pointer; color: var(--text-2); }
+.grp-nudge + .grp-privpanel { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 55%, transparent); }
+.grp-priv-lead { margin: 0 0 10px; }
 .grp-truth { font-size: calc(13px * var(--fs)); line-height: 1.4; }
 .grp-truth > svg { flex: none; }
 .grp-rel { font-weight: 600; color: var(--text-2); }
@@ -2235,3 +2238,21 @@ button.pr-status svg { color: var(--text-2); }
 .gpic-font-u { font-family: 'Unbounded', sans-serif; }
 .gpic-font-o { font-family: 'Onest', sans-serif; }
 .gpic-clear { align-self: center; color: var(--holiday); background: color-mix(in srgb, var(--holiday) 10%, transparent); border-color: color-mix(in srgb, var(--holiday) 30%, transparent); }
+
+/* 2.28: колокольчик, уведомления, комментарии к идеям */
+.bell-btn { position: relative; }
+.bell-dot { position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 800; line-height: 20px; text-align: center; border: 2px solid var(--bg); box-sizing: content-box; }
+.tab.has-dot::before { content: ""; position: absolute; top: 5px; left: calc(50% + 8px); width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-sizing: content-box; z-index: 2; }
+.ntc-list { display: flex; flex-direction: column; }
+.ntc-ask { padding: 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.ntc-ask:last-child { border-bottom: 0; }
+.ntc-mute { align-self: flex-start; background: none; border: 0; padding: 0; min-height: 32px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; font-size: calc(14px * var(--fs)); }
+.ntc-idea { align-items: flex-start; text-align: left; }
+.ntc-empty { margin-top: 8px; }
+.ntc-hint { margin-top: 14px; }
+.idea-note { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--card-2); color: var(--text-2); font-size: calc(14px * var(--fs)); line-height: 1.35; overflow-wrap: anywhere; }
+.idea-note b { color: var(--text); }
+.idea-quote { padding: 10px 12px; border-radius: 12px; background: var(--card-2); color: var(--text-2); font-size: calc(14px * var(--fs)); line-height: 1.4; margin-bottom: 12px; overflow-wrap: anywhere; }
+.col-ask { margin-top: 10px; width: 100%; }
+.col-asked { margin-top: 8px; }
+.col-ask-note { margin-bottom: 12px; }

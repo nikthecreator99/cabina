@@ -104,7 +104,7 @@ function statusHtml(st) {
 // 2.22 (пример Никиты): персонаж слева, справа имя с ✎, должность, депо и стаж, телефон; статус — во всю ширину карточки.
 // Ниже — «Коллеги» и «Награды». Строки «Приватность профиля» с 2.21.2 нет (просьба Никиты: она есть в Настройках).
 // 2.26: без аккаунта — профиль гостя (guest.js): что даёт аккаунт и кнопки «Зарегистрироваться» / «Войти».
-export function renderProfile(colleagues = '') {
+export function renderProfile(colleagues = '', bell = '') {
   if (isGuest()) return guestProfileHtml();
   const p = S.profile;
   const st = profileStatus();
@@ -112,7 +112,7 @@ export function renderProfile(colleagues = '') {
   const line2 = [p.depot ? `депо ${p.depot}` : '', t ? `Стаж ${tenureText(t, { short: true }).replace(/ /g, '\u00a0')}` : ''].filter(Boolean).join(' · ');
   const subs = [roleLine(p) && `<div class="profile-sub">${esc(roleLine(p))}</div>`, line2 && `<div class="profile-sub">${esc(line2)}</div>`,
     p.phone && `<div class="profile-sub pr-phone">${small(I.call, 16)} <span class="nw">${esc(p.phone)}</span></div>`].filter(Boolean).join('');
-  return `${pageHead('Профиль', { right: `<button class="icon-btn" data-act="go" data-page="settings" aria-label="Настройки">${I.gear}</button>` })}
+  return `${pageHead('Профиль', { right: `${bell}<button class="icon-btn" data-act="go" data-page="settings" aria-label="Настройки">${I.gear}</button>` })}
     <div class="pr-page">
     <section class="profile-card pr-card">
       <div class="pr-top">

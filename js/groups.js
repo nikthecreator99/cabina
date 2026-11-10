@@ -181,13 +181,30 @@ function shareRows(g) {
   return row('status', 'Показывать мой статус группе', 'В пути, на отдыхе, между поездками — без станций', st)
     + row('place', 'Где я', placeSub, pl, !st);
 }
-// Постоянное напоминание над переключателем, пока я свой статус не показываю: стрелка — на переключатель
+// Коротко, что группа видит сейчас — подпись у кнопки «Приватность»
+function privSummary(g) {
+  const { status: st, place: pl } = myShare(g);
+  return !st ? 'Свой статус группе не показываю' : pl ? 'Показываю статус и где я' : 'Показываю статус, без станций';
+}
+// Окно «Приватность в группе» (2.28, просьба Никиты: не занимать полэкрана): переключатели и честный текст про геолокацию
+const privBody = (g) => `<div class="panel" id="grp-share">${shareRows(g)}</div>
+  <div class="notice ok grp-truth" id="grp-truth">${I.shield}<div>${TRUTH}</div></div>`;
+function openPriv(g) {
+  const el = openLayer(sheet({ title: 'Приватность в группе', body: `<p class="hint grp-priv-lead">Что видят участники группы «${esc(g.name)}». Всё выключено, пока вы сами не включите.</p><div id="grp-priv-body">${privBody(g)}</div>` }),
+    { onClose: () => colRerender() });
+  // окна не входят в общий разбор нажатий экрана — переключатели обрабатываем здесь
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act="grp-share"]');
+    if (b) groupsClick('grp-share', b);
+  });
+}
+// Постоянное напоминание над кнопкой «Приватность», пока я свой статус не показываю: стрелка — на переключатель
 function nudgeHtml(g) {
   if (!hiddenForMe(g)) return '';
   const n = showing(g);
   const all = others(g).length;
-  return `<div class="grp-nudge" id="grp-nudge" role="note"><div class="grow"><b>Хотите видеть, где коллеги?</b>
-    <span>Покажите группе свой статус — и увидите их.${n ? ` Уже показывают: ${n} из ${all}.` : ''}</span></div>${ARROW}</div>`;
+  return `<button class="grp-nudge" id="grp-nudge" data-act="grp-priv"><div class="grow"><b>Хотите видеть, где коллеги?</b>
+    <span>Покажите группе свой статус — и увидите их.${n ? ` Уже показывают: ${n} из ${all}.` : ''} Нажмите «Приватность» ниже.</span></div>${ARROW}</button>`;
 }
 
 export function renderGroup() {
@@ -205,10 +222,9 @@ export function renderGroup() {
     </div>
     ${g.admin ? `<div class="grp-btns"><button class="btn btn-primary" data-act="grp-invite" id="grp-invite">${I.plus} Пригласить коллегу</button>
       <button class="btn btn-plain" data-act="grp-code" id="grp-code">${small(I.qr, 18)} Код и QR-код группы</button></div>` : ''}
-    <div class="group-title">Мой статус в этой группе</div>
     ${nudgeHtml(g)}
-    <div class="panel" id="grp-share">${shareRows(g)}</div>
-    <div class="notice ok grp-truth" id="grp-truth">${I.shield}<div>${TRUTH}</div></div>
+    <div class="panel grp-privpanel"><button class="row" data-act="grp-priv" id="grp-priv-btn"><span class="ico" style="--c:var(--ok)">${I.shield}</span>
+      <div class="grow"><div class="t1">Приватность</div><div class="t2">${esc(privSummary(g))}</div></div>${small(I.right, 18)}</button></div>
     <div class="group-title">Участники</div>
     <div id="grp-members">${membersHtml(g)}</div>
     ${g.admin && g.pending.length ? `<div class="group-title">Ждут ответа</div><div class="panel" id="grp-pending">${g.pending.map((p) => `<div class="row col-row">${avaBox(p.card)}<div class="grow"><div class="t1">${esc(p.card.name)}</div><div class="t2">Приглашён в группу</div></div>
@@ -476,6 +492,9 @@ async function setShare(g, item) {
   toast(item === 'status' ? (st ? 'Группа видит ваш статус' : 'Группа больше не видит ваш статус') : (pl ? 'Группа видит, где вы' : 'Группа больше не видит, где вы'));
   colSync();
   await reload();
+  const box = document.querySelector('#grp-priv-body');
+  const fresh = groupOf(g.id);
+  if (box && fresh) { box.innerHTML = privBody(fresh); colRerender(); } // и сам экран группы за окном — тоже
 }
 
 // ---------------------------------------------------------------- действия
@@ -504,6 +523,7 @@ export async function groupsClick(act, b) {
         break;
       }
       case 'grp-share': if (g && !b.disabled) await setShare(g, b.dataset.item === 'place' ? 'place' : 'status'); break;
+      case 'grp-priv': if (g) openPriv(g); break;
       case 'grp-invite': if (g?.admin) inviteSheet(g); break;
       case 'grp-pic': if (g?.admin) await editPic(g); break;
       case 'grp-code': if (g?.admin) await showCode(g); break;

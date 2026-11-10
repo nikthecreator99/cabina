@@ -89,18 +89,27 @@ test('статус в группе — взаимно: скрыт, пока не
   assert.match(list, /Олег Пробный[\s\S]*Машинист/);
   // напоминание над переключателем, стрелка указывает на него
   assert.match(await text(page, '#grp-nudge'), /Хотите видеть, где коллеги\?[\s\S]*Покажите группе свой статус — и увидите их\. Уже показывают: 1 из 2\./);
+  // 2.28: настройки за кнопкой «Приватность»; стрелка указывает на неё
+  assert.equal(await page.locator('#grp-share').count(), 0, 'переключателей на экране группы больше нет');
   const arrow = await box(page.locator('#grp-nudge .grp-arrow'));
-  const sw = await box(page.locator('#grp-share [data-item=status]'));
-  assert.ok(arrow.y + arrow.height <= sw.y + 4, 'стрелка — над переключателем');
-  assert.ok(Math.abs((arrow.x + arrow.width / 2) - (sw.x + sw.width / 2)) < sw.width, 'и прямо над ним');
-  // честный текст: геолокации нет, станции — только по «Где я»
+  const sw = await box(page.locator('#grp-priv-btn'));
+  assert.ok(arrow.y + arrow.height <= sw.y + 4, 'стрелка — над кнопкой «Приватность»');
+  assert.ok(arrow.x >= sw.x && arrow.x + arrow.width <= sw.x + sw.width, 'и в её ширине');
+  assert.match(await text(page, '#grp-priv-btn'), /Приватность[\s\S]*Свой статус группе не показываю/);
+  // напоминание само ведёт в «Приватность»; честный текст: геолокации нет, станции — только по «Где я»
+  await page.locator('#grp-nudge').click();
+  await top(page).locator('#grp-truth').waitFor();
+  await shot(page, 'group-privacy-sheet-dark-390');
   assert.match(await text(page, '#grp-truth'), /CABINA не знает, где вы находитесь: геолокации в приложении нет[\s\S]*станции из поездки — только если включите «Где я»[\s\S]*Номер поезда и локомотива, точное время явки и причину отвлечения не видит никто/);
+  await top(page).locator('.sheet-head [data-close]').click();
   await shot(page, 'group-locked-dark-390');
   // окно участника: тоже скрыто
   await page.locator('[data-act=grp-member]', { hasText: 'Анна' }).click();
   assert.match(await text(page, '#layers .sheet'), /Статус скрыт: покажите группе свой — и увидите его/);
   await top(page).locator('.sheet-head [data-close]').click();
   // показываю статус — вижу статус Анны, но без станций (я свои не показываю)
+  await page.locator('#grp-priv-btn').click();
+  await top(page).locator('#grp-share').waitFor();
   await page.locator('#grp-share [data-item=status]').click();
   await page.waitForFunction(() => document.querySelector('#grp-share [data-item=status]')?.getAttribute('aria-checked') === 'true');
   assert.deepEqual(srv.calls('set_group_share').at(-1).body, { p_group: G2, p_status: true, p_place: false });
@@ -111,6 +120,8 @@ test('статус в группе — взаимно: скрыт, пока не
   // показываю «где я» — вижу станции
   await page.locator('#grp-share [data-item=place]').click();
   await page.waitForFunction(() => /Сосновка → Ольховка/.test(document.querySelector('#grp-members')?.innerText || ''));
+  await top(page).locator('.sheet-head [data-close]').click();
+  assert.match(await text(page, '#grp-priv-btn'), /Показываю статус и где я/);
   // в списке групп напоминания у этой группы больше нет
   await page.locator('.page-head [data-act=back]').click();
   await page.locator('#grp-list').waitFor();

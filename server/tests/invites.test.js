@@ -173,7 +173,7 @@ test('администратор видит идеи без автора и от
   const list = json('select public.admin_ideas()', admin);
   const it = list.find((x) => x.id === id);
   assert.equal(it.body, 'Покажите ночные часы на главной');
-  assert.deepEqual(Object.keys(it).sort(), ['answered_at', 'body', 'created_at', 'email', 'id', 'state'], 'без id автора');
+  assert.deepEqual(Object.keys(it).sort(), ['answered_at', 'body', 'created_at', 'email', 'id', 'note', 'state'], 'без id автора');
   assert.equal(it.email, null, 'без отметки «можно ответить» — без почты');
   q(`select public.admin_answer_idea('${id}', true)`, admin);
   assert.deepEqual(q(`select state, answered_at is not null from public.ideas where id = '${id}'`, me), ['accepted|t']);

@@ -40,10 +40,11 @@ import { openTableExport, importTableFile } from './table.js';
 import { renderHelp, helpListHtml } from './help.js';
 import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, joinByCode } from './groups.js';
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, nagClick } from './invites.js';
-import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
+import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml, checkAdminIdeas } from './ideas.js';
+import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
 
-export const VERSION = '2.27.0';
+export const VERSION = '2.28.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -586,9 +587,19 @@ function renderSetAbout() {
 // ---------------------------------------------------------------- рендер и навигация
 // Гость (2.26): награды, рекорды и персонаж — с аккаунтом; вместо экрана — что там будет и «Зарегистрироваться»
 const locked = (kind, fn) => () => (isGuest() ? guestLockHtml(kind) : fn());
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
+// Уведомления (2.28): ответы на мои идеи и (у администратора) новые идеи подгружаем не чаще раза в 2 минуты, на «Профиле» — раз в 30 секунд;
+// просьбы коллег приходят вместе с «Коллегами» (раз в минуту). Красная точка — на колокольчике и на кнопке «Профиль».
+let lastPoke = 0;
+function pokeNotices(now) {
+  if (!session() || !legalReady() || isGuest()) return;
+  if (!now && Date.now() - lastPoke < 120e3) return;
+  lastPoke = Date.now();
+  loadIdeas();
+  if (premiumOk()) checkAdminIdeas();
+}
 // На вкладке «Профиль» — лицо персонажа вместо значка (рисуется заново, только если персонаж изменился)
 let tabFace = { key: null, icon: null };
 function renderTabbar() {
@@ -597,6 +608,7 @@ function renderTabbar() {
   document.body.classList.toggle('av-editing', page() === 'avatar' && !isGuest());
   const tab = document.querySelector('.tab[data-tab=profile]');
   if (!tab) return;
+  tab.classList.toggle('has-dot', noticeCount() > 0); // красная точка: есть непрочитанные уведомления (2.28)
   const old = tab.querySelector('svg');
   if (tabFace.icon == null) tabFace.icon = old?.outerHTML || '';
   const rights = avatarRights();
@@ -617,7 +629,8 @@ function render({ still = false } = {}) {
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
   else if (V.tab === 'learn') app.innerHTML = `<div class="screen lr-hub">${renderLearn()}</div>`; // «Обучение» — своя вкладка (2.23.0)
-  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()))}</div>`;
+  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()), bellHtml())}</div>`;
+  pokeNotices(!p && V.tab === 'profile');
   learnAfter(p, V.tab, still);
   renderTabbar();
   scheduleTours();
@@ -665,6 +678,7 @@ function go(name) {
   if (name === 'help') { V.helpQ = ''; V.helpOpen = new Set(); }
   if (name === 'invites') loadInvites({ force: true });
   if (name === 'ideas') loadIdeas({ force: true });
+  if (name === 'notices') { loadColleagues({ force: true }); if (premiumOk()) checkAdminIdeas({ force: true }); noticesEnter(); }
   V.pages.push(name);
   // наверх — до отрисовки (2.24.5): новый экран может сам прокрутиться к нужному месту (дорога курса — к своему уроку),
   // и тогда первый кадр сразу правильный, без мелькания верха экрана
@@ -722,6 +736,7 @@ export { scheduleTours };
 onChange(() => rerender());
 initInvites({ rerender });
 initIdeas({ rerender });
+initNotices({ rerender, isAdmin: premiumOk });
 initLearn({ rerender, go });
 initColleagues({ rerender, go, back, active: () => (V.tab === 'profile' && !V.pages.length) || ['team', 'colleagues', 'privacy', 'account', 'groups', 'group'].includes(page()) });
 
@@ -809,6 +824,7 @@ app.addEventListener('click', async (e) => {
   if (await accountClick(act, b, ctx)) return;
   if (await groupsClick(act, b)) return;
   if (await invitesClick(act, b)) return;
+  if (await noticesClick(act, b)) return;
   if (await ideasClick(act, b)) return;
   if (nagClick(act, ctx)) return;
   if (statsClick(act, b, ctx)) return;

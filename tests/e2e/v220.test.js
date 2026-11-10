@@ -196,13 +196,16 @@ test('«Предложить идею»: без аккаунта — объяс�
 
   const { context, page, errors } = await openApp(env, { awards: true });
   const srv = await ready(context, page, { ...NEW, ideas: [{ id: 'aaaaaaaa-0000-4000-8000-999999999999', body: 'Тёмная тема для квитка', state: 'accepted', created_at: '2026-10-18T09:00:00Z', answered_at: '2026-10-19T09:00:00Z' }] });
-  await drainAwards(page); // «Свой человек» за аккаунт
+  // «Свой человек» за аккаунт. С 2.28 ответы на идеи подтягиваются уже при запуске (для колокольчика) — «Идейный» засчитывается там же
+  let awardsText = await drainAwards(page);
   await tab(page, 'extra');
   await page.locator('#extra-ideas').click();
   await page.locator('#idea-list').waitFor();
   assert.match(await text(page, '#idea-list'), /Тёмная тема для квитка[\s\S]*18 октября · Принята/);
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.ideas?.n === 1);
-  assert.match(await drainAwards(page), /Идейный[\s\S]*Бронза/, 'за принятую идею — поздравление');
+  awardsText += await drainAwards(page);
+  const idea = await page.evaluate(async () => { const m = await import('./js/awards.js'); const r = m.computeAwards().aw; return r.idea ? r.idea.tier : null; });
+  assert.ok(/Идейный[\s\S]*Бронза/.test(awardsText) || idea >= 1, 'за принятую идею — награда («Идейный», бронза)');
   assert.match(await text(page, '.screen'), /Не пишите имена, телефоны, номера поездов и служебную информацию/);
   await page.locator('#idea-text').fill('Напоминание   за час до конца отдыха');
   assert.match(await text(page, '#idea-count'), /36 \/ 500/);
