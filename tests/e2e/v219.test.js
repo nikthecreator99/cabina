@@ -149,9 +149,11 @@ test('поездки напарнику: QR и ссылка; у напарник
   assert.match(await text(B.page, '.aw-dialog'), /Добро пожаловать в кабину/);
   await B.page.locator('[data-act=aw-later]').click();
   await waitNoLayers(B.page);
-  const got = await B.page.evaluate(async () => { const s = await import('./js/store.js'); return { trips: s.S.trips.map((t) => [t.start, t.end, t.locoNumber, t.note || '']), routes: s.S.routes.map((r) => `${r.from}→${r.to} ${r.distanceKm}`) }; });
+  const got = await B.page.evaluate(async () => { const s = await import('./js/store.js'); return { trips: s.S.trips.map((t) => [t.start, t.end, t.locoNumber, t.note || '']), routes: s.S.routes.map((r) => `${r.from}→${r.to} ${r.distanceKm}`), paths: s.S.trips.map((t) => s.routeOf(t)).sort() }; });
   assert.deepEqual(got.trips.sort(), [['2026-10-14T06:00', '2026-10-14T15:30', '1234', ''], ['2026-10-15T03:10', '2026-10-15T12:00', '1234', '']], 'заметка не передаётся');
-  assert.deepEqual(got.routes.sort(), ['Ольховка→Сосновка 180', 'Сосновка→Ольховка 180']);
+  // 2.25: обратно — тот же участок в другую сторону
+  assert.equal(got.routes.length, 1);
+  assert.deepEqual(got.paths, ['Ольховка → Сосновка', 'Сосновка → Ольховка']);
 
   // те же поездки по фото QR-кода: уже есть — галочки сняты, добавить нечего
   await B.page.locator('[data-act=add-trip]').click();

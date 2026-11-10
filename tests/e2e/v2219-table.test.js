@@ -66,9 +66,10 @@ test('выгрузка: предупреждение, период, зарабо
   assert.ok(await fits(B.page));
   await B.page.locator('#imp-add').click();
   await waitNoLayers(B.page);
-  const got = await B.page.evaluate(async () => { const s = await import('./js/store.js'); return { t: s.S.trips.map((t) => [t.start, t.end, t.locoNumber, t.kind || '']).sort(), r: s.S.routes.map((r) => `${r.from}→${r.to}`).sort() }; });
+  const got = await B.page.evaluate(async () => { const s = await import('./js/store.js'); return { t: s.S.trips.map((t) => [t.start, t.end, t.locoNumber, t.kind || '']).sort(), r: s.S.routes.map((r) => `${r.from}→${r.to}`).sort(), p: s.S.trips.map((t) => s.routeOf(t)).sort() }; });
   assert.deepEqual(got.t, [['2026-10-14T20:30', '2026-10-15T05:10', '0123', ''], ['2026-10-16T08:00', '2026-10-16T16:00', '', 'reserve']]);
-  assert.deepEqual(got.r, ['Ольховка→Сосновка', 'Сосновка→Ольховка']);
+  assert.equal(got.r.length, 1, '2.25: обратно — тот же участок');
+  assert.deepEqual(got.p, ['Ольховка → Сосновка', 'Сосновка → Ольховка']);
   // файл Excel (.xlsx) — объяснение, как сохранить в CSV
   const x = join(dir, 'tab.xlsx'); writeFileSync(x, 'PK');
   await openSettings(B.page, 'set-data');
