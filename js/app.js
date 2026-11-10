@@ -1,8 +1,8 @@
 // CABINA — главный модуль: экраны, навигация, настройки.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, attachSwipe, attachLongPress, attachReorder, MONTHS, MONTHS_PREP, MONTHS_SHORT, WD, hm, whenShort, dayMonth, plural, fmtSize, layerCount, highlight, searchWords, normSearch } from './ui.js';
 import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, liveTrip, refreshLive, myPay, overRestByTrip, saveBackupInfo, EXTRA_KEYS, extraOrder, TEXT_SIZES, textSize } from './store.js';
-import { monthSummary, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
-import { yearInfo, officialYears, mergeCalendarData } from './calendar.js';
+import { monthSummary, normSoFar, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
+import { yearInfo, officialYears, mergeCalendarData, normWeek } from './calendar.js';
 import { openTripForm, openDayOffEdit, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
@@ -226,13 +226,14 @@ function renderHome() {
   const payCtx = hasRate(cfg) ? { cfg, or: overRestByTrip() } : null;
   const pay = payCtx ? payMonth(V.y, V.m, S.trips, S.absences, cfg, statsOf, { overRest: overRestIntervals(S.trips, statsOf) }) : null;
 
-  let normHtml;
+  // 2.24.9 (просьба Никиты): вверху карточки — «Норма 159 ч (32 ч)», в скобках — норма на сегодня, как на листке в депо
+  const soFar = isCurrent ? normSoFar(V.y, V.m, dateKeyOf(now), S.absences, sum.norm) : null;
+  const showSoFar = soFar != null && sum.normMin > 0 && Math.round(soFar * 60) !== sum.normMin;
+  const normHead = `<div class="hero-norm" id="hero-norm">Норма <b class="num">${fmtHours(sum.norm)}</b>${showSoFar ? ` <span class="so-far num" aria-label="на сегодня ${fmtHours(soFar)}" title="Норма на сегодня">(${fmtHours(soFar)})</span>` : ''}</div>`;
+  let normHtml = '';
   if (sum.normMin === 0 && sum.base > 0) normHtml = `<div class="norm-full">Норма на этот месяц полностью покрыта отвлечениями.</div>`;
-  else {
-    normHtml = `<div class="norm-line">Норма: <b class="num">${fmtHours(sum.norm)}</b></div>`;
-    if (sum.absTotal > 0) normHtml += `<div class="norm-sub">${fmtHours(sum.base)} по календарю − ${fmtHours(sum.absTotal)} отвлечений</div>`;
-    else if (!yi.official) normHtml += `<div class="norm-sub">Предварительно: календарь на ${V.y} год ещё не утверждён</div>`;
-  }
+  else if (sum.absTotal > 0) normHtml = `<div class="norm-sub">${fmtHours(sum.base)} по календарю − ${fmtHours(sum.absTotal)} отвлечений</div>`;
+  else if (!yi.official) normHtml = `<div class="norm-sub">Предварительно: календарь на ${V.y} год ещё не утверждён</div>`;
   let remainHtml;
   if (sum.normMin === 0) remainHtml = sum.work > 0 ? `<div class="remain over">Сверх нормы<b>+${fmtDur(sum.work)}</b></div>` : `<div class="remain">Норма<b>покрыта</b></div>`;
   else if (over) remainHtml = `<div class="remain over">Сверх нормы<b>+${fmtDur(-remain)}</b></div>`;
@@ -275,14 +276,14 @@ function renderHome() {
         <button class="round-btn" data-act="go" data-page="search" aria-label="Поиск по поездкам">${I.search}</button>
       </div>
       <section class="glass hero" data-act="stats" role="button" tabindex="0" aria-label="Итоги месяца — открыть статистику">
-        <div class="hero-top"><div class="eyebrow">Отработано в ${MONTHS_PREP[V.m - 1]}</div><span class="hero-link">Статистика ›</span></div>
+        <div class="hero-top">${normHead}<span class="hero-link">Статистика ›</span></div>
         <div class="hero-left">
-          <div class="big num ${Math.floor(Math.round(sum.work) / 60) >= 100 ? 'long' : ''}">${bigDur(sum.work)}</div>
+          <div class="big num ${Math.floor(Math.round(sum.work) / 60) >= 100 ? 'long' : ''}" aria-label="Отработано в ${MONTHS_PREP[V.m - 1]}: ${fmtDur(sum.work)}">${bigDur(sum.work)}</div>
           ${normHtml}
           ${payHtml}
         </div>
         <div class="hero-right">${ring(sum.normMin === 0 ? null : pct)}${remainHtml}</div>
-        <div class="hero-foot"><div class="hero-row">${linesHtml}<button class="btn btn-ghost hero-abs" data-act="absences"><span class="ico-wrap" style="color:var(--vacation)">${small(I.vacation, 20)}</span> Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button></div></div>
+        <div class="hero-foot"><div class="hero-row">${linesHtml}<button class="btn hero-abs" data-act="absences">Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button></div></div>
       </section>
     </div>
     ${moveNag()}
@@ -427,6 +428,13 @@ async function refreshStorage() {
 
 const tzLabel = (v) => (TZ.find(([k]) => k === v) || TZ[1])[1];
 
+// Норма и отвлечения — по шестидневке (как на листке в депо) или по пятидневке (2.24.9)
+const WEEK_NAME = { 6: 'Шестидневка', 5: 'Пятидневка' };
+const WEEK_HINT = {
+  6: 'Норма и отвлечения — по шестидневке, как на листке нормы часов в депо: понедельник–пятница по 7 ч, суббота 5 ч, воскресенье и праздники 0, накануне праздника на 1 ч меньше.',
+  5: 'Норма и отвлечения — по пятидневке, 40 часов: рабочий день 8 ч, предпраздничный 7 ч, суббота и воскресенье 0.',
+};
+
 // Производственный календарь: пояснения в отдельном окне, в Настройках — одна строка
 function openCalendarInfo() {
   const y = new Date(nowLocal()).getUTCFullYear();
@@ -438,7 +446,7 @@ function openCalendarInfo() {
         <div class="row"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">${y} год: ${yi.hours} ч</div><div class="t2">${yi.official ? esc(yi.source) : 'Предварительный расчёт по ТК РФ'}</div></div></div>
         <div class="row"><span class="ico">${I.calendar}</span><div class="grow"><div class="t1">${y + 1} год: ${nextYi.hours} ч</div><div class="t2">${nextYi.official ? 'Утверждён' : 'Предварительный расчёт по ТК РФ'}</div></div></div>
       </div>
-      <p class="hint">Пятидневная неделя, 40 часов. Рабочий день — 8 ч, предпраздничный — 7 ч. Праздничные часы — только в официальные нерабочие праздничные дни. Официальные данные: ${officialYears().join(', ')}. Календарь обновляется вместе с приложением и не затрагивает ваши записи.</p>`,
+      <p class="hint">${WEEK_HINT[normWeek()]} Праздничные часы — только в официальные нерабочие праздничные дни. Официальные данные: ${officialYears().join(', ')}. Календарь обновляется вместе с приложением и не затрагивает ваши записи.</p>`,
   }));
 }
 
@@ -489,7 +497,7 @@ function setSub(id) {
   if (id === 'set-look') return `${s.theme === 'light' ? 'Светлая' : 'Тёмная'} тема${textSize() !== 'm' ? ` · ${TEXT_SIZES.find((x) => x.id === textSize()).name.toLowerCase()} текст` : ''} · ${PULL_STYLES.find((x) => x.id === pullStyle(s.pullAnim)).name.toLowerCase()}`;
   if (id === 'set-privacy') return `Код для входа ${lockOn() ? 'включён' : 'выключен'}${flipOn() ? ' · суммы скрываются переворотом' : ''}`;
   if (id === 'set-data') return isMemoryMode() ? 'Записи не сохраняются — откройте в обычном окне' : lastBackupText();
-  if (id === 'set-time') return `${tzLabel(s.tz)} · ${yearInfo(new Date(nowLocal()).getUTCFullYear()).hours} ч в году`;
+  if (id === 'set-time') return `${tzLabel(s.tz)} · ${WEEK_NAME[normWeek()].toLowerCase()}`;
   if (id === 'set-install') return inFrame() ? 'Доступно по прямому адресу' : isStandalone() ? 'CABINA установлена' : 'Иконка на главном экране, работа без интернета';
   return `Помощь, что нового, подсказки, политика · ${VERSION}`;
 }
@@ -542,7 +550,10 @@ function renderSetTime() {
   const yi = yearInfo(y);
   return `${pageHead('Календарь и часовой пояс', { back: true })}
     <div class="group"><div class="group-title">Производственный календарь</div>
-      <div class="panel"><button class="row" data-act="cal-info"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">РФ, 40-часовая неделя</div><div class="t2">${y} год — ${yi.hours} ч</div></div>${small(I.right, 18)}</button></div></div>
+      <div class="panel"><button class="row" data-act="cal-info"><span class="ico" style="--c:var(--holiday)">${I.calendar}</span><div class="grow"><div class="t1">РФ, 40-часовая неделя · ${WEEK_NAME[normWeek()].toLowerCase()}</div><div class="t2">${y} год — ${yi.hours} ч</div></div>${small(I.right, 18)}</button></div>
+      <div class="group-title">Норма часов и отвлечения</div>
+      <div class="seg" id="week-seg">${[6, 5].map((w) => `<button data-act="norm-week" data-v="${w}" aria-pressed="${normWeek() === w}">${WEEK_NAME[w]}</button>`).join('')}</div>
+      <p class="hint" id="week-hint">${WEEK_HINT[normWeek()]}${normWeek() === 6 ? '' : ' Выберите «Шестидневка», если в вашем депо так на листке нормы часов.'}</p></div>
     <div class="group"><div class="group-title">Часовой пояс</div>
       <div class="panel"><button class="row" data-act="tz-pick" id="tz-row"><span class="ico" style="--c:var(--night)">${I.globe}</span><div class="grow"><div class="t1">${esc(tzLabel(s.tz))}</div><div class="t2">Для отметки «сейчас», поездки «в пути» и статуса отдыха</div></div>${small(I.right, 18)}</button></div></div>`;
 }
@@ -876,6 +887,7 @@ app.addEventListener('click', async (e) => {
     case 'doc-mkdir': mkdir(); break;
     case 'theme': await saveSettings({ theme: b.dataset.v }); applyTheme(); break;
     case 'text-size': await saveSettings({ textSize: textSize(b.dataset.v) }); applyTheme(); break;
+    case 'norm-week': await saveSettings({ normWeek: Number(b.dataset.v) }); break;
     case 'money-eye': await toggleMoney(); break;
     case 'lock-settings': openLockSettings(rerender); break;
     case 'flip-toggle': if (await setFlip(!flipOn())) rerender(); break;

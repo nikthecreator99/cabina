@@ -131,8 +131,9 @@ test('учёба: вычитается из нормы с расшифровко
   await page.fill('#af-start', '2026-10-30');
   await page.fill('#af-end', '2026-11-05');
   const calc = await text(sheet(page), '#af-hours');
-  assert.match(calc, /Из нормы вычтется\s+31 ч/);
-  assert.match(calc, /8 \+ 8 \+ 7 \+ 8, выходные и праздник — 0/);
+  // 2.24.9: по листку депо (шестидневка): пт 7, сб 5, вс 0, пн 7, вт 6 (предпраздничный), 4 ноября 0, чт 7
+  assert.match(calc, /Из нормы вычтется\s+32 ч/);
+  assert.match(calc, /7 \+ 5 \+ 7 \+ 6 \+ 7, выходной и праздник — 0/);
   await sheet(page).locator('[data-act=save-abs]').click();
   const dlg = sheet(page);
   await dlg.getByRole('button', { name: 'Указать' }).click();
@@ -144,10 +145,10 @@ test('учёба: вычитается из нормы с расшифровко
   await page.locator('#pf-avgHour').blur();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.avgHour === 500);
   await tab(page, 'home');
-  assert.match(await text(page, '.hero'), /Норма: 168 ч/, 'в октябре из 31 ч только 30-е, 8 ч: 176 − 8');
+  assert.match(await text(page, '.hero'), /Норма 167 ч/, 'в октябре 30-е (7 ч) и 31-е (суббота, 5 ч): 179 − 12');
   await page.locator('.hero').click();
   await page.locator('#st-kind button').nth(1).click();
-  assert.match(await text(page, '.screen'), /Учёба \(сессия\)[\s\S]*8\s*ч[\s\S]*4\s000/, '30 октября, 8 ч × 500 (31-е — суббота)');
+  assert.match(await text(page, '.screen'), /Учёба \(сессия\)[\s\S]*12\s*ч[\s\S]*6\s000/, '30 октября 7 ч и 31-е (суббота) 5 ч × 500 — те же часы, что вычтены из нормы');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -200,7 +201,7 @@ test('настройки: новый порядок, календарь и ча�
   assert.deepEqual(rows, ['оформление', 'конфиденциальность', 'данные и резервная копия', 'календарь и часовой пояс', 'установка на экран', 'о приложении']);
   await openSettings(page, 'set-time');
   const titles = (await page.locator('.screen .group-title').allInnerTexts()).map((s) => s.trim().toLowerCase());
-  assert.deepEqual(titles, ['производственный календарь', 'часовой пояс']);
+  assert.deepEqual(titles, ['производственный календарь', 'норма часов и отвлечения', 'часовой пояс']);
   assert.equal(await page.locator('#tz').count(), 0, 'длинного списка в самих настройках нет');
   assert.match(await text(page, '#tz-row'), /Москва \(МСК\)/);
   await page.locator('#tz-row').click();

@@ -21,13 +21,14 @@ async function workPage(page, name) {
 // 2.21: Настройки по разделам
 const settingsPage = (page, section = 'set-data') => openSettings(page, section);
 
-test('первый запуск: приветствие, затем пустой октябрь с нормой 176 ч', async () => {
+test('первый запуск: приветствие, затем пустой октябрь с нормой 179 ч (шестидневка, 2.24.9)', async () => {
   const { context, page, errors } = await openApp(env, { onboard: false });
   assert.match(await sheet(page).innerText(), /Добро пожаловать/);
   await page.getByRole('button', { name: 'Начать' }).click();
   await waitNoLayers(page);
   assert.equal(await text(page, '.month-title'), 'Октябрь');
-  assert.match(await text(page, '.hero'), /Норма: 176 ч/);
+  // 2.24.9: вверху — «Норма 179 ч (113 ч)»: месяц по шестидневке и норма с 1-го по сегодня (20 октября)
+  assert.match(await text(page, '#hero-norm'), /^Норма 179 ч \(113 ч\)$/);
   // ставка не указана — вместо заработка ссылка на тарифные ставки
   assert.match(await text(page, '.hero'), /Указать ставку/);
   assert.match(await text(page, '.empty'), /В октябре поездок нет/);
@@ -107,13 +108,13 @@ test('отвлечение уменьшает норму и открываетс
   await f.locator('.type-pick button').filter({ hasText: 'Отпуск' }).click();
   await f.locator('#af-start').fill('2026-10-19');
   await f.locator('#af-end').fill('2026-10-20');
-  assert.match(await f.locator('#af-hours').innerText(), /16 ч/);
+  assert.match(await f.locator('#af-hours').innerText(), /14 ч/); // 2.24.9: по 7 ч, как на листке в депо
   await f.locator('[data-act=save-abs]').click();
   await waitNoLayers(page);
   const hero = await text(page, '.hero');
-  assert.match(hero, /Норма: 160 ч/);
-  assert.match(hero, /176 ч по календарю − 16 ч отвлечений/);
-  assert.match(await text(page, '.hero-lines'), /Отпуск:\s*−16 ч/);
+  assert.match(hero, /Норма 165 ч \(99 ч\)/);
+  assert.match(hero, /179 ч по календарю − 14 ч отвлечений/);
+  assert.match(await text(page, '.hero-lines'), /Отпуск:\s*−14 ч/);
   assert.equal(await text(page, '[data-act=absences] .count'), '1');
   // теперь кнопка открывает список; пересечение с существующим отвлечением не сохраняется
   await page.locator('[data-act=absences]').click();
@@ -137,8 +138,9 @@ test('переработка и отпуск: итоги месяца по за�
   for (let d = 1; d <= 23; d++) trips.push({ id: `t${d}`, start: `2026-10-${String(d).padStart(2, '0')}T08:00`, end: `2026-10-${String(d).padStart(2, '0')}T16:00` });
   await seed(page, { trips });
   assert.match(await text(page, '.hero'), /184\s*ч\s*00\s*мин/);
-  assert.match(await text(page, '.hero'), /Сверх нормы\s*\+8 ч 00 мин/);
-  assert.match(await text(page, '.hero-lines'), /Переработка:\s*8 ч 00 мин/);
+  // норма октября по шестидневке — 179 ч (2.24.9)
+  assert.match(await text(page, '.hero'), /Сверх нормы\s*\+5 ч 00 мин/);
+  assert.match(await text(page, '.hero-lines'), /Переработка:\s*5 ч 00 мин/);
   assert.match(await text(page, '.sec-head'), /23 поездки/);
   await context.close();
 });
@@ -276,7 +278,8 @@ test('переключение месяцев и возврат к текуще�
   await page.locator('[data-act=next]').click();
   // 2.6: не текущий месяц — название становится кнопкой «к сегодня»
   assert.match(await text(page, '.month-title'), /^Ноябрь\s+к сегодня$/);
-  assert.match(await text(page, '.hero'), /Норма: 159 ч/);
+  // не текущий месяц — без нормы на сегодня в скобках
+  assert.match(await text(page, '#hero-norm'), /^Норма 159 ч$/);
   await page.locator('[data-act=next]').click();
   await page.locator('[data-act=next]').click();
   assert.match(await text(page, '.month-title'), /^Январь 2027\s+к сегодня$/);
@@ -295,10 +298,10 @@ test('настройки: тема и минимальный отдых сохр
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   // 2.5: календарь — одной строкой, пояснения в отдельном окне
   await settingsPage(page, 'set-time');
-  assert.match(await text(page, '[data-act=cal-info]'), /РФ, 40-часовая неделя[\s\S]*2026 год — 1972 ч/);
+  assert.match(await text(page, '[data-act=cal-info]'), /РФ, 40-часовая неделя · шестидневка[\s\S]*2026 год — 1988 ч/);
   await page.locator('[data-act=cal-info]').click();
-  assert.match(await text(page, '#layers'), /2026 год: 1972 ч[\s\S]*Пятидневная неделя, 40 часов/);
-  await page.locator('#layers [data-close]').first().click();
+  assert.match(await text(page, '#layers'), /2026 год: 1988 ч[\s\S]*по шестидневке, как на листке нормы часов в депо/);
+  await page.locator('#layers .sheet button[data-close]').first().click(); // окно стало выше — фон в середине закрыт
   await waitNoLayers(page);
   await workPage(page, 'houses');
   assert.equal(await text(page, '#min-rest'), '4 ч 00 мин');
@@ -343,7 +346,7 @@ test('резервная копия: сохранить и восстанови�
   await two.page.waitForFunction(() => document.querySelector('.toast-wrap')?.innerText.includes('Данные восстановлены'));
   await tab(two.page, 'home');
   assert.match(await text(two.page, '.trip'), /Няндома → Коноша/);
-  assert.match(await text(two.page, '.hero'), /Норма: 160 ч/);
+  assert.match(await text(two.page, '.hero'), /Норма 165 ч/);
   await two.context.close();
 });
 

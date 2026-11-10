@@ -3,11 +3,13 @@ import * as db from './db.js';
 import { tripStats, parseLocal, MIN, legsOf, hasLegs } from './calc.js';
 import { payCfg, overRestIntervals } from './pay.js';
 import { emptyLearn, normalizeLearn } from './learn-state.js';
+import { setNormWeek, normWeekOf } from './calendar.js';
 
 // minRest — общий минимальный отдых в пункте оборота, minShiftRest — минимальный междусменный отдых (мин).
 // houses — свой минимум для домов отдыха: { [ключ станции]: { name, minRest } }.
 // pay — наборы тарифных ставок: { assistant: {...}, driver: {...} } (см. pay.js).
-export const DEFAULT_SETTINGS = { id: 'settings', theme: 'dark', minRest: 240, minShiftRest: 16 * 60, dayOffMin: 60 * 60, tz: 'Europe/Moscow', houses: {}, pay: {} };
+// normWeek — по какой неделе считать норму и отвлечения (2.24.9): 6 — шестидневка, как на листке в депо; 5 — пятидневка.
+export const DEFAULT_SETTINGS = { id: 'settings', theme: 'dark', minRest: 240, minShiftRest: 16 * 60, dayOffMin: 60 * 60, tz: 'Europe/Moscow', houses: {}, pay: {}, normWeek: 6 };
 export const DEFAULT_PROFILE = { id: 'profile', name: '', role: 'assistant', depot: '', klass: '', photo: '', phone: '' };
 
 export const S = {
@@ -40,6 +42,8 @@ export async function loadAll() {
   if (S.settings.theme !== 'light' && S.settings.theme !== 'dark') S.settings.theme = 'dark';
   if (!S.settings.houses || typeof S.settings.houses !== 'object') S.settings.houses = {};
   if (!S.settings.pay || typeof S.settings.pay !== 'object') S.settings.pay = {};
+  S.settings.normWeek = normWeekOf(S.settings.normWeek);
+  setNormWeek(S.settings.normWeek);
   S.profile = { ...DEFAULT_PROFILE, ...(m.profile || {}) };
   S.backup = { id: 'backup', lastAt: 0, since: 0, snoozeUntil: 0, ...(m.backup || {}) };
   S.locoTypes = m.locoTypes?.list || [];
@@ -246,6 +250,10 @@ export async function saveLearn(next) {
 
 export async function saveSettings(patch) {
   S.settings = { ...S.settings, ...patch };
+  if ('normWeek' in patch) {
+    S.settings.normWeek = normWeekOf(S.settings.normWeek);
+    setNormWeek(S.settings.normWeek);
+  }
   await db.put('meta', S.settings);
   try { localStorage.setItem('cabina-theme', S.settings.theme); localStorage.setItem('cabina-text', textSize()); } catch {}
   emit();
