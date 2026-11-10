@@ -111,7 +111,7 @@ gtest('создать группу: согласие новой редакции
   await page.locator('.screen [data-act=back]').click();
   await page.locator('#grp-entry').click();
   await page.waitForSelector('.screen[data-page=groups] #grp-new');
-  assert.match(await text(page, '#grp-sec'), /Переписки нет/);
+  assert.match(await text(page, '#grp-sec'), /Вы пока не в группе[\s\S]*Вы сами решаете, кому виден ваш статус/); // 2.27: макет Никиты
   await page.locator('#grp-new').click();
   await top(page).locator('[data-act=grp-name-ok]').click();
   assert.match(await text(page, '#grp-name-err'), /Введите название/);
@@ -161,13 +161,17 @@ gtest('в группе: статус участника виден, только
   await page.locator('#grp-entry').click();
   await page.locator('[data-act=grp-open]').click();
   await page.waitForSelector('#grp-members');
-  const list = await text(page, '#grp-members');
-  assert.match(list, /в пути[\s\S]*Анна Тестовая[\s\S]*администратор[\s\S]*Сосновка → Ольховка/i);
-  assert.match(list, /Олег Пробный[\s\S]*Статус не показан|Олег Пробный\s*(Машинист|Статус)/);
-  assert.doesNotMatch(list, /На отдыхе/, 'Олег статус группе не показывает — его не видно, хотя сервер его хранит');
+  // 2.27: статус в группе — взаимно. Пока я свой не показываю, статус Анны скрыт
+  assert.match(await text(page, '#grp-members'), /Анна Тестовая[\s\S]*администратор[\s\S]*Статус скрыт/);
   // включаю показ своего статуса группе
   await page.locator('#grp-share [data-item=status]').click();
   await page.waitForFunction(() => document.querySelector('#grp-share [data-item=status]')?.getAttribute('aria-checked') === 'true');
+  await page.waitForFunction(() => /В пути/.test(document.querySelector('#grp-members')?.innerText || ''));
+  const list = await text(page, '#grp-members');
+  assert.match(list, /в пути[\s\S]*Анна Тестовая[\s\S]*администратор[\s\S]*В пути/i);
+  assert.doesNotMatch(list, /Сосновка/, 'станции — только тем, кто показывает свои');
+  assert.match(list, /Олег Пробный[\s\S]*Статус группе не показывает|Олег Пробный\s*(Машинист|Статус)/);
+  assert.doesNotMatch(list, /На отдыхе/, 'Олег статус группе не показывает — его не видно, хотя сервер его хранит');
   assert.deepEqual(srv.calls('set_group_share').at(-1).body, { p_group: G1, p_status: true, p_place: false });
   assert.equal((await profileOf(page)).privacy.status, true, 'общий выключатель статуса включился');
   await page.waitForTimeout(400);

@@ -4,15 +4,19 @@
 // администратора или по коду группы. Переписки и описания нет. Не больше 10 групп у человека и 200 участников в группе.
 // Участники видят имена (и то, что человек разрешил в «Приватности») друг друга. Статус — только если человек сам
 // включил «Показывать моей группе» именно в этой группе. Всё с сервера — непроверенное: текст только через esc().
+// 2.27 (просьбы Никиты 10.11.2026): экран «Группы» по его макету («Вы администратор» / «Вы участник»), картинка группы (grp-pic.js),
+// статус в группе — взаимно (видишь чужие, только если показываешь свой; станции — за станции; на сервере — private.allowed, шаг 9),
+// постоянное напоминание со стрелкой к переключателю, «Предложить стать коллегами» из окна участника.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, layerCount } from './ui.js';
 import { privacyOf } from './profile.js';
 import { S, saveProfile } from './store.js';
 import { rpc, errorText } from './auth.js';
 import { legalReady } from './legal.js';
 import { qrSvg } from './share.js';
+import { picSvg, openPicEditor, normPic } from './grp-pic.js';
 import {
   colSnap, colSub, colMine, colSync, colRerender, colGo, colBack, colMarkStatusCleared, loadColleagues, ensureConsent, ensureCard, snapOrSay,
-  notReady, OFFLINE, needAccount, cardAvatar, cardSub, pill, avaBox, colleagueLine, updatedText, teamGroup, TEAM_GROUPS, cleanText, groupShare,
+  notReady, OFFLINE, needAccount, cardAvatar, cardSub, pill, avaBox, colleagueLine, updatedText, teamGroup, TEAM_GROUPS, cleanText, groupShare, colError,
 } from './colleagues.js';
 
 export const GROUPS_MAX = 10;
@@ -63,26 +67,62 @@ export function groupsRowHtml() {
     <div class="grow"><div class="t1">Группы</div><div class="t2">${esc(sub)}</div></div>${k ? `<span class="col-badge" aria-label="Приглашений в группы: ${k}">${k}</span>` : ''}${small(I.right, 18)}</button>`;
 }
 
-// ---------------------------------------------------------------- экран «Группы»
+// ---------------------------------------------------------------- кто что видит в группе
+
+// Что я показываю этой группе (общий выключатель статуса выключен — не показываю никому)
+export function myShare(g) {
+  const st = !!(g?.me?.status && privacyOf().status);
+  return { status: st, place: st && !!g.me.place };
+}
+const relOf = (id) => {
+  const snap = colSnap();
+  if (snap?.colleagues.some((c) => c.id === id)) return 'colleague';
+  if (snap?.outgoing.some((c) => c.id === id)) return 'out';
+  if (snap?.incoming.some((c) => c.id === id)) return 'in';
+  return 'none';
+};
+// Статус участника, который я вижу в группе. Взаимно (2.27, просьба Никиты 10.11.2026): только если я сам показываю этой группе
+// свой статус, станции — только за свои станции (то же правило — на сервере, private.allowed). Коллега — по правилам коллег.
+export function seenStatus(g, m) {
+  if (!m?.status || m.id === colSub()) return null;
+  if (relOf(m.id) === 'colleague') return m.status;
+  const mine = myShare(g);
+  if (!mine.status) return null;
+  return mine.place ? m.status : { ...m.status, place: '', dest: '' };
+}
+const others = (g) => g.members.filter((m) => m.id !== colSub());
+const showing = (g) => others(g).filter((m) => m.show.status).length;
+// Статус коллег скрыт, потому что я свой не показываю: тогда — напоминание
+const hiddenForMe = (g) => others(g).length > 0 && !myShare(g).status;
+
+// Правда о том, что видно (проверено по statusPayload и colleagueLine): геолокации нет, станции — только из поездки и по «Где я»
+const TRUTH = 'CABINA не знает, где вы находитесь: геолокации в приложении нет. Группа увидит только статус — «в пути», «на отдыхе», «между поездками», '
+  + 'а станции из поездки — только если включите «Где я». Номер поезда и локомотива, точное время явки и причину отвлечения не видит никто.';
+const ARROW = '<svg class="grp-arrow" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15M6 13l6 6 6-6"/></svg>';
+
+// ---------------------------------------------------------------- экран «Группы» (по макету Никиты 10.11.2026)
 
 function inviteRow(i) {
   return `<div class="col-offer">
-    <div class="col-who"><span class="col-ava grp-ava" aria-hidden="true">${I.grid}</span><div class="grow"><div class="t1">${esc(i.name)}</div>
+    <div class="col-who"><span class="grp-pic" aria-hidden="true">${picSvg(i.pic, { size: 44 })}</span><div class="grow"><div class="t1">${esc(i.name)}</div>
       <div class="t2">${i.from ? `Приглашает ${esc(i.from.name)}` : 'Вас пригласили в группу'}</div></div></div>
     <div class="col-btns"><button class="btn btn-plain btn-sm" data-act="grp-decline" data-id="${esc(i.id)}">Отказаться</button><button class="btn btn-primary btn-sm" data-act="grp-accept" data-id="${esc(i.id)}">Вступить</button></div>
   </div>`;
 }
 function groupRow(g) {
-  const sharing = g.me.status && privacyOf().status;
-  return `<button class="row col-row" data-act="grp-open" data-id="${esc(g.id)}"><span class="col-ava grp-ava" aria-hidden="true">${I.grid}</span>
-    <div class="grow"><div class="t1">${esc(g.name)}</div><div class="t2">${esc([members(g.members.length), g.admin ? 'вы администратор' : '', sharing ? 'видят ваш статус' : ''].filter(Boolean).join(' · '))}</div></div>${small(I.right, 18)}</button>`;
+  const sh = myShare(g);
+  const nudge = hiddenForMe(g) ? `<div class="grp-row-nudge">${small(I.lock, 14)}<span>Покажите свой статус — увидите коллег</span></div>` : '';
+  return `<button class="row col-row grp-row" data-act="grp-open" data-id="${esc(g.id)}"><span class="grp-pic" aria-hidden="true">${picSvg(g.pic, { size: 48 })}</span>
+    <div class="grow"><div class="t1">${esc(g.name)}</div><div class="t2">${esc([members(g.members.length), sh.status ? 'видят ваш статус' : ''].filter(Boolean).join(' · '))}</div>${nudge}</div>${small(I.right, 18)}</button>`;
 }
+const section = (title, list, id) => (list.length ? `<div class="grp-sec-title"><h2>${title}</h2><span class="grp-count">${list.length}</span></div>
+  <div class="grp-cards" id="${id}">${list.map(groupRow).join('')}</div>` : '');
 
 const needAccountHtml = (head) => `${head}<div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Группы работают через аккаунт. Без него CABINA работает как раньше: записи остаются в этом телефоне.</div></div>
   <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
 
 export function renderGroups() {
-  const head = pageHead('Группы', { back: true });
+  const head = pageHead('Группы', { back: true, right: `<button class="icon-btn grp-help-btn" data-act="grp-help" id="grp-help" aria-label="Как работают группы">${I.help}</button>` });
   if (!legalReady() || !colMine()) return needAccountHtml(head);
   const snap = colSnap();
   if (!snap) { if (!layerCount()) loadColleagues(); return `${head}<div class="hint" id="grp-sec">Загружаем…</div>`; }
@@ -92,45 +132,62 @@ export function renderGroups() {
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
   const full = snap.groups.length >= GROUPS_MAX;
+  const adm = snap.groups.filter((g) => g.admin);
+  const mem = snap.groups.filter((g) => !g.admin);
   return `${head}<div id="grp-sec">
-    <p class="hint">Бригада, колонна, депо — все ваши люди одним списком. Переписки нет: только кто где — у тех, кто сам показывает статус группе.</p>
-    ${snap.groupInvites.length ? `<div class="group-title">Приглашают в группу</div><div class="panel col-offers" id="grp-invites">${snap.groupInvites.map(inviteRow).join('')}</div>` : ''}
-    ${snap.groups.length ? `<div class="group-title">Мои группы <span class="hint">${snap.groups.length} из ${GROUPS_MAX}</span></div><div class="panel" id="grp-list">${snap.groups.map(groupRow).join('')}</div>`
-      : '<div class="hint grp-empty">Вы пока не в группе. Создайте свою или вступите по коду, который даст администратор группы.</div>'}
-    <div class="grp-btns">
-      <button class="btn btn-primary" data-act="grp-new" id="grp-new"${full ? ' disabled' : ''}>${I.plus} Создать группу</button>
-      <button class="btn btn-plain" data-act="grp-code-enter" id="grp-join"${full ? ' disabled' : ''}>${small(I.qr, 18)} Вступить по коду</button>
+    <p class="grp-lead">Бригада, колонна, депо — все ваши люди одним списком</p>
+    <div class="grp-top">
+      <button class="btn btn-primary" data-act="grp-new" id="grp-new"${full ? ' disabled' : ''}>${I.plus} Создать</button>
+      <button class="btn btn-plain" data-act="grp-code-enter" id="grp-join"${full ? ' disabled' : ''}>${small(I.qr, 20)} Вступить по коду</button>
     </div>
     ${full ? `<div class="hint">Групп уже ${GROUPS_MAX} — больше нельзя. Выйдите из ненужной, чтобы вступить в новую.</div>` : ''}
-    <div class="notice ok">${I.shield}<div>Участники группы видят имена друг друга (и депо с персонажем — если вы разрешили в «Приватности»). Ваш статус группа видит, только если вы сами включите это в группе.</div></div>
+    ${snap.groupInvites.length ? `<div class="grp-sec-title"><h2>Приглашают в группу</h2><span class="grp-count">${snap.groupInvites.length}</span></div><div class="panel col-offers" id="grp-invites">${snap.groupInvites.map(inviteRow).join('')}</div>` : ''}
+    ${snap.groups.length ? `<div id="grp-list">${section('Вы администратор', adm, 'grp-admin')}${section('Вы участник', mem, 'grp-mem')}</div>`
+      : '<div class="hint grp-empty">Вы пока не в группе. Создайте свою или вступите по коду, который даст администратор группы.</div>'}
+    <div class="grp-priv">${I.shield}<div><span>Вы сами решаете, кому виден ваш статус</span>
+      <button class="link-btn" data-act="go" data-page="privacy" id="grp-privacy">Настройки приватности</button></div></div>
   </div>`;
 }
 
 // ---------------------------------------------------------------- экран одной группы
 
 function memberRow(m, g) {
-  const line = m.status ? colleagueLine(m.status) : null;
   const me = m.id === colSub();
   // своя карточка могла ещё не прийти с сервера — своё имя берём из профиля
   if (me && m.card.name === 'Без имени' && cleanText(S.profile.name)) m = { ...m, card: { ...m.card, name: cleanText(S.profile.name) } };
-  const tag = [m.admin ? '<span class="col-tag ok">администратор</span>' : '', me ? '<span class="col-tag">вы</span>' : ''].join('');
-  const body = `${avaBox(m.card)}<div class="grow"><div class="t1">${esc(m.card.name)} ${tag}</div>
-    ${line ? `<div class="t2">${pill(line)}</div><div class="col-upd">${esc(updatedText(m.status.at))}</div>` : `<div class="t2">${esc(me ? (g.me.status && privacyOf().status ? 'Группа видит ваш статус' : 'Группа не видит ваш статус') : cardSub(m.card) || 'Статус не показан')}</div>`}</div>`;
+  const rel = me ? '' : relOf(m.id);
+  const st = seenStatus(g, m);
+  const line = st ? colleagueLine(st) : null;
+  const locked = !me && !line && m.show.status && !myShare(g).status && rel !== 'colleague';
+  const tag = [m.admin ? '<span class="col-tag ok">администратор</span>' : '', me ? '<span class="col-tag">вы</span>' : '', rel === 'colleague' ? '<span class="col-tag">коллега</span>' : ''].join('');
+  const sub = line ? `<div class="t2">${pill(line)}</div><div class="col-upd">${esc(updatedText(st.at))}</div>`
+    : locked ? `<div class="t2 grp-lock">${small(I.lock, 14)}<span>Статус скрыт. Покажите свой — увидите его</span></div>`
+      : `<div class="t2">${esc(me ? (myShare(g).status ? 'Группа видит ваш статус' : 'Группа не видит ваш статус') : cardSub(m.card) || 'Статус группе не показывает')}</div>`;
+  const body = `${avaBox(m.card)}<div class="grow"><div class="t1">${esc(m.card.name)} ${tag}</div>${sub}</div>`;
   return me ? `<div class="row col-row">${body}</div>` : `<button class="row col-row" data-act="grp-member" data-id="${esc(m.id)}">${body}${small(I.right, 18)}</button>`;
 }
 function membersHtml(g) {
   const now = Date.now();
   const groups = TEAM_GROUPS.map(() => []);
-  for (const m of g.members) groups[m.id === colSub() ? 3 : teamGroup(m.status, now)].push(m);
+  for (const m of g.members) groups[m.id === colSub() ? 3 : teamGroup(seenStatus(g, m), now)].push(m);
   const titled = groups.filter((x) => x.length).length > 1;
   return groups.map((x, i) => (x.length ? `${titled ? `<div class="group-title col-gt">${TEAM_GROUPS[i]} <span class="hint">${x.length}</span></div>` : ''}<div class="panel">${x.map((m) => memberRow(m, g)).join('')}</div>` : '')).join('');
 }
 function shareRows(g) {
-  const st = g.me.status && privacyOf().status;
+  const { status: st, place: pl } = myShare(g);
+  const placeSub = !st ? 'Сначала включите статус' : !pl && others(g).some((m) => m.show.place) ? 'Станции коллег видны тем, кто показывает свои' : 'Станции из вашей поездки и дом отдыха';
   const row = (item, title, sub, on, off = false) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
     <button class="switch" role="switch" data-act="grp-share" data-item="${item}" aria-checked="${on}" aria-label="${title}" ${off ? 'disabled' : ''}></button></div>`;
   return row('status', 'Показывать мой статус группе', 'В пути, на отдыхе, между поездками — без станций', st)
-    + row('place', 'Где я', st ? 'Станции и дом отдыха' : 'Сначала включите статус', st && g.me.place, !st);
+    + row('place', 'Где я', placeSub, pl, !st);
+}
+// Постоянное напоминание над переключателем, пока я свой статус не показываю: стрелка — на переключатель
+function nudgeHtml(g) {
+  if (!hiddenForMe(g)) return '';
+  const n = showing(g);
+  const all = others(g).length;
+  return `<div class="grp-nudge" id="grp-nudge" role="note"><div class="grow"><b>Хотите видеть, где коллеги?</b>
+    <span>Покажите группе свой статус — и увидите их.${n ? ` Уже показывают: ${n} из ${all}.` : ''}</span></div>${ARROW}</div>`;
 }
 
 export function renderGroup() {
@@ -138,14 +195,20 @@ export function renderGroup() {
   if (!g) {
     return `${pageHead('Группа', { back: true })}<div class="empty"><div class="em-ico">${I.grid}</div><b>Группы больше нет</b><p>Вас исключили, вы вышли или группу удалили.</p></div>`;
   }
+  const pic = picSvg(g.pic, { size: 64 });
   return `${pageHead(g.name, { back: true, right: g.admin ? `<button class="icon-btn" data-act="grp-rename" aria-label="Переименовать группу">${I.edit}</button>` : '' })}
     <div id="grp-page" data-id="${esc(g.id)}">
-    <p class="hint grp-sub">${esc(members(g.members.length))}${g.admin ? ' · вы администратор' : ''}</p>
+    <div class="grp-hero">
+      ${g.admin ? `<button class="grp-pic grp-pic-big" data-act="grp-pic" id="grp-pic" aria-label="Изменить картинку группы">${pic}<span class="grp-pic-edit" aria-hidden="true">${small(I.edit, 14)}</span></button>` : `<span class="grp-pic grp-pic-big" aria-hidden="true">${pic}</span>`}
+      <div class="grow"><p class="hint grp-sub">${esc(members(g.members.length))}${g.admin ? ' · вы администратор' : ''}</p>
+        ${g.admin ? `<button class="link-btn" data-act="grp-pic">${g.pic ? 'Изменить картинку' : 'Сделать картинку'}</button>` : ''}</div>
+    </div>
     ${g.admin ? `<div class="grp-btns"><button class="btn btn-primary" data-act="grp-invite" id="grp-invite">${I.plus} Пригласить коллегу</button>
       <button class="btn btn-plain" data-act="grp-code" id="grp-code">${small(I.qr, 18)} Код и QR-код группы</button></div>` : ''}
     <div class="group-title">Мой статус в этой группе</div>
+    ${nudgeHtml(g)}
     <div class="panel" id="grp-share">${shareRows(g)}</div>
-    <div class="hint">По умолчанию группа ваш статус не видит. Номер поезда и локомотива, точное время явки и причину отвлечения CABINA не показывает никому.</div>
+    <div class="notice ok grp-truth" id="grp-truth">${I.shield}<div>${TRUTH}</div></div>
     <div class="group-title">Участники</div>
     <div id="grp-members">${membersHtml(g)}</div>
     ${g.admin && g.pending.length ? `<div class="group-title">Ждут ответа</div><div class="panel" id="grp-pending">${g.pending.map((p) => `<div class="row col-row">${avaBox(p.card)}<div class="grow"><div class="t1">${esc(p.card.name)}</div><div class="t2">Приглашён в группу</div></div>
@@ -304,20 +367,38 @@ function inviteSheet(g) {
   });
 }
 
-// Участник: статус (если он показывает его группе); администратору — «Сделать администратором» и «Исключить»
+// Участник: статус (взаимно), «Предложить стать коллегами» (2.27); администратору — «Сделать администратором» и «Исключить»
 function memberSheet(g, id) {
   const m = g.members.find((x) => x.id === id);
   if (!m) return;
-  const line = m.status ? colleagueLine(m.status) : null;
+  const st = seenStatus(g, m);
+  const line = st ? colleagueLine(st) : null;
+  const rel = relOf(m.id);
+  const locked = !line && m.show.status && !myShare(g).status && rel !== 'colleague';
+  const relHtml = rel === 'colleague' ? '<div class="hint grp-rel" id="grp-rel">Вы коллеги</div>'
+    : rel === 'out' ? '<div class="hint grp-rel" id="grp-rel">Вы предложили стать коллегами — ждём ответа</div>'
+      : rel === 'in' ? '<div class="hint grp-rel" id="grp-rel">Предлагает вам стать коллегами</div>' : '';
+  const offerBtn = rel === 'none' ? `<button class="btn btn-primary" data-act="grp-offer" id="grp-offer">${small(I.users, 18)} Предложить стать коллегами</button>`
+    : rel === 'in' ? `<button class="btn btn-primary" data-act="grp-offer" id="grp-offer">${small(I.check, 18)} Принять: стать коллегами</button>` : '';
+  const adminBtns = g.admin && !m.admin ? `<button class="btn btn-plain" data-act="grp-make-admin">Сделать администратором</button><button class="btn btn-danger" data-act="grp-remove">${small(I.trash, 18)} Исключить из группы</button>` : '';
   const el = openLayer(sheet({ title: 'Участник группы', body: `
     <section class="profile-card col-card">
       <span class="avatar view big">${cardAvatar(m.card, 132)}</span>
       <div class="profile-name">${esc(m.card.name)}</div>
       ${cardSub(m.card) ? `<div class="profile-sub">${esc(cardSub(m.card))}</div>` : ''}
       ${m.admin ? '<div class="profile-sub">Администратор группы</div>' : ''}
-      ${line ? `${pill(line, 'pr-status')}<div class="hint">${esc(updatedText(m.status.at))}</div>` : '<div class="hint">Статус этой группе не показывает.</div>'}
-    </section>`,
-  foot: g.admin && !m.admin ? `<button class="btn btn-plain" data-act="grp-make-admin">Сделать администратором</button><button class="btn btn-danger" data-act="grp-remove">${small(I.trash, 18)} Исключить из группы</button>` : '' }));
+      ${line ? `${pill(line, 'pr-status')}<div class="hint">${esc(updatedText(st.at))}</div>`
+    : locked ? `<div class="hint grp-lock">${small(I.lock, 14)}<span>Статус скрыт: покажите группе свой — и увидите его.</span></div>` : '<div class="hint">Статус этой группе не показывает.</div>'}
+      ${relHtml}
+    </section>
+    ${offerBtn}
+    ${rel === 'none' ? '<p class="hint">Коллеги видят друг друга в «Мои коллеги». Свой статус каждый показывает сам — кому захочет.</p>' : ''}`,
+  foot: adminBtns }));
+  el.querySelector('[data-act="grp-offer"]')?.addEventListener('click', async () => {
+    if (G.busy) return;
+    G.busy = true;
+    try { if (await offerColleague(m, rel)) closeLayer(el); } finally { G.busy = false; }
+  });
   el.querySelector('[data-act="grp-make-admin"]')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: 'Передать права?', ok: 'Передать', danger: false,
       text: `Администратором станет ${m.card.name}. Вы останетесь в группе обычным участником. Администратор в группе один.` });
@@ -334,6 +415,49 @@ function memberSheet(g, id) {
     if (!r?.ok) { fail(r); return; }
     closeLayer(el); toast('Исключён из группы'); await reload();
   });
+}
+
+// Предложить участнику группы стать коллегами (или принять его предложение). Сервер (шаг 9) разрешает это участнику общей группы,
+// даже если его нельзя найти поиском. true — получилось.
+async function offerColleague(m, rel) {
+  if (!(await ensureConsent())) return false;
+  if (rel === 'none') {
+    const ok = await confirmDialog({ title: 'Предложить стать коллегами?', ok: 'Предложить', danger: false,
+      text: `${m.card.name} получит предложение и сам решит. Если согласится, вы увидите друг друга в «Мои коллеги». Свой статус каждый показывает сам — кому захочет.` });
+    if (!ok) return false;
+  }
+  if (!(await ensureCard())) return false;
+  const r = rel === 'in' ? await rpc('answer_colleague', { p_from: m.id, p_accept: true }) : await rpc('offer_colleague', { p_to: m.id });
+  if (!r?.ok) {
+    const msg = /cabina: not found/.test(String(r?.data?.message || '')) ? 'Не получилось: возможно, он уже не в группе. Обновите экран и попробуйте ещё раз.' : colError(r);
+    toast(msg, { error: true, ms: 6000 });
+    return false;
+  }
+  toast(rel === 'in' || r.data === 'accepted' ? 'Теперь вы коллеги' : r.data === 'already' ? 'Вы уже коллеги' : 'Предложение отправлено. Когда согласится — появится в «Мои коллеги»', { ms: 5000 });
+  await reload();
+  return true;
+}
+
+// Картинка группы: только администратор. Сервер без шага 9 — «ещё не включено».
+async function editPic(g) {
+  const pic = await openPicEditor({ name: g.name, pic: g.pic });
+  if (pic === undefined) return;
+  const r = await rpc('set_group_pic', { p_group: g.id, p_pic: pic });
+  if (!r?.ok) { toast(notReady(r) ? 'Картинки групп на сервере ещё не включены. Попробуйте позже.' : groupError(r), { error: true, ms: 6000 }); return; }
+  g.pic = normPic(pic);
+  toast(pic ? 'Картинка группы сохранена' : 'Картинка убрана');
+  await reload();
+}
+
+// «?» на экране «Группы»
+function openGroupsHelp() {
+  openLayer(sheet({ title: 'Как работают группы', body: `<div class="grp-help" id="grp-help-body">
+    <p><b>Группа</b> — список ваших людей с названием: бригада, колонна, депо. Переписки в группе нет.</p>
+    <p><b>Вы администратор</b> — группы, которые вы создали (или вам передали права): приглашаете коллег, показываете код и QR-код, меняете название и картинку, исключаете.</p>
+    <p><b>Вы участник</b> — группы, в которые вы вступили по коду или приглашению.</p>
+    <p><b>Статус — взаимно.</b> Пока вы не показываете группе свой статус, вы не видите статус участников. Станции видят только те, кто показывает свои.</p>
+    <p><b>Коллеги.</b> Нажмите на участника — и предложите стать коллегами. Он сам решит.</p>
+    <div class="notice ok">${I.shield}<div>${TRUTH}</div></div></div>` }));
 }
 
 // Показывать ли этой группе мой статус и где я. Включить — с согласием; включение статуса включает и общий выключатель.
@@ -361,6 +485,7 @@ export async function groupsClick(act, b) {
   if (act === 'grp-open') { if (UUID.test(String(b.dataset.id))) openGroupPage(String(b.dataset.id).toLowerCase()); return true; }
   const g = groupOf(G.id);
   if (act === 'grp-member') { if (g) memberSheet(g, String(b.dataset.id || '').toLowerCase()); return true; }
+  if (act === 'grp-help') { openGroupsHelp(); return true; }
   if (act === 'grp-code-enter') { if (await ready()) enterCode(); return true; }
   if (G.busy) return true;
   G.busy = true;
@@ -380,6 +505,7 @@ export async function groupsClick(act, b) {
       }
       case 'grp-share': if (g && !b.disabled) await setShare(g, b.dataset.item === 'place' ? 'place' : 'status'); break;
       case 'grp-invite': if (g?.admin) inviteSheet(g); break;
+      case 'grp-pic': if (g?.admin) await editPic(g); break;
       case 'grp-code': if (g?.admin) await showCode(g); break;
       case 'grp-rename': {
         if (!g?.admin) break;
