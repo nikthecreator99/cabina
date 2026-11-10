@@ -108,16 +108,43 @@ export function chosenRest(trip, pool = S.trips) {
   return { kind: 'turnaround', label: 'Отдых в пункте оборота', house, until: r.until, rest: r.rest };
 }
 
-// Отдых, который идёт сейчас: после последней завершённой поездки, если нет поездки «в пути»
-export function currentRest(now) {
+// Последняя законченная поездка, если нет поездки «в пути» и «ждёт явки»
+function lastFinished(now) {
   if (S.trips.some(isLive)) return null;
   let last = null;
   let lastEnd = -Infinity;
   for (const t of S.trips) { const st = statsOf(t); if (st.end <= now && st.end > lastEnd) { last = t; lastEnd = st.end; } }
+  return last;
+}
+
+// Отдых, который идёт сейчас: после последней завершённой поездки, если нет поездки «в пути»
+export function currentRest(now) {
+  const last = lastFinished(now);
   if (!last) return null;
   const r = chosenRest(last);
   if (!r || r.until <= now) return null;
   return { trip: last, ...r, left: (r.until - now) / MIN };
+}
+
+// Больше 48 ч после поездки — это уже не отдых в пункте оборота (как OVERREST_MAX в pay.js)
+const TURN_MAX = 48 * 60 * MIN;
+
+// Отдых в пункте оборота для главного экрана (2.24.8, просьба Никиты), пока не добавлена новая явка:
+// 'rest' — идёт положенный отдых (половина рабочего времени, не меньше минимума), до r.until;
+// 'full' — положенный вышел, идёт отдых до 100 % рабочего времени поездки;
+// 'over' — и 100 % вышли: переотдых (с окончания 100 %, как в заработке — overRestIntervals), до 48 ч после поездки.
+export function turnaroundNow(now) {
+  const last = lastFinished(now);
+  if (!last || last.restType !== 'turnaround') return null;
+  const r = chosenRest(last);
+  if (!r) return null;
+  const st = statsOf(last);
+  const fullAt = st.end + st.work * MIN;
+  const base = { trip: last, house: r.house, half: r.until, fullAt };
+  if (now < r.until) return { ...base, stage: 'rest', until: r.until, left: (r.until - now) / MIN };
+  if (now < fullAt) return { ...base, stage: 'full', until: fullAt, left: (fullAt - now) / MIN };
+  if (now - st.end > TURN_MAX) return null;
+  return { ...base, stage: 'over', since: fullAt, over: (now - fullAt) / MIN };
 }
 
 // Выходные (выбор «Пойти на выходной» после поездки): [{ trip, s, e }] в мс — для календаря и статуса

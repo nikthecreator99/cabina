@@ -11,7 +11,7 @@ import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen, noteTourScreen, toursOff, setToursOff } from './tour.js';
 import { homeTour, swipeTour, settingsTour, workTour, tariffsTour, housesTour, fixTour, careerTour, calDayTour, moneyTour, payModeTour, colleaguesTour, shareTour } from './tours.js';
 import { isMemoryMode } from './db.js';
-import { currentRest } from './rest.js';
+import { currentRest, turnaroundNow } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
 import { lockOn, lockScreen, initLock, openLockSettings } from './lock.js';
 import { initMoney, applyMoney, toggleMoney, eyeBtn, flipOn, setFlip } from './money.js';
@@ -253,6 +253,7 @@ function renderHome() {
 
   const absCount = sum.monthAbs.length;
   const rest = isCurrent ? currentRest(now) : null;
+  const turn = isCurrent ? turnaroundNow(now) : null; // отдых в пункте оборота: положенный → 100 % → переотдых (2.24.8)
   const lt = isCurrent ? liveTrip() : null;
   const pend = lt && isPending(lt, now) ? lt : null;
   const trips = [...sum.monthTrips].sort((a, b) => (isLive(b) - isLive(a)) || statsOf(b).start - statsOf(a).start);
@@ -288,13 +289,25 @@ function renderHome() {
     <button class="btn btn-primary" data-act="add-trip">${I.plus} Добавить поездку</button>
     ${pend ? `<div class="banner-row"><button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn('yavka', statsOf(pend).start, 'Напомнить о явке в календаре')}</div>` : ''}
     ${departBanner(lt && !pend ? lt : null, now)}
-    ${rest ? `<div class="banner-row"><button class="rest-banner" data-act="${editableRest(rest) ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${editableRest(rest) ? ` aria-label="${rest.kind === 'dayOff' ? 'Выходной' : 'Полный отдых'} — изменить время окончания"` : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn(restRemindKind(rest.kind), rest.until, 'Напомнить о конце отдыха в календаре')}</div>` : ''}
+    ${turn ? turnBanner(turn, now) : rest ? `<div class="banner-row"><button class="rest-banner" data-act="${editableRest(rest) ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${editableRest(rest) ? ` aria-label="${rest.kind === 'dayOff' ? 'Выходной' : 'Полный отдых'} — изменить время окончания"` : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn(restRemindKind(rest.kind), rest.until, 'Напомнить о конце отдыха в календаре')}</div>` : ''}
     ${isCurrent ? medBanner() + loyaltyBanner() + yearNagHtml(now) : ''}
     ${backupNag(now) || (isCurrent && !OLD_SITE ? signupNagHtml() : '')}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.train}</div><b>В ${MONTHS_PREP[V.m - 1]} поездок нет</b><p>Нажмите «Добавить поездку» — время, ночные и праздничные часы посчитаются автоматически.</p></div>`}
   </div>${V.sel ? selBar(trips) : ''}`;
+}
+
+// Отдых в пункте оборота на главном (2.24.8, просьба Никиты): пока не добавлена новая явка —
+// сначала положенный отдых, когда он вышел — до 100 % рабочего времени поездки, потом — сколько уже переотдых.
+function turnBanner(t, now) {
+  const house = t.house ? ` · ${esc(t.house)}` : '';
+  let t1, t2, cls = '';
+  if (t.stage === 'rest') { t1 = `Отдых в пункте оборота · до ${whenShort(t.until, now)}`; t2 = `Осталось ${fmtDur(t.left)}${house}`; }
+  else if (t.stage === 'full') { t1 = `Отдых 100 % · до ${whenShort(t.until, now)}`; t2 = `Осталось ${fmtDur(t.left)}${house}`; }
+  else { cls = ' over'; t1 = `Переотдых ${fmtDur(t.over)}`; t2 = `Отдых 100 % вышел ${whenShort(t.since, now)}${house}`; }
+  const remind = t.stage === 'over' ? '' : remindBtn('rest', t.until, t.stage === 'full' ? 'Напомнить о конце отдыха 100 % в календаре' : 'Напомнить о конце отдыха в календаре');
+  return `<div class="banner-row"><button class="rest-banner turn-${t.stage}${cls}" data-act="trip" data-id="${esc(t.trip.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${t1}</div><div class="t2">${t2}</div></div><span class="chev">${small(I.right, 18)}</span></button>${remind}</div>`;
 }
 
 // Выбор поездок долгим нажатием (2.19): отправить напарнику QR-кодом или ссылкой

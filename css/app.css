@@ -259,6 +259,7 @@ button.stat:active { transform: scale(.98); }
 .rest-banner .t1 { font-weight: 700; font-size: calc(15px * var(--fs)); }
 .rest-banner .t2 { font-size: calc(13px * var(--fs)); color: var(--text-2); }
 .rest-banner.pending .pulse { background: var(--warn); animation: none; }
+.rest-banner.over .pulse { background: var(--warn); animation: none; box-shadow: none; } /* переотдых (2.24.8) */
 
 /* Секции и списки */
 .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 8px; }
@@ -570,6 +571,16 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .calc-row.tight { border-bottom: 0; padding-bottom: 4px; }
 .calc-note { padding: 0 14px 11px; font-size: calc(14px * var(--fs)); color: var(--muted); border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .calc-head { padding: 10px 14px; font-size: calc(12px * var(--fs)); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--card-2); border-bottom: 1px solid var(--line); }
+.calc-head.has-info { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; padding-bottom: 2px; }
+.calc-head.has-info .info-btn { width: 40px; height: 40px; margin-right: -8px; color: var(--text-2); }
+/* «Как считается полный отдых» (2.24.8) */
+.rules { display: grid; gap: 10px; font-size: calc(15px * var(--fs)); line-height: 1.45; color: var(--text-2); }
+.rules p, .rules ul { margin: 0; }
+.rules ul { padding-left: 20px; display: grid; gap: 6px; }
+.rules b { color: var(--text); }
+.rules h3 { margin: 8px 0 0; font-size: calc(17px * var(--fs)); color: var(--text); }
+.rules-f { padding: 12px 14px; border-radius: 14px; background: var(--card-2); color: var(--text); font-weight: 800; }
+.rules-ex { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--card-solid); font-variant-numeric: tabular-nums; }
 .status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; font-size: calc(13px * var(--fs)); font-weight: 700; }
 .status.on { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
 .status.off { color: var(--muted); background: var(--card-2); }

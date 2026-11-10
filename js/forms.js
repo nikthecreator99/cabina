@@ -106,14 +106,19 @@ export function restBlock(trip, { now = nowLocal(), pool = S.trips } = {}) {
   if (!Number.isFinite(st.end)) return '';
   if (trip.restType === 'home') {
     const r = computeHomeRest(trip, trip.homeRest?.ids, pool);
-    if (!r) return `<div class="calc-head">Полный отдых</div><div class="calc-row"><span>Выберите поездки для расчёта полного отдыха</span></div>`;
-    if (r.missing) return `<div class="calc-head">Полный отдых</div><div class="calc-row"><span>Одна из выбранных поездок удалена. Выберите поездки заново.</span></div>`;
-    if (!r.valid) return `<div class="calc-head">Полный отдых</div><div class="calc-row"><span>Эти поездки не подходят для расчёта. Выберите другие поездки.</span></div>`;
-    return `<div class="calc-head">Полный отдых</div>
+    const head = `<div class="calc-head has-info"><span>Полный отдых</span><button type="button" class="info-btn" data-act="full-rest-info" aria-label="Как считается полный отдых">${I.excl}</button></div>`;
+    if (!r) return `${head}<div class="calc-row"><span>Выберите поездки для расчёта полного отдыха</span></div>`;
+    if (r.missing) return `${head}<div class="calc-row"><span>Одна из выбранных поездок удалена. Выберите поездки заново.</span></div>`;
+    if (!r.valid) return `${head}<div class="calc-row"><span>Эти поездки не подходят для расчёта. Выберите другие поездки.</span></div>`;
+    // 2.24.8: вычитается только первый отдых в доме отдыха, второй и следующие — нет
+    const many = r.gaps.length > 1;
+    return `${head}
       <div class="calc-row"><span>${r.count > 1 ? `Поездки${r.count > 2 ? ` (${r.count})` : ''}` : 'Поездка'}</span><b>${r.count > 1 ? `${esc(tripLabelShort(r.earlyTrip).split(' · ')[0])} → ${esc(tripLabelShort(r.lateTrip).split(' · ')[0])}` : esc(tripLabelShort(r.lateTrip))}</b></div>
       <div class="calc-row"><span>${r.count > 1 ? 'Рабочее время всего' : 'Рабочее время'}</span><b>${fmtDur(r.work)}</b></div>
-      ${r.count > 1 ? `<div class="calc-row"><span>${r.count > 2 ? 'Промежутки между ними' : 'Промежуток между ними'}</span><b>${fmtDur(r.gap)}</b></div>` : ''}
+      ${r.count > 1 ? `<div class="calc-row" id="tf-gap"><span>${many ? 'Первый отдых — вычитается' : 'Отдых между ними'}</span><b>${fmtDur(r.gap)}</b></div>` : ''}
+      ${many ? `<div class="calc-row" id="tf-gap-kept"><span>${r.gaps.length > 2 ? 'Следующие отдыхи' : 'Второй отдых'} — не вычитается</span><b>${fmtDur(r.kept)}</b></div>` : ''}
       <div class="calc-row main"><span>Полный отдых</span><b>${fmtDur(r.full)}</b></div>
+      <div class="calc-note" id="tf-full-formula">${fmtDur(r.work, { short: true })} × 2,6${r.gap ? ` − ${fmtDur(r.gap, { short: true })}` : ''} = ${fmtDur(r.full)}</div>
       <div class="calc-row"><span>Окончание</span><b>${whenShort(r.fullUntil, now)}</b></div>
       <div class="calc-row main"><span>С выходным (+24 ч)</span><b>${fmtDur(r.withDayOff)}</b></div>
       <div class="calc-row"><span>Окончание</span><b>${whenShort(r.withDayOffUntil, now)}</b></div>`;
@@ -128,6 +133,31 @@ export function restBlock(trip, { now = nowLocal(), pool = S.trips } = {}) {
     ${custom ? `<div class="calc-row"><span>Минимум для этого дома отдыха</span><b>${fmtDur(min)}</b></div>` : ''}
     <div class="calc-row"><span>Окончание</span><b>${whenShort(r.until, now)}</b></div>
     <div class="calc-row"><span>Статус</span>${statusOf(now, st.end, r.until)}</div>`;
+}
+
+// «!» у полного отдыха (2.24.8, просьба Никиты): все правила расчёта — с формулой и примерами.
+// Поменялся расчёт (homeRestMulti в calc.js) — поправить текст здесь и в «Помощи» (rest-full).
+export const FULL_REST_RULES = `<div class="rules">
+  <p>Полный отдых — отдых дома после поездки или после нескольких поездок подряд с отдыхом в пункте оборота между ними.</p>
+  <h3>Формула</h3>
+  <p class="rules-f">Полный отдых = рабочее время × 2,6 − первый отдых</p>
+  <ul>
+    <li><b>Рабочее время</b> — всех отмеченных поездок вместе, от явки до окончания работы, вместе со следованием пассажиром и ожиданием.</li>
+    <li><b>Отдых</b> — промежуток между поездками: от окончания одной поездки до явки на следующую.</li>
+    <li>Если в домах отдыха отдыхали <b>два раза и больше</b>, вычитается только <b>первый</b> отдых. Второй и следующие не вычитаются.</li>
+    <li>Полный отдых отсчитывается от окончания последней поездки.</li>
+    <li><b>С выходным</b> — к полному отдыху добавляются 24 часа.</li>
+  </ul>
+  <h3>Примеры</h3>
+  <div class="rules-ex"><b>Одна поездка</b><br>Рабочее время 7 ч.<br>7 ч × 2,6 = <b>18 ч 12 мин</b>.</div>
+  <div class="rules-ex"><b>Туда и обратно</b><br>Туда 6 ч, отдых в доме отдыха 6 ч, обратно 6 ч.<br>(6 + 6) × 2,6 = 31 ч 12 мин, минус отдых 6 ч = <b>25 ч 12 мин</b>.<br>Закончили в 02:00 — отдых до 03:12 следующего дня, с выходным — до 03:12 через день.</div>
+  <div class="rules-ex"><b>Два дома отдыха</b><br>Туда 6 ч, отдых 6 ч, дальше 5 ч, отдых 7 ч, домой 6 ч.<br>(6 + 5 + 6) × 2,6 = 44 ч 12 мин, минус первый отдых 6 ч = <b>38 ч 12 мин</b>. Второй отдых (7 ч) не вычитается.</div>
+  <h3>Какие поездки считаются</h3>
+  <p>CABINA сама предлагает всю поездку: предыдущие поездки с отдыхом в пункте оборота, если перерыв между ними не больше 48 часов и станции стыкуются. Отметки можно поменять руками.</p>
+  <p>Если по факту отдых дали другой длины, нажмите на отдых на главном экране и поправьте окончание. Расчёт справочный — итог по графику депо.</p>
+</div>`;
+export function openFullRestInfo() {
+  openLayer(sheet({ title: 'Расчёт полного отдыха', tall: true, body: FULL_REST_RULES, foot: '<button class="btn btn-primary" data-close>Понятно</button>' }));
 }
 
 // Заработок на руки за поездку (черновик формы): с отдыхом сверх нормы после неё
@@ -801,6 +831,8 @@ export function openTripForm(tripId) {
       if (!F.homeSel.length) F.homeSel = suggestChain(draft()).chain.map((c) => c.id); // сразу вся поездка (или одна эта)
       refreshAll();
       setTimeout(() => $(el, '#tf-full-choice')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    } else if (act === 'full-rest-info') {
+      openFullRestInfo();
     } else if (act === 'home-chain') {
       F.homeSel = suggestChain(draft()).chain.map((c) => c.id); refreshAll();
     } else if (act === 'add-pass') {
