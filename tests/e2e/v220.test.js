@@ -5,6 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
 import { mockServer, signIn, ready, CUR, TRIP } from './mock-colleagues.js';
+import { SIGNUP_OPEN } from '../../js/legal.js';
 
 let env;
 before(async () => { env = await startEnv(); });
@@ -262,7 +263,7 @@ test('плашка для гостя: с 3 поездок; зовёт награ
   assert.ok(await fits(page));
   await page.locator('[data-act=nag-signup]').click();
   await page.waitForSelector('.screen[data-page=account] #acc-invite');
-  assert.match(await text(page, '.screen'), /Код приглашения · если есть/);
+  assert.match(await text(page, '.screen'), SIGNUP_OPEN ? /Код приглашения · если есть/ : /Код приглашения[\s\S]*только по приглашению/);
   await page.locator('[data-act=back]').click();
   await page.locator('[data-act=nag-snooze]').click();
   await page.waitForFunction(() => !document.querySelector('#signup-nag'));
