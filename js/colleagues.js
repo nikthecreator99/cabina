@@ -126,7 +126,7 @@ function accessRows(rows, me) {
 // Снимок с сервера: согласия, моя карточка, предложения мне, мои предложения, коллеги со статусом, кому что видно.
 // Станции статуса (с 2.16) приходят отдельно — их сервер отдаёт только тем, кому человек показывает, где он.
 // Группы (2.22): groups/members/ginvites — null, если на сервере их ещё нет (тогда groupsOn = false).
-export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null }) {
+export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null, asks = null }) {
   me = String(me).toLowerCase();
   const ok = (doc) => arr(consents).some((c) => c && c.document === doc && !c.withdrawn_at);
   const cardOf = new Map();
@@ -157,6 +157,12 @@ export function buildSnapshot(me, { consents, links, cards, statuses, places, ac
   }
   const byName = (a, b) => a.card.name.localeCompare(b.card.name, 'ru');
   out.colleagues.sort(byName); out.incoming.sort(byName); out.outgoing.sort(byName);
+  // Просьбы показать им мой статус (2.28): только от моих коллег, не больше 20; старый сервер без таблицы — asksOn: false
+  out.asksOn = Array.isArray(asks);
+  out.asks = arr(asks).filter((a) => a && a.state === 'open' && UUID.test(String(a.asker)))
+    .map((a) => ({ id: a.asker.toLowerCase(), at: Date.parse(a.asked_at) || 0 }))
+    .map((a) => ({ ...a, card: out.colleagues.find((c) => c.id === a.id)?.card }))
+    .filter((a) => a.card).sort((a, b) => b.at - a.at).slice(0, 20);
   Object.assign(out, buildGroups(me, { groups, members, ginvites, cardOf, statusOf }));
   return out;
 }
@@ -336,6 +342,8 @@ export function loadColleagues({ force = false } = {}) {
   if (!force && C.snap && Date.now() - C.at < 30e3) return Promise.resolve(C.snap);
   const sub = C.sub;
   C.loading = (async () => {
+    // просьбы показать статус (2.28) — отдельно и необязательно: сервер без шага 10 «Коллег» не ломает
+    const asking = restGet('status_asks?select=asker,state,asked_at&state=eq.open&order=asked_at.desc&limit=50');
     const rs = await Promise.all([
       restGet('consents?select=document,withdrawn_at'),
       restGet('links?select=from_id,to_id,state'),
@@ -361,7 +369,8 @@ export function loadColleagues({ force = false } = {}) {
     }
     const [consents, links, cards, statuses, places, access] = rs.map((r) => r.data);
     const [groups, members, ginvites] = gBad === undefined ? gs.map((r) => r.data) : [null, null, null];
-    C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access, groups, members, ginvites });
+    const ar = await asking;
+    C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access, groups, members, ginvites, asks: ar?.ok && Array.isArray(ar.data) ? ar.data : null });
     C.at = Date.now(); C.err = '';
     return C.snap;
   })().finally(() => { C.loading = null; });
@@ -527,22 +536,74 @@ function colAccessRows(id) {
     + row('place', 'Где я', st ? 'Станции и дом отдыха' : 'Сначала включите статус', st && sees(C.snap, 'place', id), !st);
 }
 
-// Окно коллеги: персонаж, имя, статус, что он видит, «Удалить из коллег»
-function openColleague(id) {
+// «Попросить показать статус» (2.28): отметка в телефоне, кого и когда просили, — чтобы не звать чаще раза в 7 дней
+const ASK_KEY = 'cabina-asked';
+const ASK_DAYS = 7;
+const askedAt = (id) => {
+  try { return Number((JSON.parse(localStorage.getItem(ASK_KEY) || '{}') || {})[id]) || 0; } catch { return 0; }
+};
+const noteAsked = (id) => {
+  try {
+    const m = JSON.parse(localStorage.getItem(ASK_KEY) || '{}') || {};
+    const now = Date.now();
+    for (const k of Object.keys(m)) if (!(now - Number(m[k]) < ASK_DAYS * 864e5)) delete m[k];
+    m[id] = now;
+    localStorage.setItem(ASK_KEY, JSON.stringify(m));
+  } catch {}
+};
+const askedRecently = (id) => Date.now() - askedAt(id) < ASK_DAYS * 864e5;
+const askHtml = (id) => (askedRecently(id)
+  ? '<div class="hint col-asked">Вы уже попросили показать статус. Коллега увидит просьбу, когда откроет CABINA.</div>'
+  : '<button class="btn btn-plain col-ask" data-act="col-ask">Попросить показать статус</button>');
+function askError(r) {
+  if (!r) return OFFLINE;
+  if (notReady(r)) return 'Просьбы на сервере ещё не включены. Попробуйте позже.';
+  const m = String(r.data?.message || '');
+  if (/cabina: not found/.test(m)) return 'Вы больше не коллеги: просить некого.';
+  if (/cabina: limit/.test(m)) return 'На сегодня просьб слишком много. Попробуйте завтра.';
+  if (/consent required/.test(m)) return 'Сначала примите новую редакцию согласия.';
+  return errorText(r);
+}
+async function askStatus(id) {
+  if (!(await ensureConsent())) return false;
+  const r = await rpc('ask_status', { p_to: id });
+  if (!r?.ok) { toast(askError(r), { error: true, ms: 5000 }); return false; }
+  if (r.data === 'already') { toast('Коллега уже разрешил вам видеть статус. Он появится, когда коллега откроет CABINA.', { ms: 5000 }); return true; }
+  noteAsked(id);
+  toast(r.data === 'later' ? 'Вы уже просили недавно. Повторить можно через неделю.' : 'Просьба отправлена. Коллега увидит её, когда откроет CABINA.', { ms: 5000 });
+  return true;
+}
+// Ответ на просьбу: «не сейчас» или «больше не просить от него» — просящему об этом не сообщается
+export async function answerAsk(id, mute) {
+  const r = await rpc('answer_status_ask', { p_asker: id, p_mute: !!mute });
+  if (!r?.ok) { toast(askError(r), { error: true, ms: 5000 }); return false; }
+  if (C.snap) C.snap.asks = C.snap.asks.filter((a) => a.id !== id);
+  toast(mute ? 'Больше не будем показывать просьбы от этого коллеги' : 'Хорошо, просьба убрана');
+  hooks.rerender();
+  return true;
+}
+// Просьбы мне — для колокольчика
+export const colAsks = () => C.snap?.asks || [];
+
+// Окно коллеги: персонаж, имя, статус, что он видит, «Удалить из коллег». С просьбой (из колокольчика) — сверху пояснение:
+// ничего не включено, пока человек сам не включит ниже.
+export function openColleague(id, { ask = false } = {}) {
   const c = C.snap?.colleagues.find((x) => x.id === id);
   if (!c) return;
   const line = colleagueLine(c.status);
   const el = openLayer(sheet({ title: 'Коллега', body: `
+    ${ask ? `<div class="notice col-ask-note">${I.bell}<div><b>${esc(c.card.name)} просит показать ему ваш статус.</b> Пока вы сами не включите переключатель ниже, он ничего не увидит. Решаете вы.</div></div>` : ''}
     <section class="profile-card col-card">
       <span class="avatar view big">${cardAvatar(c.card, 132)}</span>
       <div class="profile-name">${esc(c.card.name)}</div>
       ${cardSub(c.card) ? `<div class="profile-sub">${esc(cardSub(c.card))}</div>` : ''}
-      ${line ? `${pill(line, 'pr-status')}<div class="hint">${esc(updatedText(c.status.at))}</div>` : '<div class="hint">Статус не показан: коллега его не включил или давно не открывал CABINA.</div>'}
+      ${line ? `${pill(line, 'pr-status')}<div class="hint">${esc(updatedText(c.status.at))}</div>` : `<div class="hint">Статус не показан: коллега его не включил или давно не открывал CABINA.</div><div id="col-ask-box">${askHtml(c.id)}</div>`}
     </section>
     <div class="group-title">Что видит ${esc(c.card.name)}</div>
     <div class="panel" id="col-acc">${colAccessRows(c.id)}</div>
     <div class="notice ok">${I.shield}<div>Номер поезда и локомотива, точное время явки и причину отвлечения CABINA коллегам не показывает.</div></div>`,
-  foot: `<button class="btn btn-danger" data-act="col-drop">${small(I.trash, 18)} Удалить из коллег</button>` }));
+  foot: `<button class="btn btn-danger" data-act="col-drop">${small(I.trash, 18)} Удалить из коллег</button>` }),
+  { onClose: ask ? () => hooks.rerender() : undefined });
   el.querySelector('#col-acc').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-item]');
     if (!b || C.busy) return;
@@ -550,6 +611,12 @@ function openColleague(id) {
     try { await setAccessFor(b.dataset.item, c.id, b.getAttribute('aria-checked') !== 'true'); } finally { C.busy = false; }
     const box = el.querySelector('#col-acc');
     if (box) box.innerHTML = colAccessRows(c.id);
+    if (ask) loadColleagues({ force: true }); // включил — просьба выполнена и на сервере стёрта
+  });
+  el.querySelector('#col-ask-box')?.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-act="col-ask"]') || C.busy) return;
+    C.busy = true;
+    try { if (await askStatus(c.id)) { const box = el.querySelector('#col-ask-box'); if (box) box.innerHTML = askHtml(c.id); } } finally { C.busy = false; }
   });
   el.querySelector('[data-act="col-drop"]').addEventListener('click', async () => {
     const ok = await confirmDialog({ title: 'Удалить из коллег?', ok: 'Удалить',

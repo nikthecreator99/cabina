@@ -4,7 +4,7 @@
 // С 2.21 (просьба Никиты) — галочка «Можно ответить мне на почту» у каждой идеи (по умолчанию снята): только у таких
 // идей администратор видит почту автора (миграция 0006). Без галочки — как раньше, без почты.
 // Просим не писать имена, телефоны, номера поездов и служебную информацию (ДСП) — это предупреждение рядом с полем.
-import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, dayMonth, layerCount } from './ui.js';
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, dayMonth, layerCount } from './ui.js';
 import { nowLocal } from './store.js';
 import { dateKeyOf } from './calc.js';
 import { legalReady } from './legal.js';
@@ -14,6 +14,7 @@ import { ensureConsent, tzOffset, cleanText } from './colleagues.js';
 
 export const IDEA_MAX = 500;
 export const IDEAS_PER_DAY = 5;
+export const NOTE_MAX = 300;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATES = { new: 'На рассмотрении', accepted: 'Принята', declined: 'Не подошла' };
 const when = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
@@ -22,7 +23,9 @@ const when = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; ret
 export function cleanIdeas(rows) {
   return (Array.isArray(rows) ? rows : []).filter((x) => x && UUID.test(String(x.id)) && Object.hasOwn(STATES, x.state))
     .map((x) => ({ id: String(x.id).toLowerCase(), body: cleanText(x.body, IDEA_MAX), state: x.state, created: when(x.created_at), answered: when(x.answered_at),
-      reply: x.reply_ok === true, email: cleanEmail(x.email) }))
+      reply: x.reply_ok === true, email: cleanEmail(x.email),
+      // комментарий администратора (2.28) и «ответ ещё не открыт автором» (seen_at пусто); сервер без шага 10 их не отдаёт
+      note: cleanText(x.admin_note ?? x.note, NOTE_MAX), unseen: x.seen_at === null && x.state !== 'new' }))
     .filter((x) => x.body).slice(0, 200);
 }
 // Почта автора (только у администратора и только у идей с галочкой): простая проверка вида, иначе — нет почты
@@ -56,7 +59,8 @@ async function noteAccepted(list) {
   const before = awardSnapshot();
   if (await noteCount('ideas', n, dateKeyOf(nowLocal()))) {
     const news = awardNews(before);
-    if (news) setTimeout(() => { if (!layerCount()) celebrate(news); }, 600);
+    // с 2.28 ответы подтягиваются и при запуске — окно может быть уже занято другим (например, «Свой человек»): ждём, пока освободится
+    if (news) { let tries = 0; const show = () => { if (!layerCount()) celebrate(news); else if (++tries < 40) setTimeout(show, 1000); }; setTimeout(show, 600); }
   }
 }
 
@@ -66,12 +70,16 @@ export function loadIdeas({ force = false } = {}) {
   if (D.sub !== s.sub) Object.assign(D, { sub: s.sub, list: null, at: 0, err: '' });
   if (D.loading) return D.loading;
   if (!force && D.list && Date.now() - D.at < 30e3) return Promise.resolve(D.list);
+  if (!force && D.err && Date.now() - D.at < 60e3) return Promise.resolve(D.list); // не получилось — не долбим сервер на каждой перерисовке
   const sub = D.sub;
   D.loading = (async () => {
     // reply_ok — с сервера 2.21; на старом сервере его нет (42703) — читаем без него
+    // admin_note и seen_at — с сервера 2.28 (шаг 10); без них — как раньше
     const q = 'order=created_at.desc&limit=200';
-    let r = await restGet(`ideas?select=id,body,state,created_at,answered_at,reply_ok&${q}`);
-    if (r && !r.ok && String(r.data?.code || '') === '42703') r = await restGet(`ideas?select=id,body,state,created_at,answered_at&${q}`);
+    const bad = (x) => x && !x.ok && String(x.data?.code || '') === '42703';
+    let r = await restGet(`ideas?select=id,body,state,created_at,answered_at,reply_ok,admin_note,seen_at&${q}`);
+    if (bad(r)) r = await restGet(`ideas?select=id,body,state,created_at,answered_at,reply_ok&${q}`);
+    if (bad(r)) r = await restGet(`ideas?select=id,body,state,created_at,answered_at&${q}`);
     if (session()?.sub !== sub) return null;
     if (!r?.ok) { D.err = !r ? 'offline' : notReady(r) ? 'server' : 'error'; D.at = Date.now(); return D.list; }
     D.list = cleanIdeas(r.data); D.at = Date.now(); D.err = '';
@@ -85,7 +93,8 @@ const wall = (abs) => abs + tzOffset();
 function ideaRow(x) {
   const meta = [x.created != null ? dayMonth(wall(x.created)) : '', STATES[x.state], x.reply ? 'можно ответить на почту' : ''].filter(Boolean).join(' · ');
   return `<div class="idea st-${x.state}" data-id="${esc(x.id)}"><div class="grow"><div class="idea-body">${esc(x.body)}</div>
-      <div class="t2 idea-meta">${x.state === 'accepted' ? small(I.check, 14) : ''}${esc(meta)}</div></div>
+      <div class="t2 idea-meta">${x.state === 'accepted' ? small(I.check, 14) : ''}${esc(meta)}</div>
+      ${x.note ? `<div class="idea-note"><b>Ответ:</b> ${esc(x.note)}</div>` : ''}</div>
     <button class="icon-btn idea-del" data-act="idea-del" data-id="${esc(x.id)}" aria-label="Стереть идею">${small(I.trash, 18)}</button></div>`;
 }
 
@@ -180,31 +189,98 @@ export async function ideasClick(act, b) {
 
 // ---------------------------------------------------------------- для администратора (Настройки аккаунта)
 // Без id автора; почта — только у идей, где автор отметил «Можно ответить мне на почту»
-export async function openAdminIdeas() {
+// Новые идеи для колокольчика администратора: число считаем раз в минуту, пока открыт «Профиль» или «Уведомления»
+const AD = { sub: null, n: null, at: 0, loading: null };
+export const adminNewIdeas = () => AD.n || 0;
+export function checkAdminIdeas({ force = false } = {}) {
+  const s = session();
+  if (!s || !legalReady()) return Promise.resolve(null);
+  if (AD.sub !== s.sub) Object.assign(AD, { sub: s.sub, n: null, at: 0 });
+  if (AD.loading) return AD.loading;
+  if (!force && Date.now() - AD.at < 60e3) return Promise.resolve(AD.n);
+  const sub = AD.sub;
+  AD.loading = (async () => {
+    const r = await rpc('admin_ideas');
+    if (session()?.sub !== sub) return null;
+    AD.at = Date.now();
+    const before = AD.n;
+    AD.n = r?.ok ? cleanIdeas(r.data).filter((x) => x.state === 'new').length : null;
+    return before !== AD.n;
+  })().finally(() => { AD.loading = null; });
+  return AD.loading.then((changed) => { if (changed && !layerCount()) rerender(); return AD.n; });
+}
+
+// Мои идеи, на которые ответили, но я ещё не открывал уведомления (2.28); открыл — отмечаем прочитанными
+export const ideasUnseen = () => (D.list || []).filter((x) => x.unseen);
+let seenBusy = null;   // два вызова подряд (открыли экран и пришёл свежий список) шлют на сервер один запрос
+export function markIdeasSeen() {
+  if (!session() || !ideasUnseen().length) return Promise.resolve();
+  if (seenBusy) return seenBusy;
+  seenBusy = (async () => {
+    try {
+      const r = await rpc('mark_ideas_seen');
+      if (r?.ok) D.list = D.list.map((x) => (x.unseen ? { ...x, unseen: false } : x));
+    } finally { seenBusy = null; }
+  })();
+  return seenBusy;
+}
+
+// Комментарий администратора к идее: до 300 знаков, увидит только автор идеи
+function commentSheet(x) {
+  return new Promise((resolve) => {
+    let result;
+    const el = openLayer(sheet({ title: 'Комментарий к идее', body: `<div class="idea-quote">${esc(x.body)}</div>
+      <div class="pay-field"><label for="idea-note">Ваш комментарий автору</label>
+        <textarea class="input idea-text" id="idea-note" rows="4" maxlength="${NOTE_MAX}" placeholder="Например: сделали в 2.28, спасибо!">${esc(x.note || '')}</textarea>
+        <div class="hint">До ${NOTE_MAX} знаков. Увидит только автор идеи, в колокольчике. Ответить комментарием он не сможет. Не пишите чужие данные. Пустое поле — стереть комментарий.</div></div>`,
+    foot: '<button class="btn btn-primary" data-act="idea-note-ok">Сохранить</button>' }), { onClose: () => resolve(result) });
+    el.querySelector('[data-act="idea-note-ok"]').addEventListener('click', () => {
+      result = cleanText(el.querySelector('#idea-note').value, NOTE_MAX);
+      closeLayer(el);
+    });
+  });
+}
+
+export async function openAdminIdeas(onClose) {
   const r = await rpc('admin_ideas');
   if (!r?.ok) { toast(ideaError(r), { error: true, ms: 5000 }); return; }
   let list = cleanIdeas(r.data);
   const fresh = () => list.filter((x) => x.state === 'new').length;
+  AD.n = fresh(); AD.at = Date.now();
   const rowHtml = (x) => `<div class="idea st-${x.state}" data-id="${esc(x.id)}"><div class="grow"><div class="idea-body">${esc(x.body)}</div>
       <div class="t2 idea-meta">${esc([x.created != null ? dayMonth(wall(x.created)) : '', STATES[x.state]].filter(Boolean).join(' · '))}</div>
       ${x.email ? `<div class="t2 idea-mail">${small(I.mail, 14)} Можно ответить: <b class="sel">${esc(x.email)}</b></div>` : ''}
-      ${x.state === 'new' ? `<div class="idea-ans"><button class="btn btn-primary btn-sm" data-ans="1" data-id="${esc(x.id)}">Принять</button><button class="btn btn-plain btn-sm" data-ans="0" data-id="${esc(x.id)}">Не подошла</button></div>` : ''}</div></div>`;
+      ${x.note ? `<div class="idea-note"><b>Ваш комментарий:</b> ${esc(x.note)}</div>` : ''}
+      <div class="idea-ans">${x.state === 'new' ? `<button class="btn btn-primary btn-sm" data-ans="1" data-id="${esc(x.id)}">Принять</button><button class="btn btn-plain btn-sm" data-ans="0" data-id="${esc(x.id)}">Не подошла</button>` : ''}
+        <button class="btn btn-plain btn-sm" data-cm="1" data-id="${esc(x.id)}">${x.note ? 'Изменить комментарий' : 'Комментарий'}</button></div></div></div>`;
   const body = () => (list.length ? `<div class="hint">Новых: ${fresh()}. Почта автора видна, только если он сам отметил «Можно ответить мне на почту».</div><div class="panel idea-list">${list.map(rowHtml).join('')}</div>`
     : '<div class="hint">Идей пока нет.</div>');
-  const el = openLayer(sheet({ title: 'Идеи пользователей', tall: true, body: `<div id="adm-ideas">${body()}</div>` }));
+  const el = openLayer(sheet({ title: 'Идеи пользователей', tall: true, body: `<div id="adm-ideas">${body()}</div>` }), { onClose });
   let busy = false;
   el.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-ans]');
+    const cm = e.target.closest('[data-cm]');
+    const b = cm || e.target.closest('[data-ans]');
     if (!b || busy) return;
     const id = String(b.dataset.id || '').toLowerCase();
     if (!UUID.test(id)) return;
     busy = true;
     try {
-      const a = await rpc('admin_answer_idea', { p_id: id, p_accept: b.dataset.ans === '1' });
-      if (!a?.ok) { toast(ideaError(a), { error: true, ms: 5000 }); return; }
-      list = list.map((x) => (x.id === id ? { ...x, state: b.dataset.ans === '1' ? 'accepted' : 'declined', answered: Date.now() } : x));
+      if (cm) {
+        const idea = list.find((x) => x.id === id);
+        const note = idea ? await commentSheet(idea) : undefined;
+        if (note === undefined) return;
+        const a = await rpc('admin_answer_idea', { p_id: id, p_note: note });
+        if (!a?.ok) { toast(ideaError(a), { error: true, ms: 5000 }); return; }
+        list = list.map((x) => (x.id === id ? { ...x, note } : x));
+        toast(note ? 'Комментарий сохранён' : 'Комментарий стёрт');
+      } else {
+        const a = await rpc('admin_answer_idea', { p_id: id, p_accept: b.dataset.ans === '1' });
+        if (!a?.ok) { toast(ideaError(a), { error: true, ms: 5000 }); return; }
+        list = list.map((x) => (x.id === id ? { ...x, state: b.dataset.ans === '1' ? 'accepted' : 'declined', answered: Date.now() } : x));
+        toast(b.dataset.ans === '1' ? 'Идея принята' : 'Ответ отправлен');
+      }
+      AD.n = fresh();
       el.querySelector('#adm-ideas').innerHTML = body();
-      toast(b.dataset.ans === '1' ? 'Идея принята' : 'Ответ отправлен');
     } finally { busy = false; }
   });
   return el;

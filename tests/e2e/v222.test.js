@@ -122,8 +122,12 @@ gtest('создать группу: согласие новой редакции
   assert.deepEqual(srv.calls('create_group')[0].body, { p_name: 'Колонна <b>3</b>' });
   assert.equal(await page.locator('.screen h1').innerText(), 'Колонна <b>3</b>', 'название — текстом, не разметкой');
   assert.match(await text(page, '.grp-sub'), /1 участник · вы администратор/);
+  // 2.28: настройки — за кнопкой «Приватность»
+  await page.locator('#grp-priv-btn').click();
+  await page.locator('#grp-share').waitFor();
   assert.match(await text(page, '#grp-share'), /Показывать мой статус группе/);
   assert.equal(await page.locator('#grp-share [data-item=status]').getAttribute('aria-checked'), 'false', 'по умолчанию группа статус не видит');
+  await top(page).locator('.sheet-head [data-close]').click();
   // код и QR
   await page.locator('#grp-code').click();
   await top(page).locator('#grp-qr svg').waitFor();
@@ -163,7 +167,9 @@ gtest('в группе: статус участника виден, только
   await page.waitForSelector('#grp-members');
   // 2.27: статус в группе — взаимно. Пока я свой не показываю, статус Анны скрыт
   assert.match(await text(page, '#grp-members'), /Анна Тестовая[\s\S]*администратор[\s\S]*Статус скрыт/);
-  // включаю показ своего статуса группе
+  // включаю показ своего статуса группе (окно «Приватность» остаётся открытым до конца проверки)
+  await page.locator('#grp-priv-btn').click();
+  await page.locator('#grp-share').waitFor();
   await page.locator('#grp-share [data-item=status]').click();
   await page.waitForFunction(() => document.querySelector('#grp-share [data-item=status]')?.getAttribute('aria-checked') === 'true');
   await page.waitForFunction(() => /В пути/.test(document.querySelector('#grp-members')?.innerText || ''));
@@ -187,6 +193,7 @@ gtest('в группе: статус участника виден, только
   await page.waitForFunction(() => document.querySelector('#grp-share [data-item=status]')?.getAttribute('aria-checked') === 'false');
   assert.deepEqual(srv.calls('set_group_share').at(-1).body, { p_group: G1, p_status: false, p_place: false });
   assert.equal(srv.db.statuses[ME], undefined);
+  await top(page).locator('.sheet-head [data-close]').click();
   // участник — не администратор: кнопок администратора нет
   assert.equal(await page.locator('#grp-invite, #grp-code, #grp-delete, [data-act=grp-rename]').count(), 0);
   // «Что сервер знает о вас» — тоже с группами (как отвечает export_my_data)

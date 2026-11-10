@@ -21,7 +21,9 @@ export async function mockServer(context, init = {}) {
     // 2.20: приглашения (как в миграции 0005: в ответе — только числа и срок, без кодов) и идеи
     role: 'user', invites: { open: [], joined: 0, counted: 0 }, ideas: [], ideasToday: 0,
     // 2.22: группы (как в миграции 0007). groupsOff — сервер без групп (старый): таблиц нет, 404
-    groups: [], members: [], ginvites: [], codes: {}, bans: [], groupsOff: false, oldGroups: false, ...init,
+    groups: [], members: [], ginvites: [], codes: {}, bans: [], groupsOff: false, oldGroups: false,
+    // 2.28: просьбы показать статус (как в миграции 0010). asksOff — сервер без шага 10; sentAsks — что отправил я
+    asks: [], sentAsks: [], asksOff: false, ...init,
   };
   let seq = 0;
   const uuid = () => `aaaaaaaa-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
@@ -59,7 +61,15 @@ export async function mockServer(context, init = {}) {
     const rpc = path.replace('/rest/v1/rpc/', '');
     switch (path) {
       case '/rest/v1/profiles': return send(200, [{ role: db.role }]);
-      case '/rest/v1/ideas': return send(200, [...db.ideas].reverse().map(({ id, body: b, state, created_at, answered_at, reply_ok = false }) => ({ id, body: b, state, created_at, answered_at, reply_ok })));
+      case '/rest/v1/ideas': {
+        if (db.asksOff) return send(200, [...db.ideas].reverse().map(({ id, body: b, state, created_at, answered_at, reply_ok = false }) => ({ id, body: b, state, created_at, answered_at, reply_ok })));
+        // seen_at не задан — «прочитано» (старые тесты); null — ответ ещё не открыт
+        return send(200, [...db.ideas].reverse().map(({ id, body: b, state, created_at, answered_at, reply_ok = false, admin_note = null, seen_at }) => ({ id, body: b, state, created_at, answered_at, reply_ok, admin_note, seen_at: seen_at === undefined ? created_at : seen_at })));
+      }
+      case '/rest/v1/status_asks': {
+        if (db.asksOff) return send(404, { code: 'PGRST205', message: 'not found' });
+        return send(200, db.asks.filter((a) => a.target === ME && a.state === 'open'));
+      }
       case '/rest/v1/consents': return send(200, db.consents);
       case '/rest/v1/links': return send(200, db.links.filter(mine).map(({ from_id, to_id, state }) => ({ from_id, to_id, state })));
       case '/rest/v1/groups': case '/rest/v1/group_members': case '/rest/v1/group_invites': {
@@ -88,11 +98,31 @@ export async function mockServer(context, init = {}) {
     if (rpc === 'my_invites') return send(200, { ...db.invites, open: db.invites.open.map(({ id, created_at, expires_at }) => ({ id, created_at, expires_at })), limit: 10, need_days: 3 });
     if (rpc === 'drop_invite') { db.invites.open = db.invites.open.filter((x) => x.id !== body.p_id); return send(204); }
     if (rpc === 'delete_idea') { db.ideas = db.ideas.filter((x) => x.id !== body.p_id); return send(204); }
-    if (rpc === 'admin_ideas') return db.role === 'admin' ? send(200, db.ideas.map(({ id, body: b, state, created_at, answered_at, reply_ok, email }) => ({ id, body: b, state, created_at, answered_at, email: reply_ok ? (email || 'avtor@example.com') : null }))) : send(403, { code: '42501', message: 'cabina: forbidden' });
+    if (rpc === 'admin_ideas') return db.role === 'admin' ? send(200, db.ideas.map(({ id, body: b, state, created_at, answered_at, reply_ok, email, admin_note = null }) => ({ id, body: b, state, created_at, answered_at, note: admin_note, email: reply_ok ? (email || 'avtor@example.com') : null }))) : send(403, { code: '42501', message: 'cabina: forbidden' });
     if (rpc === 'admin_answer_idea') {
       if (db.role !== 'admin') return send(403, { code: '42501', message: 'cabina: forbidden' });
+      if (db.asksOff && 'p_note' in (body || {})) return send(404, { code: 'PGRST202', message: 'not found' });
       const d = db.ideas.find((x) => x.id === body.p_id);
-      if (d) Object.assign(d, { state: body.p_accept ? 'accepted' : 'declined', answered_at: NOW });
+      if (d) {
+        if (typeof body.p_accept === 'boolean') Object.assign(d, { state: body.p_accept ? 'accepted' : 'declined', answered_at: NOW });
+        if (typeof body.p_note === 'string') d.admin_note = body.p_note || null;
+        d.seen_at = d.state === 'new' ? NOW : null;
+      }
+      return send(204);
+    }
+    if (rpc === 'mark_ideas_seen') { for (const d of db.ideas) if (d.seen_at === null) d.seen_at = NOW; return send(204); }
+    if (rpc === 'ask_status') {
+      if (db.asksOff) return send(404, { code: 'PGRST202', message: 'not found' });
+      if (!db.links.some((l) => l.state === 'accepted' && mine(l) && other(l) === body.p_to)) return fail('not found');
+      if (db.access.some((a) => a.user_id === body.p_to && a.item === 'status' && (!a.viewer_id || a.viewer_id === ME))) return send(200, 'already');
+      if (db.sentAsks.includes(body.p_to)) return send(200, 'later');
+      db.sentAsks.push(body.p_to);
+      return send(200, 'sent');
+    }
+    if (rpc === 'answer_status_ask') {
+      if (db.asksOff) return send(404, { code: 'PGRST202', message: 'not found' });
+      const a = db.asks.find((x) => x.asker === body.p_asker && x.target === ME);
+      if (a) a.state = body.p_mute ? 'muted' : 'dismissed';
       return send(204);
     }
     if (rpc === 'clear_status') { delete db.statuses[ME]; return send(204); }
@@ -104,6 +134,8 @@ export async function mockServer(context, init = {}) {
       const colleague = (id) => db.links.some((l) => mine(l) && l.state === 'accepted' && other(l) === id);
       if (body.p_all) db.access.push({ user_id: ME, item: body.p_item, viewer_id: null });
       else for (const id of body.p_ids || []) if (colleague(id)) db.access.push({ user_id: ME, item: body.p_item, viewer_id: id });
+      // включил показ статуса просящему (или всем) — его просьба выполнена (триггер на сервере)
+      if (body.p_item === 'status') db.asks = db.asks.filter((x) => !(x.target === ME && (body.p_all || (body.p_ids || []).includes(x.asker))));
       const has = (item) => db.access.some((a) => a.user_id === ME && a.item === item);
       if (!has('status') && !gShares('status')) delete db.statuses[ME];
       if (!has('place') && !gShares('place') && db.statuses[ME]) { db.statuses[ME].place = null; db.statuses[ME].dest = null; }
