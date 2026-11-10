@@ -171,13 +171,19 @@ test('статус: участники группы видят его, толь�
   assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`), 0, 'показывать некому — сервер не хранит');
   shareG(b, g, true);
   status(b);
-  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, a), 1, 'админ видит');
-  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 1, 'участник видит');
+  // статус в группе — взаимно (2.27): кто свой не показывает, чужой не видит
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, a), 0, 'админ свой не показывает — не видит');
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 0, 'участник свой не показывает — не видит');
+  shareG(a, g, true);
+  shareG(c, g, true, true);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, a), 1, 'админ показывает — видит');
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 1, 'участник показывает — видит');
   assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, stranger), 0, 'чужой — нет');
   assert.equal(count(`select count(*) from public.status_places where user_id = '${b}'`), 0, 'станции без «где я» не хранятся');
   shareG(b, g, true, true);
   status(b);
   assert.deepEqual(q(`select place || '>' || dest from public.status_places where user_id = '${b}'`, c), ['Сосновка>Ольховка']);
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${b}'`, a), 0, 'А не показывает «где я» — станций не видит');
   assert.equal(count(`select count(*) from public.status_places where user_id = '${b}'`, stranger), 0);
   // «где я» без статуса не бывает
   shareG(b, g, false, true);
@@ -187,6 +193,7 @@ test('статус: участники группы видят его, толь�
   const g2 = create(c, 'Вторая');
   join(b, code(c, g2));
   shareG(b, g2, true);
+  shareG(c, g2, true);
   status(b);
   assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 1);
   assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, a), 0, 'А не во второй группе — не видит');
@@ -201,6 +208,7 @@ test('статус для коллег и для группы не мешают 
   const friend = account({ name: 'Пётр' });
   colleagues(b, friend);
   q(`select public.set_access('status', true, null)`, b);
+  shareG(a, g, true);
   shareG(b, g, true);
   status(b);
   q(`select public.set_access('status', false, null)`, b);
@@ -286,4 +294,84 @@ test('очистка: приглашения без ответа старше 30
   q('select private.cleanup_logs()');
   assert.equal(count('select count(*) from public.group_invites'), 0);
   assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`), 0);
+});
+
+// ---------------------------------------------------------------- шаг 9 (2.27)
+
+test('статус в группе взаимно: выключил свой — чужие снова не видны; коллегам — как раньше', () => {
+  const { a, b, c, g } = trio();
+  shareG(b, g, true, true);
+  status(b);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 0, 'C свой не показывает');
+  shareG(c, g, true);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 1, 'C показывает статус — видит статус');
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${b}'`, c), 0, 'а станции — только за свои станции');
+  shareG(c, g, true, true);
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${b}'`, c), 1, 'показал «где я» — видит станции');
+  shareG(c, g, false);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 0, 'выключил свой — снова не видит');
+  assert.equal(count(`select count(*) from public.status_places where user_id = '${b}'`, c), 0);
+  // коллега видит по правилу «кому видно», даже если в общей группе свой не показывает
+  colleagues(a, b);
+  q(`select public.set_access('status', true, null)`, b);
+  status(b);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, a), 1, 'коллега видит как раньше');
+  // показывать в одной группе не открывает чужие статусы в другой
+  const g2 = create(c, 'Вторая');
+  join(b, code(c, g2));
+  shareG(b, g2, true);
+  q(`select public.set_group_share('${g}', false, false)`, b);
+  shareG(c, g, true);
+  assert.equal(count(`select count(*) from public.statuses where user_id = '${b}'`, c), 0, 'B показывает только во второй, C показывает только в первой');
+});
+
+test('картинка группы: только администратор, только известные значения; видят участники, чужой — нет', () => {
+  const { a, b, g } = trio();
+  const stranger = account();
+  q(`select public.set_group_pic('${g}', '{"k":"text","t":"ТД-64","f":"u","sz":3,"sh":"circle","bg":2}'::jsonb)`, a);
+  assert.deepEqual(json(`select pic from public.groups where id = '${g}'`, b), { k: 'text', t: 'ТД-64', f: 'u', sz: 3, sh: 'circle', bg: 2 });
+  assert.equal(count(`select count(*) from public.groups where id = '${g}'`, stranger), 0, 'чужой группу не видит');
+  fails(`select public.set_group_pic('${g}', '{"k":"num","n":5}'::jsonb)`, b, /forbidden/);
+  fails(`select public.set_group_pic('${g}', '{"k":"num","n":5}'::jsonb)`, stranger, /forbidden/);
+  fails(`select public.set_group_pic('${g}', '{"k":"num","n":5}'::jsonb)`, 'anon', /permission denied/);
+  fails(`update public.groups set pic = '{"k":"num","n":1}' where id = '${g}'`, a, /permission denied/);
+  // лишнее выбрасывается, неизвестное — отказ
+  q(`select public.set_group_pic('${g}', '{"k":"num","n":"7","x":"<script>","bg":1}'::jsonb)`, a);
+  assert.deepEqual(json(`select pic from public.groups where id = '${g}'`, a), { k: 'num', n: 7, sh: 'rnd', bg: 1 });
+  q(`select public.set_group_pic('${g}', '{"k":"art","a":"steam","sh":"sq","bg":7}'::jsonb)`, a);
+  assert.deepEqual(json(`select pic from public.groups where id = '${g}'`, a), { k: 'art', a: 'steam', sh: 'sq', bg: 7 });
+  for (const bad of ['{"k":"img","src":"http://x"}', '{"k":"num","n":100}', '{"k":"num","n":0}', '{"k":"art","a":"logo"}',
+    '{"k":"text","t":"<b>x</b>"}', '{"k":"text","t":"123456789"}', '{"k":"text","t":"ТД","f":"arial"}', '{"k":"text","t":"ТД","sz":4}',
+    '{"k":"num","n":1,"sh":"star"}', '{"k":"num","n":1,"bg":8}', '[1,2]', '"x"']) {
+    fails(`select public.set_group_pic('${g}', '${bad}'::jsonb)`, a, /bad pic/);
+  }
+  // убрать картинку
+  q(`select public.set_group_pic('${g}', null)`, a);
+  assert.deepEqual(q(`select coalesce(pic::text, 'нет') from public.groups where id = '${g}'`, a), ['нет']);
+  // приглашённый видит название и картинку (как и раньше — только саму группу)
+  q(`select public.set_group_pic('${g}', '{"k":"num","n":3}'::jsonb)`, a);
+  const friend = account({ name: 'Пётр' });
+  colleagues(a, friend);
+  q(`select public.invite_to_group('${g}', '${friend}')`, a);
+  assert.equal(count(`select count(*) from public.groups where id = '${g}' and pic is not null`, friend), 1);
+  assert.equal(count(`select count(*) from public.group_members where group_id = '${g}'`, friend), 0, 'участников приглашённый не видит');
+});
+
+test('предложить стать коллегами участнику общей группы — можно, даже если его нельзя найти; чужому — нельзя', () => {
+  const { a, b, c } = trio();
+  const stranger = account({ name: 'Пётр' });
+  assert.equal(count(`select count(*) from public.cards where user_id = '${b}' and searchable`), 0, 'B не в поиске');
+  assert.deepEqual(q(`select public.offer_colleague('${b}')`, a), ['sent']);
+  assert.deepEqual(q(`select public.offer_colleague('${c}')`, b), ['sent']);
+  q(`select public.answer_colleague('${a}', true)`, b);
+  assert.equal(count(`select count(*) from public.links where state = 'accepted' and '${a}' in (from_id, to_id) and '${b}' in (from_id, to_id)`), 1);
+  fails(`select public.offer_colleague('${b}')`, stranger, /not found/);
+  fails(`select public.offer_colleague('${stranger}')`, a, /not found/);
+  // отказ — пауза 30 дней, как и раньше
+  q(`select public.drop_colleague('${b}')`, c);
+  fails(`select public.offer_colleague('${c}')`, b, /later/);
+  // вышел из группы — больше не участник общей группы
+  const { a: a2, b: b2, g: g2 } = trio();
+  q(`select public.leave_group('${g2}')`, b2);
+  fails(`select public.offer_colleague('${b2}')`, a2, /not found/);
 });

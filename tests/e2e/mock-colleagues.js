@@ -21,7 +21,7 @@ export async function mockServer(context, init = {}) {
     // 2.20: приглашения (как в миграции 0005: в ответе — только числа и срок, без кодов) и идеи
     role: 'user', invites: { open: [], joined: 0, counted: 0 }, ideas: [], ideasToday: 0,
     // 2.22: группы (как в миграции 0007). groupsOff — сервер без групп (старый): таблиц нет, 404
-    groups: [], members: [], ginvites: [], codes: {}, bans: [], groupsOff: false, ...init,
+    groups: [], members: [], ginvites: [], codes: {}, bans: [], groupsOff: false, oldGroups: false, ...init,
   };
   let seq = 0;
   const uuid = () => `aaaaaaaa-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
@@ -33,7 +33,10 @@ export async function mockServer(context, init = {}) {
   // группы: в каких я, кто со мной в общей группе, показывает ли он мне статус через группу
   const myGroups = () => new Set(db.members.filter((m) => m.user_id === ME).map((m) => m.group_id));
   const mates = () => new Set(db.members.filter((m) => myGroups().has(m.group_id) && m.user_id !== ME).map((m) => m.user_id));
-  const viaGroup = (id, what) => db.members.some((m) => m.user_id === id && myGroups().has(m.group_id) && m.show_status && (what === 'status' || m.show_place));
+  // взаимно (шаг 9, 2.27): статус — только если я сам показываю этой группе свой, станции — за станции
+  const meIn = (g) => db.members.find((m) => m.group_id === g && m.user_id === ME);
+  const viaGroup = (id, what) => db.members.some((m) => m.user_id === id && myGroups().has(m.group_id) && m.show_status && (what === 'status' || m.show_place)
+    && (db.oldGroups || (meIn(m.group_id)?.show_status && (what === 'status' || meIn(m.group_id)?.show_place))));
   const gShares = (what) => db.members.some((m) => m.user_id === ME && (what === 'place' ? m.show_place : m.show_status) && db.members.some((x) => x.group_id === m.group_id && x.user_id !== ME));
   const isAdmin = (g) => db.members.some((m) => m.group_id === g && m.user_id === ME && m.role === 'admin');
   const gone = (g) => { // ушёл участник: нет админа — дольше всех в группе; никого — группы нет
@@ -213,8 +216,17 @@ export async function mockServer(context, init = {}) {
       return send(200, Object.values(db.cards).filter((c) => c.searchable && c.user_id !== ME && c.name.toLowerCase().includes(q) && (!body.p_role || c.role === body.p_role))
         .map((c) => ({ id: c.user_id, name: c.name, role: c.role, depot: c.depot, avatar: c.avatar })));
     }
+    if (rpc === 'set_group_pic') {
+      if (db.oldGroups) return send(404, { code: 'PGRST202', message: 'not found' });
+      if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+      db.groups.find((g) => g.id === body.p_group).pic = body.p_pic;
+      return send(204);
+    }
     if (rpc === 'offer_colleague') {
       if (!db.cards[ME]) return fail('name required');
+      if (!db.cards[body.p_to]?.searchable && (db.oldGroups || !mates().has(body.p_to))) return fail('not found');
+      const inc = db.links.find((x) => x.from_id === body.p_to && x.to_id === ME && x.state === 'pending');
+      if (inc) { inc.state = 'accepted'; return send(200, 'accepted'); }
       db.links.push({ from_id: ME, to_id: body.p_to, state: 'pending' });
       return send(200, 'sent');
     }

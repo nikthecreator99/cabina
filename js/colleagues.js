@@ -15,6 +15,7 @@ import { statusFacts, privacyOf, normDepot } from './profile.js';
 import { routeEnds } from './rest.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { hasAvatar, avatarRights } from './avatar-edit.js';
+import { normPic } from './grp-pic.js';
 
 export const ROLE_NAMES = { assistant: 'Помощник машиниста', driver: 'Машинист', other: 'Другая должность' };
 const KINDS = ['soon', 'trip', 'rest', 'wait', 'dayoff', 'between', 'abs'];
@@ -166,7 +167,12 @@ const noCard = (id) => ({ id, name: 'Без имени', role: '', depot: '', av
 function buildGroups(me, { groups, members, ginvites, cardOf, statusOf }) {
   if (!Array.isArray(groups) || !Array.isArray(members) || !Array.isArray(ginvites)) return { groupsOn: false, groups: [], groupInvites: [] };
   const gname = new Map();
-  for (const g of groups) if (g && UUID.test(String(g.id))) gname.set(String(g.id).toLowerCase(), txt(g.name, 30) || 'Группа');
+  const gpic = new Map();
+  for (const g of groups) {
+    if (!g || !UUID.test(String(g.id))) continue;
+    gname.set(String(g.id).toLowerCase(), txt(g.name, 30) || 'Группа');
+    gpic.set(String(g.id).toLowerCase(), normPic(g.pic));
+  }
   const by = new Map();
   for (const m of members) {
     if (!m || !UUID.test(String(m.group_id)) || !UUID.test(String(m.user_id))) continue;
@@ -184,7 +190,7 @@ function buildGroups(me, { groups, members, ginvites, cardOf, statusOf }) {
     const list = [...mm.values()].sort((a, b) => (b.admin - a.admin) || a.card.name.localeCompare(b.card.name, 'ru'));
     const pending = arr(ginvites).filter((i) => i && String(i.group_id).toLowerCase() === gid && UUID.test(String(i.user_id)) && String(i.user_id).toLowerCase() !== me)
       .map((i) => { const id = String(i.user_id).toLowerCase(); return { id, card: cardOf.get(id) || noCard(id) }; });
-    out.push({ id: gid, name: gname.get(gid), admin: mine.admin, me: mine.show, members: list, pending });
+    out.push({ id: gid, name: gname.get(gid), pic: gpic.get(gid), admin: mine.admin, me: mine.show, members: list, pending });
   }
   out.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const invites = [];
@@ -193,7 +199,7 @@ function buildGroups(me, { groups, members, ginvites, cardOf, statusOf }) {
     const gid = i.group_id.toLowerCase();
     if (!gname.has(gid) || out.some((g) => g.id === gid)) continue;
     const from = UUID.test(String(i.invited_by)) ? String(i.invited_by).toLowerCase() : '';
-    invites.push({ id: gid, name: gname.get(gid), from: from ? (cardOf.get(from) || noCard(from)) : null });
+    invites.push({ id: gid, name: gname.get(gid), pic: gpic.get(gid), from: from ? (cardOf.get(from) || noCard(from)) : null });
   }
   return { groupsOn: true, groups: out, groupInvites: invites };
 }
@@ -340,7 +346,7 @@ export function loadColleagues({ force = false } = {}) {
     ]);
     // группы (2.22) — отдельно: старый сервер без них не должен ломать «Коллег»
     const gs = !GROUPS_LIVE ? [{ ok: false, status: 404 }] : await Promise.all([
-      restGet('groups?select=id,name'),
+      restGet('groups?select=*'), // * — чтобы сервер без картинок групп (до шага 9) не отвечал ошибкой
       restGet('group_members?select=group_id,user_id,role,show_status,show_place,joined_at'),
       restGet('group_invites?select=group_id,user_id,invited_by'),
     ]);
