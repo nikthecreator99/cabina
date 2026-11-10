@@ -50,12 +50,12 @@ export function tripIntervals(trip, { withWait = true } = {}) {
 
 // ---- Смена локомотива в поездке (2.19.7, просьба Никиты: «за поездку два плеча обслужили») ----
 // Сама поездка — первый локомотив: её routeId, routeLabel, locoType, locoNumber, weight, axles, length — как раньше.
-// legs — следующие локомотивы: [{ id, start ('YYYY-MM-DDTHH:mm' — когда сменили), routeId, routeLabel, locoType,
+// legs — следующие локомотивы: [{ id, start ('YYYY-MM-DDTHH:mm' — когда сменили), routeId, routeLabel, stFrom, stTo, locoType,
 // locoNumber, weight, axles, length }]. Плечо длится до следующей смены или до окончания поездки; вид движения общий.
 // Поездки без смены и прежние версии приложения видят только первый локомотив — как обычную поездку.
 export const LEGS_MAX = 4;
 export const LEG_NAMES = ['Второй', 'Третий', 'Четвёртый', 'Пятый'];
-const LEG_FIELDS = ['routeId', 'routeLabel', 'locoType', 'locoNumber', 'weight', 'axles', 'length'];
+const LEG_FIELDS = ['routeId', 'routeLabel', 'stFrom', 'stTo', 'locoType', 'locoNumber', 'weight', 'axles', 'length'];
 export const hasLegs = (t) => Array.isArray(t?.legs) && t.legs.length > 0;
 // Все плечи по порядку: [{ start, end, kind, routeId, … }]; первое — сама поездка
 export function legsOf(t) {

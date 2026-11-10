@@ -1,10 +1,11 @@
-// Настройки депо одним QR-кодом (2.21.9, просьба Никиты): маршруты с километрами и нормами, нормативное время,
+// Настройки депо одним QR-кодом (2.21.9, просьба Никиты): участки (до 2.25 — «маршруты») с километрами, нормами
+// и станциями (2.25: девятым элементом — список промежуточных станций; прежние версии его не читают), нормативное время,
 // дома отдыха с их минимумами, выходной депо, общий минимум отдыха и междусменный отдых.
 // Ставок, оклада, поездок, заработка и профиля в коде нет. Из телефона в телефон: код лежит после «#» в адресе
 // (браузер его на сервер не отправляет), приложение сразу убирает его из адреса. Получатель смотрит список и сам
 // выбирает, что добавить; уже совпадающее не показываем, отличающееся — «обновить», по умолчанию не выбрано.
 import { I, esc, openLayer, closeLayer, sheet, toast, plural, uid, small } from './ui.js';
-import { S, saveRoute, saveSettings, stationKey } from './store.js';
+import { S, saveRoute, saveSettings, stationKey, STATIONS_MAX } from './store.js';
 import { fmtDur } from './calc.js';
 import { b64u, unb64u, pipe, canZip, qrSvg, openReceive } from './share.js';
 
@@ -28,7 +29,12 @@ const sameName = (a, b) => stationKey(a) === stationKey(b) && !!stationKey(a);
 // ---- что отправляем ----
 export function depotPayload(st = S) {
   const r = st.routes.filter((x) => x.from && x.to).slice(0, DEPOT_ROUTES_MAX)
-    .map((x) => [clean(x.from, 60), clean(x.to, 60), ...NUMS.map((k) => numOk(k, x[k]) ?? 0)]);
+    .map((x) => {
+      const a = [clean(x.from, 60), clean(x.to, 60), ...NUMS.map((k) => numOk(k, x[k]) ?? 0)];
+      const st = (Array.isArray(x.stations) ? x.stations : []).map((n) => clean(n, 60)).filter(Boolean).slice(0, STATIONS_MAX);
+      if (st.length) a.push(st);
+      return a;
+    });
   const h = Object.entries(st.settings.houses || {})
     .filter(([, v]) => Number.isFinite(v?.minRest)).slice(0, DEPOT_HOUSES_MAX)
     .map(([k, v]) => [clean(v.name || k, 60), Math.round(v.minRest)]);
@@ -39,7 +45,7 @@ export function depotPayload(st = S) {
 export const depotEmpty = (p) => !p.r.length && !p.h.length;
 
 export async function encodeDepot(payload = depotPayload()) {
-  // пустые хвосты маршрута (нули) не отправляем — QR меньше
+  // пустые хвосты участка (нули) не отправляем — QR меньше
   const json = JSON.stringify({ ...payload, r: payload.r.map((x) => { const a = [...x]; while (a.length > 2 && !a[a.length - 1]) a.pop(); return a; }) });
   const raw = new TextEncoder().encode(json);
   if (canZip()) return `z${b64u(await pipe(raw, new CompressionStream('deflate-raw'), JSON_MAX * 2))}`;
@@ -69,6 +75,12 @@ export async function decodeDepot(code) {
     if (!from || !to || sameName(from, to)) continue;
     const r = { from, to };
     NUMS.forEach((k, i) => { const v = numOk(k, x[i + 2]); if (v != null) r[k] = v; });
+    const st = [];
+    for (const n of (Array.isArray(x[2 + NUMS.length]) ? x[2 + NUMS.length] : []).slice(0, STATIONS_MAX)) {
+      const name = clean(n, 60);
+      if (name && stationKey(name) && ![from, to, ...st].some((y) => sameName(y, name))) st.push(name);
+    }
+    if (st.length) r.stations = st;
     if (!routes.some((y) => sameName(y.from, from) && sameName(y.to, to))) routes.push(r);
   }
   const houses = [];
@@ -90,6 +102,7 @@ export function depotItems(data, st = S) {
     const ex = st.routes.find((y) => sameName(y.from, r.from) && sameName(y.to, r.to));
     if (!ex) { items.push({ kind: 'route', r, pick: true }); continue; }
     const diff = NUMS.filter((k) => r[k] != null && r[k] !== ex[k]);
+    if (r.stations && JSON.stringify(r.stations.map(stationKey)) !== JSON.stringify((ex.stations || []).map(stationKey))) diff.push('stations');
     if (diff.length) items.push({ kind: 'route', r, ex, diff, pick: false }); else same++;
   }
   for (const h of data.houses) {
@@ -110,13 +123,14 @@ const dur = (m) => fmtDur(m, { short: true });
 function routeSub(r) {
   const p = [];
   if (r.distanceKm) p.push(`${String(r.distanceKm).replace('.', ',')} км`);
+  if (r.stations?.length) p.push(`${r.stations.length + 2} ${plural(r.stations.length + 2, 'станция', 'станции', 'станций')}`);
   if (r.weightNorm) p.push(`норма ${r.weightNorm} т`);
   if (r.lengthNorm) p.push(`${r.lengthNorm} ваг.`);
   if (r.acceptMin || r.departMin || r.walkMin) p.push('нормативное время');
   return p.join(' · ');
 }
 export function itemText(it) {
-  if (it.kind === 'route') return { t1: `${it.r.from} → ${it.r.to}`, t2: routeSub(it.r) || 'Без норм', warn: it.ex ? 'У вас уже есть — обновить нормы' : '' };
+  if (it.kind === 'route') return { t1: `Участок ${it.r.from} — ${it.r.to}`, t2: routeSub(it.r) || 'Без норм', warn: it.ex ? (it.diff?.includes('stations') ? 'У вас уже есть — обновить нормы и станции' : 'У вас уже есть — обновить нормы') : '' };
   if (it.kind === 'house') return { t1: `Дом отдыха · ${it.h.name}`, t2: `Минимум ${dur(it.h.minRest)}`, warn: it.cur != null ? `У вас ${dur(it.cur)} — заменить` : '' };
   return { t1: SET_NAMES[it.key], t2: dur(it.v), warn: it.cur != null ? `У вас ${dur(it.cur)} — заменить` : '' };
 }
@@ -128,6 +142,7 @@ export async function applyDepot(chosen, st = S) {
   for (const it of chosen) {
     if (it.kind === 'route') {
       const nums = Object.fromEntries(NUMS.filter((k) => it.r[k] != null).map((k) => [k, it.r[k]]));
+      if (it.r.stations) nums.stations = [...it.r.stations];
       if (it.ex) await saveRoute({ ...it.ex, ...nums, updatedAt: Date.now() });
       else await saveRoute({ id: uid(), from: it.r.from, to: it.r.to, distanceKm: null, weightNorm: null, lengthNorm: null, ...nums, createdAt: Date.now() });
     } else if (it.kind === 'house') houses[stationKey(it.h.name)] = { name: it.h.name, minRest: it.h.minRest };
@@ -142,8 +157,8 @@ export async function applyDepot(chosen, st = S) {
 // ---- окно «Поделиться настройками депо» ----
 export async function openDepotShare() {
   const p = depotPayload();
-  if (depotEmpty(p)) { toast('Сначала добавьте маршруты или минимумы домов отдыха в «Настройках работы»', { error: true }); return null; }
-  const what = [p.r.length ? `${p.r.length} ${plural(p.r.length, 'маршрут', 'маршрута', 'маршрутов')}` : '', p.h.length ? `${p.h.length} ${plural(p.h.length, 'дом отдыха', 'дома отдыха', 'домов отдыха')}` : ''].filter(Boolean).join(' и ');
+  if (depotEmpty(p)) { toast('Сначала добавьте участки или минимумы домов отдыха в «Настройках работы»', { error: true }); return null; }
+  const what = [p.r.length ? `${p.r.length} ${plural(p.r.length, 'участок', 'участка', 'участков')}` : '', p.h.length ? `${p.h.length} ${plural(p.h.length, 'дом отдыха', 'дома отдыха', 'домов отдыха')}` : ''].filter(Boolean).join(' и ');
   const el = openLayer(sheet({
     title: 'Настройки депо', tall: true,
     body: `<div class="share-box"><div class="qr-wrap" id="dp-qr"><div class="hint">Готовим QR-код…</div></div>
@@ -155,11 +170,11 @@ export async function openDepotShare() {
   let url = '';
   try { url = depotUrl(await encodeDepot(p)); } catch { el.querySelector('#dp-qr').innerHTML = '<div class="hint">Не удалось подготовить настройки.</div>'; return el; }
   const svg = await qrSvg(url, 'QR-код с настройками депо');
-  el.querySelector('#dp-qr').innerHTML = svg || '<div class="hint">Слишком много маршрутов для одного QR-кода — отправьте ссылкой.</div>';
+  el.querySelector('#dp-qr').innerHTML = svg || '<div class="hint">Слишком много участков для одного QR-кода — отправьте ссылкой.</div>';
   const btn = el.querySelector('#dp-link');
   btn.disabled = false;
   btn.onclick = async () => {
-    const text = 'Настройки депо для CABINA: маршруты, нормы и дома отдыха. Откройте ссылку или вставьте её в CABINA: ☰ «Настройки работы» → «Получить настройки депо».';
+    const text = 'Настройки депо для CABINA: участки со станциями, нормы и дома отдыха. Откройте ссылку или вставьте её в CABINA: ☰ «Настройки работы» → «Получить настройки депо».';
     try { if (navigator.share) { await navigator.share({ title: 'Настройки депо CABINA', text, url }); return; } } catch (ex) { if (ex?.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(url); toast('Ссылка скопирована — вставьте её в сообщение коллеге'); } catch { toast('Не удалось скопировать ссылку', { error: true }); }
   };
@@ -196,7 +211,7 @@ export function openDepotPreview(data) {
     ? `<div class="notice warn">${I.alert}<div><b>Проверьте сами:</b> коллега мог ошибиться. Всё добавленное можно изменить в «Настройках работы». Ставки и поездки не меняются.</div></div>
       <div class="list imp-list">${items.map(row).join('')}</div>
       ${same ? `<p class="t2">${same} ${plural(same, 'настройка совпадает', 'настройки совпадают', 'настроек совпадают')} с вашими — их не показываем.</p>` : ''}`
-    : `<div class="empty">${small(I.check, 28)}<b>Всё уже как у вас</b><p>Новых маршрутов и настроек в коде нет.</p></div>`;
+    : `<div class="empty">${small(I.check, 28)}<b>Всё уже как у вас</b><p>Новых участков и настроек в коде нет.</p></div>`;
   const el = openLayer(sheet({
     title: 'Настройки от коллеги', tall: true, body,
     foot: items.length ? `<button class="btn btn-primary" data-act="dp-add" id="dp-add">${I.check} <span></span></button>` : '',

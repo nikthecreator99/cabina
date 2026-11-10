@@ -5,7 +5,7 @@
 // следование пассажиром и ожидание, вид отдыха, смена локомотива (2.19.7: время смены и то же самое про следующий локомотив).
 // Не уходит: заработок, заметки, выбор «на очередь / выходной», отвлечения, профиль.
 // Всё полученное — непроверенные данные: строгая проверка, новые id, человек сам выбирает, что добавить.
-import { S, saveTrip, saveRoute, statsOf, isLive, nowLocal, legEnds, routeOf, sameSt, locosText } from './store.js';
+import { S, saveTrip, saveRoute, statsOf, isLive, nowLocal, legEnds, routeOf, sameSt, locosText, legKm, segOf, isWhole } from './store.js';
 import { parseLocal, fmtLocal, MIN, validateTrip, fmtDur, closePass, legsOf, LEGS_MAX } from './calc.js';
 import { stationKey } from './rest.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
@@ -48,9 +48,8 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? M
 // Маршрут и локомотив с поездом — у поездки и у каждого следующего локомотива одинаково
 function packLeg(l, x) {
   const ends = legEnds(l);
-  const r = l.routeId && S.routes.find((y) => y.id === l.routeId);
   if (ends) { x.f = ends.from; x.to = ends.to; }
-  if (num(r?.distanceKm)) x.km = num(r.distanceKm);
+  if (num(legKm(l))) x.km = num(legKm(l)); // у части участка — её километры
   if (l.locoType) x.lt = String(l.locoType);
   if (l.locoNumber) x.ln = String(l.locoNumber);
   if (num(l.weight)) x.w = num(l.weight);
@@ -207,27 +206,40 @@ function overlaps(trip) {
   });
 }
 
-// Добавить выбранные: маршрут — свой с теми же станциями, иначе создаём (и у каждого следующего локомотива так же)
+// Свой участок для станций «откуда → куда»: участок с этими концами, иначе участок, где обе станции есть
+// (сначала в том же направлении), иначе null. Возвращает { routeId, stFrom?, stTo? } — 2.25.
+export function sectionFor(from, to, routes = S.routes) {
+  if (!from || !to || sameSt(from, to)) return null;
+  const whole = routes.find((x) => isWhole(x, from, to));
+  if (whole) return { routeId: whole.id };
+  const segs = routes.map((r) => ({ r, s: segOf(r, from, to) })).filter((x) => x.s);
+  const best = segs.find((x) => x.s.i < x.s.j) || segs[0];
+  return best ? { routeId: best.r.id, stFrom: best.s.from, stTo: best.s.to } : null;
+}
+// Добавить выбранные: участок — свой с теми же станциями, иначе создаём (и у каждого следующего локомотива так же)
 export async function importItems(items) {
   const made = new Map();
   const routeFor = async (e) => {
     if (!e?.from || !e?.to) return null;
     const key = `${stationKey(e.from)}|${stationKey(e.to)}`;
-    let r = made.get(key) || S.routes.find((x) => `${stationKey(x.from)}|${stationKey(x.to)}` === key);
-    if (!r) {
-      r = { id: uid(), from: e.from, to: e.to, distanceKm: e.km || null, createdAt: Date.now() };
+    if (made.has(key)) return made.get(key);
+    let found = sectionFor(e.from, e.to);
+    if (!found) {
+      const r = { id: uid(), from: e.from, to: e.to, distanceKm: e.km || null, createdAt: Date.now() };
       await saveRoute(r);
+      found = { routeId: r.id };
     }
-    made.set(key, r);
-    return r.id;
+    made.set(key, found);
+    return found;
   };
+  const put = (x, f) => { const y = { ...x, routeId: f.routeId }; delete y.stFrom; delete y.stTo; if (f.stFrom) { y.stFrom = f.stFrom; y.stTo = f.stTo; y.routeLabel = `${f.stFrom} → ${f.stTo}`; } return y; };
   let n = 0;
   for (const it of items) {
-    const t = { ...it.trip, updatedAt: Date.now() };
-    const rid = await routeFor(it);
-    if (rid) t.routeId = rid;
+    let t = { ...it.trip, updatedAt: Date.now() };
+    const f = await routeFor(it);
+    if (f) t = put(t, f);
     if (Array.isArray(t.legs)) {
-      t.legs = await Promise.all(t.legs.map(async (l, i) => { const id = await routeFor(it.legs?.[i]); return id ? { ...l, routeId: id } : l; }));
+      t.legs = await Promise.all(t.legs.map(async (l, i) => { const g = await routeFor(it.legs?.[i]); return g ? put(l, g) : l; }));
     }
     await saveTrip(t);
     n++;
@@ -310,7 +322,7 @@ export async function openShareSheet(trips, { onDone } = {}) {
       <p class="share-how">Напарник открывает свою CABINA → <b>«Добавить поездку»</b> → <b>«Получить поездки от напарника»</b> и наводит камеру. Можно и обычной камерой телефона.</p>
       <p class="share-ttl" id="sh-ttl">${small(I.clock, 16)} Код и ссылка действуют сутки — до ${hm(nowLocal() + SHARE_TTL_MIN * MIN)}, ${dayMonth(nowLocal() + SHARE_TTL_MIN * MIN)}</p>
       <button class="btn btn-ghost" data-act="sh-link" id="sh-link" disabled>${I.link} Отправить ссылкой</button>
-      <div class="notice">${I.shield}<div>В коде — время, маршрут и локомотив ${list.length === 1 ? 'этой поездки' : 'этих поездок'}. <b>Заработка, заметок и отвлечений там нет.</b> Наш сервер код не видит. Ссылку отправляйте только тому, с кем ездили: мессенджер видит её содержимое.</div></div>
+      <div class="notice">${I.shield}<div>В коде — время, станции и локомотив ${list.length === 1 ? 'этой поездки' : 'этих поездок'}. <b>Заработка, заметок и отвлечений там нет.</b> Наш сервер код не видит. Ссылку отправляйте только тому, с кем ездили: мессенджер видит её содержимое.</div></div>
       <details class="share-list"><summary>Что отправится</summary><ul>${list.map((t) => `<li>${esc(tripLine(t))}</li>`).join('')}</ul></details></div>`,
   }), { onClose: () => onDone?.() });
   let url = '';
@@ -428,7 +440,7 @@ export function openImportPreview({ items, skipped }, { link, title = 'Поез�
   const row = (it, i) => {
     const t = it.trip;
     const s = parseLocal(t.start); const e = parseLocal(t.end);
-    const route = itemRoute(it) || 'Маршрут не указан';
+    const route = itemRoute(it) || 'Участок не указан';
     const loco = locosText(t);
     return `<button class="imp-row" data-act="imp-pick" data-i="${i}" aria-pressed="${pick.has(i)}"><span class="sel-dot" aria-hidden="true"></span>
       <span class="grow"><span class="t1">${esc(`${dayMonth(s)}, ${WD[new Date(s).getUTCDay()]} · ${hm(s)}–${hm(e)}`)}</span>

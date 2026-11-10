@@ -130,18 +130,50 @@ export const routeText = (r) => (r ? `${r.from} → ${r.to}` : '');
 export const stationKey = (name) => String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 export const sameSt = (a, b) => stationKey(a) === stationKey(b);
 
-// Маршрут одного плеча (или поездки без смены локомотива): сохранённый маршрут или подпись
-export function legRoute(x) {
-  const r = x?.routeId && S.routes.find((y) => y.id === x.routeId);
-  return r ? routeText(r) : x?.routeLabel || '';
+// ---- Участки (2.25, просьба Никиты: «маршруты» → «участки» со станциями по порядку) ----
+// Участок — прежний маршрут: { id, from, to, distanceKm, нормы…, stations: ['Нименга', …] } — промежуточные станции
+// от from к to по порядку (без концов). Поездка (и каждый локомотив после смены) может проехать часть участка:
+// stFrom/stTo — станции отправления и прибытия на этом участке (в любую сторону). Нет stFrom/stTo — весь участок от А к Б.
+// routeLabel у такой поездки — «Малошуйка → Поньга»: так её поймут прежние версии и она переживёт удаление участка.
+export const STATIONS_MAX = 60;
+export const sectionText = (r) => (r ? `${r.from} — ${r.to}` : '');
+export const stationsList = (r) => (r ? [r.from, ...(Array.isArray(r.stations) ? r.stations : []), r.to] : []);
+// Номер станции на участке (-1 — нет такой)
+export const stationIdx = (r, name) => stationsList(r).findIndex((x) => sameSt(x, name));
+// Часть участка: станции есть на участке и разные — { from, to, i, j }, иначе null
+export function segOf(r, a, b) {
+  if (!r || !a || !b) return null;
+  const i = stationIdx(r, a); const j = stationIdx(r, b);
+  return i >= 0 && j >= 0 && i !== j ? { from: stationsList(r)[i], to: stationsList(r)[j], i, j } : null;
 }
-// Концы маршрута плеча: из сохранённого маршрута или из подписи «А → Б». null — маршрут не указан.
+// Весь участок от А к Б — тогда stFrom/stTo не храним
+export const isWhole = (r, a, b) => !!r && sameSt(a, r.from) && sameSt(b, r.to);
+const legSection = (x) => (x?.routeId && S.routes.find((y) => y.id === x.routeId)) || null;
+// Маршрут одного плеча (или поездки без смены локомотива): по участку или подпись
+export function legRoute(x) {
+  const e = legSection(x) && legEnds(x);
+  return e ? `${e.from} → ${e.to}` : x?.routeLabel || '';
+}
+// Концы плеча: станции на участке, весь участок или подпись «А → Б». null — маршрут не указан.
 export function legEnds(x) {
-  const r = x?.routeId && S.routes.find((y) => y.id === x.routeId);
-  if (r) return { from: r.from, to: r.to };
+  const r = legSection(x);
+  if (r) return x.stFrom && x.stTo ? { from: x.stFrom, to: x.stTo } : { from: r.from, to: r.to };
   const m = String(x?.routeLabel || '').split(/\s*(?:→|—|->)\s*/);
   return m.length === 2 && m[0] && m[1] ? { from: m[0].trim(), to: m[1].trim() } : null;
 }
+// Километры плеча: весь участок — его длина; часть — длина участка / число перегонов × проеханные перегоны.
+// Станции, которых на участке больше нет, — 0 (не угадываем).
+export function legKm(x) {
+  const r = legSection(x);
+  const km = Number(r?.distanceKm) || 0;
+  if (!(km > 0)) return 0;
+  if (!(x.stFrom && x.stTo)) return km;
+  const s = segOf(r, x.stFrom, x.stTo);
+  const n = stationsList(r).length - 1;
+  return s && n > 0 ? Math.round((km * Math.abs(s.j - s.i)) / n * 10) / 10 : 0;
+}
+// Ключ «того же пути» для сравнения времени (награда «Ракета»): участок и его часть
+export const legKey = (x) => (x?.routeId ? `${x.routeId}${x.stFrom && x.stTo ? `|${stationKey(x.stFrom)}|${stationKey(x.stTo)}` : ''}` : legRoute(x).toLowerCase());
 // Станции поездки по порядку: у смены локомотива — «А → Б → А». null — где-то нет маршрута или плечи не стыкуются.
 export function stationsOf(trip) {
   const ends = legsOf(trip).map(legEnds);
@@ -324,14 +356,32 @@ async function remove(store, list, id) {
 export const saveAbsence = (a) => upsert('absences', 'absences', a);
 export const deleteAbsence = (id) => remove('absences', 'absences', id);
 export const saveRoute = (r) => upsert('routes', 'routes', r);
+// Участок со станциями: переименованные станции (renames: [старое, новое]) меняются и в поездках по нему
+export async function saveSection(r, renames = []) {
+  const ren = (name) => { const m = renames.find(([a]) => sameSt(a, name)); return m ? m[1] : name; };
+  const fix = (x) => {
+    if (x.routeId !== r.id || !x.stFrom || !x.stTo) return x;
+    const a = ren(x.stFrom); const b = ren(x.stTo);
+    const y = { ...x, stFrom: a, stTo: b, routeLabel: `${a} → ${b}` };
+    if (isWhole(r, a, b)) { delete y.stFrom; delete y.stTo; y.routeLabel = routeText(r); }
+    return y;
+  };
+  const affected = renames.length ? S.trips.filter((t) => usesRoute(t, r.id)).map((t) => ({ ...fix(t), ...(hasLegs(t) ? { legs: t.legs.map(fix) } : {}) }))
+    .filter((t) => JSON.stringify(clean(t)) !== JSON.stringify(clean(S.trips.find((x) => x.id === t.id)))) : [];
+  await db.write([{ store: 'routes', put: r }, ...affected.map((t) => ({ store: 'trips', put: clean(t) }))]);
+  const i = S.routes.findIndex((x) => x.id === r.id);
+  if (i >= 0) S.routes[i] = r; else S.routes.push(r);
+  affected.forEach((t) => { t._stats = null; statsOf(t); const k = S.trips.findIndex((x) => x.id === t.id); S.trips[k] = t; });
+  askPersist();
+  emit();
+}
 export const saveNote = (n) => upsert('notes', 'notes', n);
 export const deleteNote = (id) => remove('notes', 'notes', id);
 
 export async function deleteRoute(id) {
   const r = S.routes.find((x) => x.id === id);
-  const label = routeText(r);
-  // поездки сохраняют название маршрута — и у каждого локомотива после смены тоже
-  const off = (x) => (x.routeId === id ? { ...x, routeId: null, routeLabel: label } : x);
+  // поездки сохраняют название участка (или своей части) — и у каждого локомотива после смены тоже
+  const off = (x) => { if (x.routeId !== id) return x; const { stFrom, stTo, ...y } = x; return { ...y, routeId: null, routeLabel: legRoute(x) || routeText(r) }; };
   const affected = S.trips.filter((t) => usesRoute(t, id)).map((t) => ({ ...off(t), ...(hasLegs(t) ? { legs: t.legs.map(off) } : {}) }));
   await db.write([{ store: 'routes', del: id }, ...affected.map((t) => ({ store: 'trips', put: clean(t) }))]);
   S.routes = S.routes.filter((x) => x.id !== id);

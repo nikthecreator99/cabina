@@ -58,7 +58,7 @@ export function searchResultsHtml(q) {
       ].filter(Boolean).join(' · ');
       return `<button class="row found" data-act="trip" data-id="${esc(t.id)}">
         <div class="grow"><div class="t1">${highlight(d, words)} · ${Number.isFinite(st.start) ? `${hm(st.start)} — ${live ? 'в пути' : hm(st.end)}` : ''}</div>
-          <div class="t2">${small(I.route, 13)} ${routeOf(t) ? highlight(routeOf(t), words) : 'Маршрут не указан'}</div>
+          <div class="t2">${small(I.route, 13)} ${routeOf(t) ? highlight(routeOf(t), words) : 'Участок не указан'}</div>
           ${sub ? `<div class="t2">${sub}</div>` : ''}
           ${noteHit ? `<div class="t2 found-note">${small(I.note, 13)} ${highlight(note.length > 120 ? `${note.slice(0, 120)}…` : note, words)}</div>` : ''}</div>
         <span class="found-dur">${fmtDur(st.work, { short: true })}</span>${small(I.right, 18)}</button>`;

@@ -9,7 +9,7 @@ import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
 import { renderSearch, searchResultsHtml } from './search.js';
 import { loadTours, resetTours, tourActive, setTourScreen, noteTourScreen, toursOff, setToursOff } from './tour.js';
-import { homeTour, swipeTour, routesTour, settingsTour, workTour, tariffsTour, housesTour, fixTour, careerTour, calDayTour, moneyTour, payModeTour, colleaguesTour, shareTour } from './tours.js';
+import { homeTour, swipeTour, settingsTour, workTour, tariffsTour, housesTour, fixTour, careerTour, calDayTour, moneyTour, payModeTour, colleaguesTour, shareTour } from './tours.js';
 import { isMemoryMode } from './db.js';
 import { currentRest } from './rest.js';
 import { payMonth, tripPay, overRestIntervals, hasRate, fmtRub } from './pay.js';
@@ -42,7 +42,7 @@ import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, s
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml } from './ideas.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
 
-export const VERSION = '2.24.7';
+export const VERSION = '2.25.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -160,7 +160,7 @@ function tripRow(t, mk, payCtx) {
     ${sel ? '<span class="sel-dot" aria-hidden="true"></span>' : ''}<div class="date-block"><div class="d">${s.getUTCDate()}</div><div class="mo">${MONTHS_SHORT[s.getUTCMonth()]}</div><div class="wd">${WD[s.getUTCDay()]}</div></div>
     <div class="trip-mid">
       <div class="trip-time">${pending ? `Явка в ${hm(st.start)}` : `${hm(st.start)} — ${live ? 'сейчас' : hm(st.end)}`}</div>
-      <div class="trip-route${locos.length > 1 || (t.legs || []).length ? ' multi' : ''}">${small(I.route, 15)}<span>${route ? esc(route) : 'Маршрут не указан'}</span></div>
+      <div class="trip-route${locos.length > 1 || (t.legs || []).length ? ' multi' : ''}">${small(I.route, 15)}<span>${route ? esc(route) : 'Участок не указан'}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ''}
     </div>
     <div class="trip-right"><div class="dur">${pending ? '' : fmtDur(st.work, { short: true })}${partial ? `<small>в этом мес. ${fmtDur(part.work, { short: true })}</small>` : ''}${pay ? `<small class="earn money">≈ ${fmtRub(pay.net)}</small>` : ''}</div><span class="chev">${small(I.right, 18)}</span></div>
@@ -672,7 +672,6 @@ function scheduleTours() {
     if (layerCount() || tourActive() || !S.onboarded) return;
     const p = page();
     if (p === 'work') workTour();
-    else if (p === 'routes') routesTour();
     else if (p === 'tariffs') { tariffsTour(); payModeTour(); }
     else if (p === 'houses') housesTour();
     else if (p === 'stats') { if (app.querySelector('.cal-grid')) calDayTour(); }
