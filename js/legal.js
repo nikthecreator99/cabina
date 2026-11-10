@@ -8,7 +8,8 @@ import { esc } from './ui.js';
 export const GROUPS_LIVE = true;
 // Регистрация (2.26): true — для всех, код приглашения по желанию (его засчитают пригласившему); false — только по приглашению.
 // Должно совпадать с сервером: private.config invite_only = 'false' при true и 'true' при false.
-export const SIGNUP_OPEN = true;
+// 10.11.2026 Никита: «Оставь пока только по приглашению».
+export const SIGNUP_OPEN = false;
 
 export const CONSENT_VERSION = 'privacy-4';
 // Отдельное согласие на распространение (152-ФЗ, ст. 10.1): быть в поиске «Коллег» = имя видно всем пользователям CABINA.

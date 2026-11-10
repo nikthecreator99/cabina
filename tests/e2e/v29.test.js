@@ -6,7 +6,7 @@ import { readFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startEnv, openApp, seed, NOW, waitNoLayers, openSettings } from './helpers.js';
-import { CONSENT_VERSION } from '../../js/legal.js';
+import { CONSENT_VERSION, SIGNUP_OPEN } from '../../js/legal.js';
 
 const VERSION = (await readFile(new URL('../../js/app.js', import.meta.url), 'utf8')).match(/VERSION = '([\d.]+)'/)[1];
 
@@ -155,9 +155,14 @@ test('регистрация: проверки формы, согласие, п�
   assert.equal(await page.locator('#acc-pass').getAttribute('type'), 'text');
   await page.locator('[data-act=acc-eye]').click();
   assert.equal(await page.locator('#acc-pass').getAttribute('type'), 'password');
-  // 2.26: код приглашения — по желанию (SIGNUP_OPEN): без него форма не спорит
+  // 2.26: код приглашения обязателен, пока регистрация только по приглашению (SIGNUP_OPEN = false); иначе — по желанию
   await page.locator('#acc-submit').click();
-  assert.match(await errBox(page).innerText(), /Отметьте согласие/);
+  assert.match(await errBox(page).innerText(), SIGNUP_OPEN ? /Отметьте согласие/ : /Введите код приглашения/);
+  if (!SIGNUP_OPEN) {
+    await page.locator('#acc-invite').fill('bad-code');
+    await page.locator('#acc-submit').click();
+    assert.match(await errBox(page).innerText(), /Отметьте согласие/);
+  }
   assert.equal(log.length, 0, 'пока форма не заполнена, на сервер ничего не уходит');
   assert.equal(await page.locator('#acc-consent').isChecked(), false, 'согласие не отмечено заранее');
   assert.equal(await page.locator('#acc-policy-ok').isChecked(), false, 'политика не отмечена заранее');
@@ -166,10 +171,12 @@ test('регистрация: проверки формы, согласие, п�
   assert.match(await errBox(page).innerText(), /ознакомились с политикой/);
   assert.equal(log.length, 0, 'без второй галочки на сервер ничего не уходит');
   await page.locator('#acc-policy-ok').check();
-  // сервер пока пускает только по приглашению — без кода честно говорим, где его взять
-  await page.locator('#acc-submit').click();
-  await page.waitForFunction(() => /только по приглашению\. Попросите код у коллеги/.test(document.getElementById('acc-err')?.innerText || ''));
-  await page.locator('#acc-invite').fill('bad-code');
+  // регистрация открыта, а сервер пускает только по приглашению — без кода честно говорим, где его взять
+  if (SIGNUP_OPEN) {
+    await page.locator('#acc-submit').click();
+    await page.waitForFunction(() => /только по приглашению\. Попросите код у коллеги/.test(document.getElementById('acc-err')?.innerText || ''));
+    await page.locator('#acc-invite').fill('bad-code');
+  }
   await page.locator('#acc-submit').click();
   await page.waitForFunction(() => /Код приглашения неверный/.test(document.getElementById('acc-err')?.innerText || ''));
   assert.equal(await page.locator('#acc-pass').inputValue(), 'Probnyj-parol-1', 'после ошибки сервера пароль не стирается');
@@ -177,7 +184,7 @@ test('регистрация: проверки формы, согласие, п�
   await page.locator('#acc-submit').click();
   await page.locator('.screen', { hasText: 'Мы отправили код на ivan@example.com' }).waitFor();
   const sent = log.filter((r) => r.path === '/auth/v1/signup');
-  assert.equal(sent.length, 3);
+  assert.equal(sent.length, SIGNUP_OPEN ? 3 : 2);
   const last = sent.at(-1);
   assert.deepEqual(Object.keys(last.body).sort(), ['data', 'email', 'password']);
   assert.deepEqual(last.body.data, { consent: CONSENT_VERSION, invite: 'GOODCODE01', platform: 'web', version: VERSION });

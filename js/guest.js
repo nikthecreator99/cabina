@@ -9,6 +9,7 @@ import { I, esc, small, pageHead, plural } from './ui.js';
 import { S } from './store.js';
 import { computeAwards, AWARDS, MEDALS_TOTAL } from './awards.js';
 import { hasAvatar } from './avatar-edit.js';
+import { SIGNUP_OPEN } from './legal.js';
 
 // Сколько наград (ступеней) человек уже заработал своими поездками — они ждут его в аккаунте
 export const guestMedals = () => { const { aw } = computeAwards(); return AWARDS.reduce((s, a) => s + aw[a.id].tier, 0); };
@@ -33,7 +34,7 @@ export function guestProfileHtml() {
       <h2>Ваша CABINA — больше возможностей</h2>
       <p>Коллеги, награды и свой персонаж — в одном аккаунте.</p>
       ${startBtns()}
-      <div class="gp-free">Бесплатно</div>
+      <div class="gp-free">${SIGNUP_OPEN ? 'Бесплатно' : 'Бесплатно, по приглашению коллеги'}</div>
     </section>
     <div class="group"><div class="group-title">С аккаунтом</div>
       <div class="panel gp-perks" id="gp-perks">
