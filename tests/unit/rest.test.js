@@ -43,6 +43,26 @@ test('полный отдых: рабочее время × 2,6 минус пр�
   assert.equal(homeRestMulti([a, far]).valid, false);
 });
 
+test('полный отдых: два отдыха в домах отдыха — второй не вычитается (2.24.8)', () => {
+  // туда (6 ч) → отдых 6 ч → дальше (5 ч) → отдых 7 ч → домой (6 ч)
+  const a = tripStats(T('a', '2026-10-14T08:00', '2026-10-14T14:00'));
+  const b = tripStats(T('b', '2026-10-14T20:00', '2026-10-15T01:00'));
+  const c = tripStats(T('c', '2026-10-15T08:00', '2026-10-15T14:00'));
+  const r = homeRestMulti([c, a, b]);
+  assert.equal(r.work, 17 * 60);
+  assert.deepEqual(r.gaps, [360, 420]);
+  assert.equal(r.gap, 360); // вычитается только первый отдых
+  assert.equal(r.kept, 420); // второй — нет
+  assert.equal(r.full, Math.round(17 * 60 * 2.6 - 360));
+  assert.equal(fmtLocal(r.fullUntil), fmtLocal(c.end + r.full * MIN));
+  // третий и дальше тоже не вычитаются
+  const d = tripStats(T('d', '2026-10-15T20:00', '2026-10-16T01:00'));
+  const r4 = homeRestMulti([a, b, c, d]);
+  assert.equal(r4.gap, 360);
+  assert.equal(r4.kept, 420 + 360);
+  assert.equal(r4.full, Math.round(22 * 60 * 2.6 - 360));
+});
+
 test('домашний отдых по выбранным поездкам', () => {
   const a = T('a', '2026-10-14T08:00', '2026-10-14T14:00', { restType: 'turnaround' });
   const b = T('b', '2026-10-14T20:00', '2026-10-15T02:00', { restType: 'home' });

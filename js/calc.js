@@ -355,17 +355,21 @@ export function turnaroundRest(workMin, endMs, minRestMin) {
 }
 
 // Полный (домашний) отдых по одной или нескольким поездкам (статистика tripStats).
-// (сумма рабочего времени всех поездок) × 2,6 − (сумма промежутков между соседними поездками).
+// (сумма рабочего времени всех поездок) × 2,6 − отдых между поездками.
+// Вычитается только ПЕРВЫЙ промежуток (отдых в первом доме отдыха): второй и следующие не вычитаются
+// (Никита, 10.11.2026: «если отдыхали в домах отдыха 2 раза, второй отдых не вычитается»).
 // Для двух поездок это ровно формула ТЗ. Окончание считается от конца самой поздней поездки.
 export function homeRestMulti(list) {
   const arr = [...list].filter((x) => Number.isFinite(x.end)).sort((a, b) => a.end - b.end);
   const work = arr.reduce((s, x) => s + x.work, 0);
-  let gap = 0;
-  for (let i = 1; i < arr.length; i++) gap += Math.max(0, (arr[i].start - arr[i - 1].end) / MIN);
+  const gaps = [];
+  for (let i = 1; i < arr.length; i++) gaps.push(Math.max(0, (arr[i].start - arr[i - 1].end) / MIN));
+  const gap = gaps.length ? gaps[0] : 0; // вычитается
+  const kept = gaps.slice(1).reduce((s, g) => s + g, 0); // не вычитается
   const full = Math.round(work * 2.6 - gap);
   const late = arr[arr.length - 1];
   return {
-    list: arr, early: arr[0], late, gap, work, count: arr.length,
+    list: arr, early: arr[0], late, gaps, gap, kept, work, count: arr.length,
     valid: arr.length >= 1 && full > 0,
     full,
     fullUntil: late.end + full * MIN,
