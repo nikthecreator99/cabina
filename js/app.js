@@ -3,7 +3,8 @@ import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDi
 import { S, loadAll, onChange, emit, timeNorms, statsOf, nowLocal, routeOf, locoLabel, locoKey, locosOf, saveSettings, setOnboarded, deleteNote, deleteTrip, isLive, isPending, tripNow, refreshLive, myPay, overRestByTrip, saveBackupInfo, EXTRA_KEYS, extraOrder, TEXT_SIZES, textSize } from './store.js';
 import { monthSummary, normSoFar, fmtDur, fmtHours, parseLocal, MIN, DAY, dateKeyOf } from './calc.js';
 import { yearInfo, officialYears, mergeCalendarData, normWeek } from './calendar.js';
-import { openTripForm, openDayOffEdit, openAbsenceForm, openAbsenceList, openNoteForm, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
+import { openTripForm, openDayOffEdit, openAbsenceForm, openAbsenceList, openNoteForm, openLocoNotesSheet, ABS_TYPES, setNavigator, setTariffsOpener, fmtDate } from './forms.js';
+import { colNotesListHtml } from './loconotes.js';
 import { renderDocs, hydrateThumbs, uploadFiles, mkdir, openDoc, docMenu, docState, docsCount } from './docs.js';
 import { exportBackup, importBackup } from './backup.js';
 import { skyPhase } from './sun.js';
@@ -30,7 +31,7 @@ import { renderAccount, accountClick, accountSubmit, accountEnter, accountRedire
 import { guestLockHtml } from './guest.js';
 import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite, isGuest } from './auth.js';
 import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
-  colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError, openShowMe } from './colleagues.js';
+  colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError, openShowMe, colNotesAll, notesUseful } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
 import { legalReady, policyHtml, APP_URL, GROUPS_LIVE } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
@@ -44,7 +45,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
 
-export const VERSION = '2.28.0';
+export const VERSION = '2.29.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -358,23 +359,24 @@ function notesListHtml() {
       return { ...g, notes };
     }).filter((g) => g.notes.length);
   }
-  if (!S.notes.length) return `<div class="empty"><div class="em-ico">${I.note}</div><b>Заметок пока нет</b><p>Добавляйте заметки о локомотивах прямо в поездке или здесь.</p></div>`;
-  if (!arr.length) return `<div class="empty"><div class="em-ico">${I.search}</div><b>Ничего не найдено</b><p>Попробуйте другое слово или номер локомотива.</p></div>`;
+  const col = colNotesListHtml((t) => { const hay = normSearch(t); return words.every((w) => hay.includes(w)); }, (t) => highlight(t, words));
+  if (!S.notes.length) return `${col ? '' : `<div class="empty"><div class="em-ico">${I.note}</div><b>Заметок пока нет</b><p>Добавляйте заметки о локомотивах прямо в поездке или здесь.</p></div>`}${col}`;
+  if (!arr.length) return col ||  `<div class="empty"><div class="em-ico">${I.search}</div><b>Ничего не найдено</b><p>Попробуйте другое слово или номер локомотива.</p></div>`;
   return arr.map((g) => {
     const trips = S.trips.filter((t) => locosOf(t).some((l) => locoKey(l.type, l.number) === locoKey(g.type, g.number))).length;
     return `<section class="loco-group">
       <div class="loco-head"><span class="ico" style="color:var(--accent)">${I.train}</span>
         <div class="name">${highlight(locoLabel(g.type, g.number), words)}<small>Тип ${highlight(g.type, words)} · номер ${highlight(g.number, words)}${trips ? ` · поездок: ${trips}` : ''}</small></div>
         <button class="icon-btn" data-act="note-add" data-type="${esc(g.type)}" data-number="${esc(g.number)}" aria-label="Добавить заметку">${I.plus}</button></div>
-      ${g.notes.map((n) => `<div class="note"><div><div class="txt">${highlight(n.text, words)}</div><div class="when">${fmtDate(n.createdAt)}${n.updatedAt && n.updatedAt - n.createdAt > 60000 ? ' · изменена' : ''}</div></div>
+      ${g.notes.map((n) => `<div class="note"><div><div class="txt">${highlight(n.text, words)}</div><div class="when">${fmtDate(n.createdAt)}${n.updatedAt && n.updatedAt - n.createdAt > 60000 ? ' · изменена' : ''}${n.shared === true ? ` · <span class="ln-shared">видят коллеги</span>${notesUseful(n.id) ? ` · полезно: ${notesUseful(n.id)}` : ''}` : ''}</div></div>
         <div class="acts"><button class="icon-btn" data-act="note-edit" data-id="${esc(n.id)}" aria-label="Изменить заметку">${I.edit}</button><button class="icon-btn danger" data-act="note-del" data-id="${esc(n.id)}" aria-label="Удалить заметку">${I.trash}</button></div></div>`).join('')}
     </section>`;
-  }).join('');
+  }).join('') + col;
 }
 
 function renderNotes() {
   return `<div class="page-head"><button class="icon-btn" data-act="extra-back" aria-label="Назад">${I.left}</button><h1>Заметки о локомотивах</h1></div>
-    ${S.notes.length ? `<div class="search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="notes-q" placeholder="Поиск: серия, номер или слово" autocomplete="off" enterkeyhint="search" value="${esc(V.notesQ)}" aria-label="Поиск по заметкам">${V.notesQ ? `<button class="search-x" data-act="notes-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>` : ''}
+    ${S.notes.length || colNotesAll().length ? `<div class="search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="notes-q" placeholder="Поиск: серия, номер или слово" autocomplete="off" enterkeyhint="search" value="${esc(V.notesQ)}" aria-label="Поиск по заметкам">${V.notesQ ? `<button class="search-x" data-act="notes-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>` : ''}
     <button class="btn btn-primary" data-act="note-add">${I.plus} Новая заметка</button>
     <div id="notes-list" class="screen-list">${notesListHtml()}</div>`;
 }
@@ -895,6 +897,7 @@ app.addEventListener('click', async (e) => {
     case 'phones-clear': V.phonesQ = ''; render({ still: true }); app.querySelector('#phones-q')?.focus(); break;
     case 'fix-slope': fixSlope(b); break;
     case 'extra-back': V.extra = null; render(); break;
+    case 'col-notes-open': openLocoNotesSheet(b.dataset.type || '', b.dataset.number || '', null); break;
     case 'notes-clear': V.notesQ = ''; render(); app.querySelector('#notes-q')?.focus(); break;
     case 'trip-q-clear': V.tripQ = ''; render({ still: true }); app.querySelector('#trip-q')?.focus(); break;
     case 'note-add': openNoteForm(null, { type: b.dataset.type, number: b.dataset.number }); break;

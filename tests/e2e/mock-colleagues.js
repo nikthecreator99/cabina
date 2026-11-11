@@ -23,7 +23,9 @@ export async function mockServer(context, init = {}) {
     // 2.22: группы (как в миграции 0007). groupsOff — сервер без групп (старый): таблиц нет, 404
     groups: [], members: [], ginvites: [], codes: {}, bans: [], groupsOff: false, oldGroups: false,
     // 2.28: просьбы показать статус (как в миграции 0010). asksOff — сервер без шага 10; sentAsks — что отправил я
-    asks: [], sentAsks: [], asksOff: false, ...init,
+    asks: [], sentAsks: [], asksOff: false,
+    // 2.29: заметки о локомотивах (как в миграции 0011): чужие — от коллег; мои — то, что прислал sync_loco_notes. notesOff — сервер без шага 11
+    colNotes: [], myNotes: [], votes: [], notesOff: false, ...init,
   };
   let seq = 0;
   const uuid = () => `aaaaaaaa-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
@@ -92,6 +94,16 @@ export async function mockServer(context, init = {}) {
         return send(200, Object.entries(db.statuses).filter(([k, s]) => seen.has(k) && (s.place || s.dest)).map(([user_id, s]) => ({ user_id, place: s.place || null, dest: s.dest || null })));
       }
       case '/rest/v1/access': return send(200, db.access.filter((a) => a.user_id === ME));
+      case '/rest/v1/loco_notes': {
+        if (db.notesOff) return send(404, { code: 'PGRST205', message: 'not found' });
+        // коллеге видны заметки, только если он мне их показывает (правило 'notes' у автора — в db.access авторов не храним: colNotes уже «видимые»)
+        const cols = new Set(db.links.filter((l) => mine(l) && l.state === 'accepted').map(other));
+        return send(200, [...db.colNotes.filter((n) => cols.has(n.user_id)), ...db.myNotes.map((n) => ({ ...n, user_id: ME }))]);
+      }
+      case '/rest/v1/loco_note_votes': {
+        if (db.notesOff) return send(404, { code: 'PGRST205', message: 'not found' });
+        return send(200, db.votes.map((note_id) => ({ note_id })));
+      }
       default: break;
     }
     if (rpc === 'touch') return send(204);
@@ -137,6 +149,7 @@ export async function mockServer(context, init = {}) {
       // включил показ статуса просящему (или всем) — его просьба выполнена (триггер на сервере)
       if (body.p_item === 'status') db.asks = db.asks.filter((x) => !(x.target === ME && (body.p_all || (body.p_ids || []).includes(x.asker))));
       const has = (item) => db.access.some((a) => a.user_id === ME && a.item === item);
+      if (!has('notes')) db.myNotes = [];
       if (!has('status') && !gShares('status')) delete db.statuses[ME];
       if (!has('place') && !gShares('place') && db.statuses[ME]) { db.statuses[ME].place = null; db.statuses[ME].dest = null; }
       return send(204);
@@ -169,6 +182,20 @@ export async function mockServer(context, init = {}) {
       return send(204);
     }
     if (!main()) return fail('consent required');
+    if (rpc === 'sync_loco_notes') {
+      if (db.notesOff) return send(404, { code: 'PGRST202', message: 'not found' });
+      const has = db.access.some((a) => a.user_id === ME && a.item === 'notes');
+      db.myNotes = !has ? [] : (body.p_notes || []).map((x) => ({ id: uuid(), note_key: x.k, loco_type: x.t || null, loco_num: x.n, body: x.b, month: `${x.m}-01`, useful: db.myNotes.find((m) => m.note_key === x.k)?.useful || 0 }));
+      return send(204);
+    }
+    if (rpc === 'rate_loco_note') {
+      const n = db.colNotes.find((x) => x.id === body.p_id);
+      if (!n) return fail('not found');
+      const had = db.votes.includes(n.id);
+      if (body.p_useful && !had) { db.votes.push(n.id); n.useful++; }
+      if (!body.p_useful && had) { db.votes = db.votes.filter((x) => x !== n.id); n.useful--; }
+      return send(200, n.useful);
+    }
     if (rpc === 'create_invite') {
       if (db.invites.open.length >= 10) return fail('limit');
       const code = `${'7F3A9C21B'}${seq % 10}`;
