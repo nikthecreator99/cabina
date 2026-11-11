@@ -22,7 +22,7 @@ import {
 export const GROUPS_MAX = 10;
 export const GROUP_NAME_MAX = 30;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const G = { id: null, busy: false };
+const G = { id: null, busy: false, q: '', open: { status: false, place: false } };
 const SERVER_OFF = 'Группы на сервере ещё не включены. Попробуйте позже.';
 
 // Код группы: 10 знаков, буквы и цифры; в ссылке — после «#» (сервер сайта его не видит)
@@ -122,7 +122,7 @@ const needAccountHtml = (head) => `${head}<div class="notice ok">${I.shield}<div
   <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
 
 export function renderGroups() {
-  const head = pageHead('Группы', { back: true, right: `<button class="icon-btn grp-help-btn" data-act="grp-help" id="grp-help" aria-label="Как работают группы">${I.help}</button>` });
+  const head = pageHead('Группы', { back: true, right: `<button class="icon-btn grp-gear-btn" data-act="grp-gear" id="grp-gear" aria-label="Настройки групп">${I.gear}</button>` });
   if (!legalReady() || !colMine()) return needAccountHtml(head);
   const snap = colSnap();
   if (!snap) { if (!layerCount()) loadColleagues(); return `${head}<div class="hint" id="grp-sec">Загружаем…</div>`; }
@@ -132,22 +132,46 @@ export function renderGroups() {
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
   const full = snap.groups.length >= GROUPS_MAX;
-  const adm = snap.groups.filter((g) => g.admin);
-  const mem = snap.groups.filter((g) => !g.admin);
+  const q = G.q;
   return `${head}<div id="grp-sec">
     <p class="grp-lead">Бригада, колонна, депо — все ваши люди одним списком</p>
-    <div class="grp-top">
-      <button class="btn btn-primary" data-act="grp-new" id="grp-new"${full ? ' disabled' : ''}>${I.plus} Создать</button>
-      <button class="btn btn-plain" data-act="grp-code-enter" id="grp-join"${full ? ' disabled' : ''}>${small(I.qr, 20)} Вступить по коду</button>
-    </div>
+    ${snap.groups.length ? '' : `<div class="grp-top">
+      <button class="btn btn-primary" data-act="grp-new" id="grp-new">${I.plus} Создать</button>
+      <button class="btn btn-plain" data-act="grp-code-enter" id="grp-join">${small(I.qr, 20)} Вступить по коду</button>
+    </div>`}
     ${full ? `<div class="hint">Групп уже ${GROUPS_MAX} — больше нельзя. Выйдите из ненужной, чтобы вступить в новую.</div>` : ''}
     ${snap.groupInvites.length ? `<div class="grp-sec-title"><h2>Приглашают в группу</h2><span class="grp-count">${snap.groupInvites.length}</span></div><div class="panel col-offers" id="grp-invites">${snap.groupInvites.map(inviteRow).join('')}</div>` : ''}
-    ${snap.groups.length ? `<div id="grp-list">${section('Вы администратор', adm, 'grp-admin')}${section('Вы участник', mem, 'grp-mem')}</div>`
+    ${snap.groups.length ? `<div class="search grp-search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="grp-q" placeholder="Поиск группы по названию" autocomplete="off" enterkeyhint="search" value="${esc(q)}" aria-label="Поиск среди ваших групп">${q ? `<button class="search-x" data-act="grp-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>
+      <div id="grp-list">${groupsListHtml(snap)}</div>`
       : '<div class="hint grp-empty">Вы пока не в группе. Создайте свою или вступите по коду, который даст администратор группы.</div>'}
-    <div class="grp-priv">${I.shield}<div><span>Вы сами решаете, кому виден ваш статус</span>
-      <button class="link-btn" data-act="go" data-page="privacy" id="grp-privacy">Настройки приватности</button></div></div>
   </div>`;
 }
+
+// Поиск среди своих групп: по названию, без учёта регистра, «ё» и знаков («тд64» найдёт «ТД-64»)
+const foldName = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, '');
+export const groupMatch = (g, q) => {
+  const words = String(q || '').toLowerCase().replace(/ё/g, 'е').split(/\s+/).map(foldName).filter(Boolean);
+  const hay = foldName(g.name);
+  return words.every((w) => hay.includes(w));
+};
+function groupsListHtml(snap) {
+  const list = snap.groups.filter((g) => groupMatch(g, G.q));
+  if (!list.length) return `<div class="hint grp-empty" id="grp-none">Группы с таким названием нет.</div>`;
+  return `${section('Вы администратор', list.filter((g) => g.admin), 'grp-admin')}${section('Вы участник', list.filter((g) => !g.admin), 'grp-mem')}`;
+}
+// Ввод в строке поиска (вызывает app.js): перерисовываем только список, чтобы не терять фокус
+export function groupsInput(t) {
+  if (t.id !== 'grp-q') return false;
+  G.q = t.value;
+  const snap = colSnap();
+  const box = document.getElementById('grp-list');
+  if (box && snap) box.innerHTML = groupsListHtml(snap);
+  const x = t.parentElement.querySelector('.search-x');
+  if (G.q && !x) t.parentElement.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="grp-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);
+  else if (!G.q && x) x.remove();
+  return true;
+}
+export function groupsReset() { G.q = ''; }
 
 // ---------------------------------------------------------------- экран одной группы
 
@@ -213,15 +237,14 @@ export function renderGroup() {
     return `${pageHead('Группа', { back: true })}<div class="empty"><div class="em-ico">${I.grid}</div><b>Группы больше нет</b><p>Вас исключили, вы вышли или группу удалили.</p></div>`;
   }
   const pic = picSvg(g.pic, { size: 64 });
-  return `${pageHead(g.name, { back: true, right: g.admin ? `<button class="icon-btn" data-act="grp-rename" aria-label="Переименовать группу">${I.edit}</button>` : '' })}
+  return `${pageHead(g.name, { back: true, right: g.admin ? `<button class="icon-btn" data-act="grp-edit" id="grp-edit" aria-label="Изменить название и картинку группы">${I.edit}</button>` : '' })}
     <div id="grp-page" data-id="${esc(g.id)}">
     <div class="grp-hero">
-      ${g.admin ? `<button class="grp-pic grp-pic-big" data-act="grp-pic" id="grp-pic" aria-label="Изменить картинку группы">${pic}<span class="grp-pic-edit" aria-hidden="true">${small(I.edit, 14)}</span></button>` : `<span class="grp-pic grp-pic-big" aria-hidden="true">${pic}</span>`}
-      <div class="grow"><p class="hint grp-sub">${esc(members(g.members.length))}${g.admin ? ' · вы администратор' : ''}</p>
-        ${g.admin ? `<button class="link-btn" data-act="grp-pic">${g.pic ? 'Изменить картинку' : 'Сделать картинку'}</button>` : ''}</div>
+      ${g.admin ? `<button class="grp-pic grp-pic-big" data-act="grp-pic" id="grp-pic" aria-label="Изменить картинку группы">${pic}</button>` : `<span class="grp-pic grp-pic-big" aria-hidden="true">${pic}</span>`}
+      <div class="grow"><p class="hint grp-sub">${esc(members(g.members.length))}${g.admin ? ' · вы администратор' : ''}</p></div>
     </div>
     ${g.admin ? `<div class="grp-btns"><button class="btn btn-primary" data-act="grp-invite" id="grp-invite">${I.plus} Пригласить коллегу</button>
-      <button class="btn btn-plain" data-act="grp-code" id="grp-code">${small(I.qr, 18)} Код и QR-код группы</button></div>` : ''}
+      <button class="btn btn-plain" data-act="grp-code" id="grp-code" aria-label="Код и QR-код группы">${small(I.qr, 18)} QR-код</button></div>` : ''}
     ${nudgeHtml(g)}
     <div class="panel grp-privpanel"><button class="row" data-act="grp-priv" id="grp-priv-btn"><span class="ico" style="--c:var(--ok)">${I.shield}</span>
       <div class="grow"><div class="t1">Приватность</div><div class="t2">${esc(privSummary(g))}</div></div>${small(I.right, 18)}</button></div>
@@ -465,12 +488,26 @@ async function editPic(g) {
   await reload();
 }
 
-// «?» на экране «Группы»
+// Карандаш вверху группы (администратор): название и картинка — в одном окне
+function editSheet(g) {
+  const el = openLayer(sheet({ title: 'Изменить группу', body: `<div class="panel">
+    <button class="row" data-act="grp-rename" id="edit-name"><div class="grow"><div class="t1">Название</div><div class="t2">${esc(g.name)}</div></div>${small(I.right, 18)}</button>
+    <button class="row" data-act="grp-pic" id="edit-pic"><span class="grp-pic" aria-hidden="true">${picSvg(g.pic, { size: 36 })}</span><div class="grow"><div class="t1">Картинка</div><div class="t2">${g.pic ? 'Изменить' : 'Сделать картинку'}</div></div>${small(I.right, 18)}</button></div>` }));
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    closeLayer(el);
+    groupsClick(b.dataset.act, b);
+  });
+}
+
+// «Как работают группы» — строка в шестерёнке экрана «Группы»
 function openGroupsHelp() {
   openLayer(sheet({ title: 'Как работают группы', body: `<div class="grp-help" id="grp-help-body">
     <p><b>Группа</b> — список ваших людей с названием: бригада, колонна, депо. Переписки в группе нет.</p>
-    <p><b>Вы администратор</b> — группы, которые вы создали (или вам передали права): приглашаете коллег, показываете код и QR-код, меняете название и картинку, исключаете.</p>
+    <p><b>Вы администратор</b> — группы, которые вы создали (или вам передали права): приглашаете коллег, показываете код и QR-код, меняете название и картинку (карандаш вверху группы), исключаете.</p>
     <p><b>Вы участник</b> — группы, в которые вы вступили по коду или приглашению.</p>
+    <p><b>Шестерёнка</b> на экране «Группы»: создать группу, вступить по коду и приватность сразу по всем группам — кому из групп виден ваш статус и где вы.</p>
     <p><b>Статус — взаимно.</b> Пока вы не показываете группе свой статус, вы не видите статус участников. Станции видят только те, кто показывает свои.</p>
     <p><b>Коллеги.</b> Нажмите на участника — и предложите стать коллегами. Он сам решит.</p>
     <div class="notice ok">${I.shield}<div>${TRUTH}</div></div></div>` }));
@@ -495,6 +532,60 @@ async function setShare(g, item) {
   const box = document.querySelector('#grp-priv-body');
   const fresh = groupOf(g.id);
   if (box && fresh) { box.innerHTML = privBody(fresh); colRerender(); } // и сам экран группы за окном — тоже
+  const gear = document.querySelector('#grp-gear-priv');
+  if (gear) gear.innerHTML = gearPrivHtml();
+}
+
+// ---------------------------------------------------------------- шестерёнка на экране «Группы» (2.29, просьба Никиты 11.11.2026)
+// Создать, вступить по коду, «как работают группы» и приватность по всем группам сразу — выпадающие списки своих групп.
+// Из самих групп эти кнопки не убраны.
+function gearRow(g, item) {
+  const { status: st, place: pl } = myShare(g);
+  const on = item === 'status' ? st : pl;
+  const off = item === 'place' && !st;
+  return `<div class="row"><div class="grow"><div class="t1">${esc(g.name)}</div><div class="t2">${off ? 'Сначала включите «Кто меня видит»' : on ? 'Видят' : 'Не видят'}</div></div>
+    <button class="switch" role="switch" data-act="grp-share" data-item="${item}" data-id="${esc(g.id)}" aria-checked="${on}" aria-label="${esc(g.name)}" ${off ? 'disabled' : ''}></button></div>`;
+}
+function gearDrop(item, title, sub) {
+  const list = colSnap()?.groups || [];
+  const n = list.filter((g) => (item === 'status' ? myShare(g).status : myShare(g).place)).length;
+  const open = !!G.open[item];
+  return `<div class="grp-drop"><button class="row grp-drop-head" data-act="grp-drop" data-k="${item}" aria-expanded="${open}" aria-controls="grp-drop-${item}">
+      <div class="grow"><div class="t1">${title}</div><div class="t2">${n ? `${n} из ${list.length} ${plural(list.length, 'группы', 'групп', 'групп')}` : 'Никто'} · ${sub}</div></div>
+      <span class="grp-chev" aria-hidden="true">${small(I.down, 18)}</span></button>
+    ${open ? `<div class="panel grp-drop-list" id="grp-drop-${item}">${list.map((g) => gearRow(g, item)).join('')}</div>` : ''}</div>`;
+}
+function gearPrivHtml() {
+  const list = colSnap()?.groups || [];
+  if (!list.length) return '<div class="hint">Появится, когда вы вступите в группу.</div>';
+  return `${gearDrop('status', 'Кто меня видит', 'статус группе')}${gearDrop('place', 'Видят, где я', 'станции и дом отдыха')}
+    <div class="notice ok grp-truth">${I.shield}<div>${TRUTH}</div></div>`;
+}
+function openGear() {
+  const snap = colSnap();
+  const full = (snap?.groups.length || 0) >= GROUPS_MAX;
+  const el = openLayer(sheet({ title: 'Настройки групп', tall: true, body: `<div id="grp-gear-body">
+    <div class="panel">
+      <button class="row" data-act="grp-new" id="gear-new"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--ok)">${I.plus}</span><div class="grow"><div class="t1">Создать группу</div></div>${small(I.right, 18)}</button>
+      <button class="row" data-act="grp-code-enter" id="gear-join"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--info, var(--ok))">${small(I.qr, 20)}</span><div class="grow"><div class="t1">Вступить по коду</div></div>${small(I.right, 18)}</button>
+      <button class="row" data-act="grp-help" id="gear-help"><span class="ico" style="--c:var(--muted)">${I.help}</span><div class="grow"><div class="t1">Как работают группы</div></div>${small(I.right, 18)}</button>
+    </div>
+    ${full ? `<div class="hint">Групп уже ${GROUPS_MAX} — больше нельзя.</div>` : ''}
+    <div class="group-title">Приватность</div>
+    <p class="hint grp-priv-lead">Кому из групп виден ваш статус. Всё выключено, пока вы сами не включите.</p>
+    <div id="grp-gear-priv">${gearPrivHtml()}</div>
+    <button class="link-btn grp-col-priv" data-act="grp-col-priv" id="gear-col-priv">Приватность для коллег</button></div>` }),
+    { onClose: () => colRerender() });
+  // окна не входят в общий разбор нажатий экрана — разбираем здесь
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b || b.disabled) return;
+    const act = b.dataset.act;
+    if (act === 'grp-drop') { const k = b.dataset.k === 'place' ? 'place' : 'status'; G.open[k] = !G.open[k]; document.querySelector('#grp-gear-priv').innerHTML = gearPrivHtml(); return; }
+    if (act === 'grp-share') { groupsClick(act, b); return; }
+    if (act === 'grp-col-priv') { closeLayer(el); colGo('privacy'); return; }
+    if (act === 'grp-new' || act === 'grp-code-enter' || act === 'grp-help') { closeLayer(el); groupsClick(act, b); }
+  });
 }
 
 // ---------------------------------------------------------------- действия
@@ -505,6 +596,8 @@ export async function groupsClick(act, b) {
   const g = groupOf(G.id);
   if (act === 'grp-member') { if (g) memberSheet(g, String(b.dataset.id || '').toLowerCase()); return true; }
   if (act === 'grp-help') { openGroupsHelp(); return true; }
+  if (act === 'grp-gear') { openGear(); return true; }
+  if (act === 'grp-q-clear') { G.q = ''; colRerender(); document.getElementById('grp-q')?.focus(); return true; }
   if (act === 'grp-code-enter') { if (await ready()) enterCode(); return true; }
   if (G.busy) return true;
   G.busy = true;
@@ -522,10 +615,15 @@ export async function groupsClick(act, b) {
         if (accept) { toast('Вы в группе. Свой статус группе вы показываете, только если сами включите'); openGroupPage(id); } else toast('Приглашение отклонено');
         break;
       }
-      case 'grp-share': if (g && !b.disabled) await setShare(g, b.dataset.item === 'place' ? 'place' : 'status'); break;
+      case 'grp-share': {
+        const target = UUID.test(String(b.dataset.id || '')) ? groupOf(String(b.dataset.id).toLowerCase()) : g;
+        if (target && !b.disabled) await setShare(target, b.dataset.item === 'place' ? 'place' : 'status');
+        break;
+      }
       case 'grp-priv': if (g) openPriv(g); break;
       case 'grp-invite': if (g?.admin) inviteSheet(g); break;
       case 'grp-pic': if (g?.admin) await editPic(g); break;
+      case 'grp-edit': if (g?.admin) editSheet(g); break;
       case 'grp-code': if (g?.admin) await showCode(g); break;
       case 'grp-rename': {
         if (!g?.admin) break;

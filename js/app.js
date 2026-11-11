@@ -38,7 +38,7 @@ import { openShareSheet, checkShareHash, shareable } from './share.js';
 import { checkDepotHash } from './depot.js';
 import { openTableExport, importTableFile } from './table.js';
 import { renderHelp, helpListHtml } from './help.js';
-import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, joinByCode } from './groups.js';
+import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupsInput, groupsReset, groupFromHash, joinByCode } from './groups.js';
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml, checkAdminIdeas } from './ideas.js';
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
@@ -676,6 +676,7 @@ function go(name) {
   if (name === 'account') accountEnter().then(() => page() === 'account' && rerender());
   if (name === 'colleagues') setTimeout(() => app.querySelector('#col-name:placeholder-shown')?.focus(), 50);
   if (name === 'team') teamReset();
+  if (name === 'groups') groupsReset();
   if (name === 'groups' || name === 'group') loadColleagues({ force: true });
   if (name === 'help') { V.helpQ = ''; V.helpOpen = new Set(); }
   if (name === 'invites') loadInvites({ force: true });
@@ -950,6 +951,7 @@ app.addEventListener('keydown', (e) => {
 app.addEventListener('input', (e) => {
   if (avatarInput(e.target)) return;
   if (colleaguesInput(e.target)) return;
+  if (groupsInput(e.target)) return;
   if (fixInput(e.target)) return;
   if (ideasInput(e.target)) return;
   if (e.target.id === 'help-q') {

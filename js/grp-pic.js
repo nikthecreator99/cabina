@@ -115,14 +115,11 @@ export function openPicEditor({ name = '', pic = null } = {}) {
   return new Promise((resolve) => {
     let result;
     let cur = normPic(pic) || picFromName(name);
-    const last = { num: { k: 'num', n: 1 }, art: { k: 'art', a: 'eloc' }, text: { k: 'text', t: picFromName(name).t || 'ТД-64', f: 'u', sz: 2 } };
+    if (cur.k === 'num') cur = { k: 'art', a: 'eloc', sh: cur.sh, bg: cur.bg }; // цифры убраны из редактора (просьба Никиты 11.11.2026); старая цифра у группы остаётся, пока картинку не изменят
+    const last = { art: { k: 'art', a: 'eloc' }, text: { k: 'text', t: picFromName(name).t || 'ТД-64', f: 'u', sz: 2 } };
     last[cur.k] = { ...cur };
     const segBtns = (list, act, val) => list.map(([k, v]) => `<button type="button" data-act="${act}" data-v="${k}" aria-pressed="${String(k) === String(val)}"${act === 'gpic-font' ? ` class="gpic-font-${k}"` : ''}>${esc(v)}</button>`).join('');
     const kindHtml = () => {
-      if (cur.k === 'num') {
-        return `<div class="gpic-tiles gpic-nums" role="group" aria-label="Цифра">${Array.from({ length: 20 }, (_, i) => i + 1)
-          .map((n) => `<button type="button" class="gpic-num" data-act="gpic-n" data-v="${n}" aria-pressed="${cur.n === n}">${n}</button>`).join('')}</div>`;
-      }
       if (cur.k === 'art') {
         return `<div class="gpic-tiles gpic-arts" role="group" aria-label="Рисунок">${PIC_ARTS.map((a) => `<button type="button" class="gpic-art" data-act="gpic-a" data-v="${a}" aria-pressed="${cur.a === a}" aria-label="${esc(ART[a][0])}">${picSvg({ k: 'art', a, sh: cur.sh, bg: cur.bg }, { size: 52 })}</button>`).join('')}</div>`;
       }
@@ -134,7 +131,7 @@ export function openPicEditor({ name = '', pic = null } = {}) {
     };
     const body = () => `<div class="gpic-edit" id="gpic-edit">
       <div class="gpic-preview" id="gpic-preview">${picSvg(cur, { size: 112, label: 'Так будет выглядеть картинка' })}</div>
-      <div class="seg" id="gpic-kind" role="group" aria-label="Что на картинке">${segBtns([['num', 'Цифра'], ['art', 'Рисунок'], ['text', 'Текст']], 'gpic-kind', cur.k)}</div>
+      <div class="seg" id="gpic-kind" role="group" aria-label="Что на картинке">${segBtns([['art', 'Рисунок'], ['text', 'Текст']], 'gpic-kind', cur.k)}</div>
       <div id="gpic-kind-box">${kindHtml()}</div>
       <div class="gpic-label">Форма</div><div class="seg" id="gpic-sh">${segBtns(PIC_SHAPES, 'gpic-sh', cur.sh)}</div>
       <div class="gpic-label">Цвет фона</div>
@@ -165,7 +162,6 @@ export function openPicEditor({ name = '', pic = null } = {}) {
       const v = b.dataset.v;
       switch (b.dataset.act) {
         case 'gpic-kind': if (v !== cur.k) { cur = { ...last[v], sh: cur.sh, bg: cur.bg }; redraw(true); } break;
-        case 'gpic-n': cur = { ...cur, n: Number(v) }; last.num = { ...cur }; redraw(true); break;
         case 'gpic-a': cur = { ...cur, a: v }; last.art = { ...cur }; redraw(true); break;
         case 'gpic-sz': cur = { ...cur, sz: Number(v) }; last.text = { ...cur }; redraw(true); break;
         case 'gpic-font': cur = { ...cur, f: v }; last.text = { ...cur }; redraw(true); break;
