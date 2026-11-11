@@ -150,6 +150,15 @@ export function chainAt(s, today) {
 }
 export const streakAt = (s, today) => chainAt(s, today).n;
 export const doneToday = (s, today) => s.days.includes(today);
+// Вечернее напоминание об ударном режиме (2.29.0, просьба Никиты 11.11.2026): с NUDGE_HOUR по часовому поясу из настроек,
+// если серия жива (урок был вчера или сегодня — с учётом заморозок), а сегодня урока ещё нет. Только внутри приложения:
+// push через Google/Apple — передача за границу (раздел 1.2 CLAUDE.md). freeze — не успеете, серию сохранит заморозка.
+export const NUDGE_HOUR = 18;
+export function streakNudge(s, today, hour) {
+  if (!(hour >= NUDGE_HOUR) || doneToday(s, today)) return null;
+  const n = streakAt(s, today);
+  return n >= 1 ? { n, freeze: s.freezes > 0 } : null;
+}
 // Можно ли сегодня подарить заморозку серии длиной streak
 export const giftReady = (s, today, streak) => streak >= GIFT_FROM && (!s.giftAt || dayNum(today) - dayNum(s.giftAt) >= GIFT_EVERY);
 

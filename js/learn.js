@@ -90,6 +90,41 @@ export function learnResume() {
   return ['learn-road'];
 }
 
+// ---------------------------------------------------------------- вечернее напоминание о серии (2.29.0)
+// Просьба Никиты 11.11.2026: «ближе к вечеру напоминать, если не продлил ударный режим — всего минута твоего времени».
+// Веб-приложение в фоне не работает, а push через Google/Apple — передача за границу, поэтому напоминание — внутри CABINA:
+// плашка на главной и точка на вкладке «Обучение» с 18:00, пока урока сегодня нет. «Не сегодня» и выключатель
+// «Напоминать вечером» (окно «Ударный режим») — в localStorage, только удобство этого телефона.
+const NUDGE_KEY = 'cabina-streak-nag';
+function nudgeState() { try { return JSON.parse(localStorage.getItem(NUDGE_KEY)) || {}; } catch { return {}; } }
+function setNudge(v) { try { localStorage.setItem(NUDGE_KEY, JSON.stringify({ ...nudgeState(), ...v })); } catch { /* хранилище недоступно — не страшно */ } }
+const nudgeOn = () => !nudgeState().off;
+export function streakNudgeNow() {
+  const st = nudgeState();
+  const t = today();
+  if (st.off || st.hid === t) return null;
+  const s = L.dailyCheck(S.learn, t).state; // вчерашний пропуск, закрытый заморозкой, серию не рвёт (сохранится при открытии «Обучения»)
+  return L.streakNudge(s, t, new Date(nowLocal()).getUTCHours());
+}
+export function streakNagHtml() {
+  const x = streakNudgeNow();
+  if (!x) return '';
+  return `<div class="loyal-banner streak-banner" role="status" id="streak-nag"><button class="grow" data-act="streak-go"><span class="ico on">${ART.flame(26)}</span>
+    <span class="txt"><b>Ударный режим: ${days(x.n)}</b><small>Сегодня ещё без урока — всего минута${x.freeze ? '. Заморозка в запасе' : ''}</small></span></button>
+    <button class="icon-btn" data-act="streak-hide" aria-label="Не напоминать сегодня">${small(I.x, 18)}</button></div>`;
+}
+// Плашка на главной. 'tab' — app.js открывает вкладку «Обучение»: дорога у текущего урока (learnResume)
+export function streakClick(act) {
+  if (act === 'streak-go') { rememberView('road'); return 'tab'; }
+  if (act === 'streak-hide') {
+    setNudge({ hid: today() });
+    toast('Хорошо, сегодня больше не напомним');
+    ctx.rerender();
+    return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------- серия · заморозки · монеты · опыт · лига
 // По макетам Никиты: огонь, снежинка, гайка, молния, кубок. С 2.24.3 (его макет 06.11.2026) — снежинка: сколько заморозок
 // в запасе, нет ни одной — «0» красным; нажатие — магазин. Кубок — окно «Лига коллег» (скоро); профиль обучения открывают
@@ -614,7 +649,7 @@ function openStreak() {
   const streak = L.streakAt(s, t);
   const lit = L.doneToday(s, t);
   const week = L.weekView(s, t).map((d, i) => `<div class="lr-wd is-${d.state}"><i class="${d.state === 'done' ? 'on' : ''}">${d.state === 'done' ? ART.flame(20) : d.state === 'frozen' ? ART.snow(16) : ''}</i><small>${WDS[i]}</small></div>`).join('');
-  openLayer(sheet({
+  const el = openLayer(sheet({
     title: 'Ударный режим',
     body: `<div class="lr-big${lit ? ' on' : ''}"><span class="lr-big-ico${lit ? ' on' : ''}">${ART.flame(68)}</span><b class="num">${streak}</b><span>${plural(streak, 'день', 'дня', 'дней')} подряд</span>
         <p>${lit ? 'Сегодня урок пройден — серия продлена.' : streak ? 'Пройдите урок сегодня, чтобы продлить серию.' : 'Пройдите урок — и начнётся серия.'}</p></div>
@@ -625,11 +660,20 @@ function openStreak() {
         <div class="row"><span class="ico" style="--c:var(--night)">${ART.snow(20)}</span><div class="grow"><div class="t1">Заморозки в запасе</div></div><b class="num">${s.freezes} из ${L.FREEZE_MAX}</b></div>
         ${s.sec ? `<div class="row"><span class="ico">${I.clock}</span><div class="grow"><div class="t1">Всего в уроках</div></div><b class="num">${L.fmtSec(s.sec)}</b></div>` : ''}
       </div>
+      <div class="panel"><div class="row"><span class="ico" style="--c:var(--warn)">${I.bell}</span><div class="grow"><div class="t1">Напоминать вечером</div><div class="t2">С ${L.NUDGE_HOUR}:00 на главной, если урока ещё не было</div></div>
+        <button class="switch" role="switch" id="lr-nudge-sw" aria-checked="${nudgeOn()}" aria-label="Напоминать о серии вечером"></button></div></div>
       <div class="lr-how"><b>Как это работает</b>
         <p>Серия растёт, если за день пройден хотя бы один урок. День считается по часовому поясу из настроек.</p>
         <p>Пропустили день — серию сохранит заморозка, она срабатывает сама. Заморозка даётся за каждые ${L.FREEZE_EVERY} дней серии, её можно купить за монеты в магазине; в запасе — до двух.</p>
         <p>Если серия уже ${L.GIFT_FROM} дней и больше, а заморозок нет, CABINA подарит заморозку (не чаще раза в две недели). А если серия всё же прервалась, её можно вернуть: пройдите урок ${L.REPAIR_DAYS} дня подряд.</p></div>`,
   }));
+  el.querySelector('#lr-nudge-sw').addEventListener('click', (e) => {
+    const on = e.currentTarget.getAttribute('aria-checked') !== 'true';
+    e.currentTarget.setAttribute('aria-checked', String(on));
+    setNudge({ off: !on });
+    toast(on ? `Напомним после ${L.NUDGE_HOUR}:00, если урока ещё не было` : 'Вечерних напоминаний не будет');
+    ctx.rerender();
+  });
 }
 // Магазин (просьба Никиты 06.11.2026): сверху — сколько заморозок, ниже — купить за монеты. Монеты — только за учёбу.
 function shopBody(s) {
