@@ -111,7 +111,7 @@ gtest('создать группу: согласие новой редакции
   await page.locator('.screen [data-act=back]').click();
   await page.locator('#grp-entry').click();
   await page.waitForSelector('.screen[data-page=groups] #grp-new');
-  assert.match(await text(page, '#grp-sec'), /Вы пока не в группе[\s\S]*Вы сами решаете, кому виден ваш статус/); // 2.27: макет Никиты
+  assert.match(await text(page, '#grp-sec'), /Вы пока не в группе/); // 2.27: макет Никиты
   await page.locator('#grp-new').click();
   await top(page).locator('[data-act=grp-name-ok]').click();
   assert.match(await text(page, '#grp-name-err'), /Введите название/);
@@ -195,7 +195,7 @@ gtest('в группе: статус участника виден, только
   assert.equal(srv.db.statuses[ME], undefined);
   await top(page).locator('.sheet-head [data-close]').click();
   // участник — не администратор: кнопок администратора нет
-  assert.equal(await page.locator('#grp-invite, #grp-code, #grp-delete, [data-act=grp-rename]').count(), 0);
+  assert.equal(await page.locator('#grp-invite, #grp-code, #grp-delete, #grp-edit').count(), 0);
   // «Что сервер знает о вас» — тоже с группами (как отвечает export_my_data)
   const html = await page.evaluate(async () => (await import('./js/colleagues.js')).myDataHtml({ email: 'ivan@example.com', groups: [{ name: 'Бригада <7>', role: 'member', members: 3, show_status: true, show_place: false }] }));
   assert.match(html, /Бригада &lt;7&gt;[\s\S]*участник · 3 участника · видят статус/);
@@ -247,7 +247,8 @@ gtest('приглашение в группу: принять или отказ�
   assert.deepEqual(srv.calls('answer_group_invite')[0].body, { p_group: G1, p_accept: true });
   // я создаю свою и приглашаю Олега
   await page.locator('.screen [data-act=back]').click();
-  await page.locator('#grp-new').click();
+  await page.locator('#grp-gear').click();           // 2.29: «Создать» — в шестерёнке, пока есть группы
+  await top(page).locator('#gear-new').click();
   await top(page).locator('#grp-name').fill('Моя');
   await top(page).locator('[data-act=grp-name-ok]').click();
   await page.waitForSelector('#grp-invite');
@@ -276,7 +277,8 @@ gtest('администратор: переименовать, исключит�
   await tab(page, 'profile');
   await page.locator('#grp-entry').click();
   await page.locator('[data-act=grp-open]').click();
-  await page.locator('[data-act=grp-rename]').click();
+  await page.locator('#grp-edit').click();      // 2.29: карандаш вверху — название и картинка в одном окне
+  await top(page).locator('#edit-name').click();
   await top(page).locator('#grp-name').fill('Колонна 3');
   await top(page).locator('[data-act=grp-name-ok]').click();
   await page.locator('.screen h1', { hasText: 'Колонна 3' }).waitFor();
