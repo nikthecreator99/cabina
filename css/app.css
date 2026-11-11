@@ -919,6 +919,10 @@ mark { background: color-mix(in srgb, var(--warn) 45%, transparent); color: var(
 .col-row .t2 { margin-top: 2px; }
 .col-row > .btn-sm { flex: none; width: auto; }
 .col-upd { font-size: calc(12px * var(--fs)); color: var(--muted); margin-top: 2px; }
+.col-hrs { display: flex; align-items: flex-start; gap: 4px; color: var(--text-2); font-weight: 600; }
+.col-hrs svg { flex: none; margin-top: 0.15em; }
+.col-hours-box { margin-top: 12px; }
+.col-hours-upd { margin: 4px 4px 0; }
 .col-st { --c: var(--warn); display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; max-width: 100%; }
 .col-st .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
 .col-st b { color: var(--text); font-weight: 700; }

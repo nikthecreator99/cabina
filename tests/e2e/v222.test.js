@@ -107,7 +107,7 @@ gtest('создать группу: согласие новой редакции
   await top(page).locator('[data-act=col-agree-ok]').click();
   await waitNoLayers(page);
   assert.deepEqual(srv.calls('give_consent').at(-1).body, { p_document: CUR });
-  assert.equal(CUR, 'privacy-4');
+  assert.equal(CUR, 'privacy-5');
   await page.locator('.screen [data-act=back]').click();
   await page.locator('#grp-entry').click();
   await page.waitForSelector('.screen[data-page=groups] #grp-new');
