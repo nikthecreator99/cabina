@@ -4,7 +4,7 @@
 //   карточка — имя, должность и, если включено в «Приватности», депо и персонаж (набор деталей, не фото);
 //   «Меня можно найти» — отдельное согласие на распространение (152-ФЗ, ст. 10.1); выключил — согласие отозвано;
 //   статус — одна строка без истории: вид, станции или дом отдыха, часть суток, «до …»; сам стирается через 48 часов.
-//   часы (2.29) — только два числа: отработано в этом месяце и итог прошлого; кому — выбирает человек (по умолчанию никому).
+//   часы (2.30) — только два числа: отработано в этом месяце и итог прошлого; кому — выбирает человек (по умолчанию никому).
 // Номер поезда и локомотива, точное время явки, причина и даты отвлечения, норма, заработок, телефон на сервер не уходят никогда.
 // Всё, что пришло с сервера, — непроверенное: текст только через esc(), персонаж — через normalizeAvatar.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, whenShort, plural, layerCount, MONTHS_GEN, hm } from './ui.js';
@@ -114,7 +114,7 @@ export function cleanStatus(x) {
   };
 }
 
-// Часы коллеги (2.29): месяц 'YYYY-MM', минуты за него и за прошлый месяц. Всё с сервера — проверяем.
+// Часы коллеги (2.30): месяц 'YYYY-MM', минуты за него и за прошлый месяц. Всё с сервера — проверяем.
 const HOURS_MAX = 31 * 24 * 60;
 const minOk = (v) => Number.isInteger(v) && v >= 0 && v <= HOURS_MAX;
 export function cleanHours(x) {
@@ -154,7 +154,7 @@ function accessRows(rows, me) {
 // Снимок с сервера: согласия, моя карточка, предложения мне, мои предложения, коллеги со статусом, кому что видно.
 // Станции статуса (с 2.16) приходят отдельно — их сервер отдаёт только тем, кому человек показывает, где он.
 // Группы (2.22): groups/members/ginvites — null, если на сервере их ещё нет (тогда groupsOn = false).
-// Часы (2.29): hours — null, если на сервере их ещё нет (тогда hoursOn = false и выбора «Мои часы» нет).
+// Часы (2.30): hours — null, если на сервере их ещё нет (тогда hoursOn = false и выбора «Мои часы» нет).
 export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null, asks = null, hours = null }) {
   me = String(me).toLowerCase();
   const ok = (doc) => arr(consents).some((c) => c && c.document === doc && !c.withdrawn_at);
@@ -377,7 +377,7 @@ export function loadColleagues({ force = false } = {}) {
   C.loading = (async () => {
     // просьбы показать статус (2.28) — отдельно и необязательно: сервер без шага 10 «Коллег» не ломает
     const asking = restGet('status_asks?select=asker,state,asked_at&state=eq.open&order=asked_at.desc&limit=50');
-    // часы коллег (2.29) — тоже отдельно: сервер без шага 11 «Коллег» не ломает
+    // часы коллег (2.30) — тоже отдельно: сервер без шага 11 «Коллег» не ломает
     const hrs = restGet('hours?select=user_id,month,cur_min,prev_min,updated_at');
     const rs = await Promise.all([
       restGet('consents?select=document,withdrawn_at'),
@@ -486,7 +486,7 @@ async function sync() {
       const r = await rpc('clear_status');
       if (r?.ok) { last.status = ''; last.statusAt = 0; snap.myStatus = null; }
     }
-    // часы (2.29): только если кому-то из коллег их показываю. Во время поездки «в пути» минуты растут —
+    // часы (2.30): только если кому-то из коллег их показываю. Во время поездки «в пути» минуты растут —
     // отправляем не чаще раза в 10 минут; поправили запись — сразу.
     if (snap.hoursOn && snap.colleagues.length && accessMode(snap, 'hours', pv).mode !== 'none') {
       const h = hoursPayload();
@@ -684,7 +684,7 @@ export function openColleague(id, { ask = false } = {}) {
 
 // Мои часы так, как их увидит коллега: «112 ч в ноябре»
 const myHoursLine = () => { const h = hoursPayload(); return hoursLines(cleanHours({ month: h.p_month, cur_min: h.p_cur }))[0]; };
-// Часы коллеги в его окне (2.29): только если он сам мне их показывает
+// Часы коллеги в его окне (2.30): только если он сам мне их показывает
 function hoursBox(c) {
   const ls = hoursLines(c.hours);
   if (!ls.length) return '';

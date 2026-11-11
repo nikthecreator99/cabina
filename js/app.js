@@ -42,9 +42,9 @@ import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupFromHash, j
 import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml, checkAdminIdeas } from './ideas.js';
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
-import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume } from './learn.js';
+import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.29.0';
+export const VERSION = '2.30.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -295,7 +295,7 @@ function renderHome() {
     ${pend ? `<div class="banner-row"><button class="rest-banner pending" data-act="trip" data-id="${esc(pend.id)}"><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">До явки осталось ${fmtDur((statsOf(pend).start - now) / MIN)}</div><div class="t2">Явка ${whenShort(statsOf(pend).start, now)}${routeOf(pend) ? ` · ${esc(routeOf(pend))}` : ''}</div>${normsLine(pend)}</div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn('yavka', statsOf(pend).start, 'Напомнить о явке в календаре')}</div>` : ''}
     ${departBanner(lt && !pend ? lt : null, now)}
     ${turn ? turnBanner(turn, now) : rest ? `<div class="banner-row"><button class="rest-banner" data-act="${editableRest(rest) ? 'dayoff-edit' : 'trip'}" data-id="${esc(rest.trip.id)}"${editableRest(rest) ? ` aria-label="${rest.kind === 'dayOff' ? 'Выходной' : 'Полный отдых'} — изменить время окончания"` : ''}><span class="pulse"></span><div class="grow" style="flex:1;min-width:0"><div class="t1">${restText}</div><div class="t2">Осталось ${fmtDur(rest.left)}${rest.house ? ` · ${esc(rest.house)}` : ''}</div></div><span class="chev">${small(I.right, 18)}</span></button>${remindBtn(restRemindKind(rest.kind), rest.until, 'Напомнить о конце отдыха в календаре')}</div>` : ''}
-    ${isCurrent ? medBanner() + loyaltyBanner() + yearNagHtml(now) : ''}
+    ${isCurrent ? streakNagHtml() + medBanner() + loyaltyBanner() + yearNagHtml(now) : ''}
     ${backupNag(now) || (isCurrent && !OLD_SITE ? signupNagHtml() : '')}
     <div class="sec-head"><h2>Поездки в ${MONTHS_PREP[V.m - 1]}</h2><span class="meta">${trips.length ? `${trips.length} ${plural(trips.length, 'поездка', 'поездки', 'поездок')}` : ''}</span></div>
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
@@ -607,6 +607,8 @@ function renderTabbar() {
   // в конструкторе персонажа нижнее меню прячется: больше места и ничего не теряется случайным нажатием
   document.body.classList.toggle('av-editing', page() === 'avatar' && !isGuest());
   const tab = document.querySelector('.tab[data-tab=profile]');
+  // точка на «Обучении»: вечером серия ещё не продлена (2.29.0)
+  document.querySelector('.tab[data-tab=learn]')?.classList.toggle('has-dot', !!streakNudgeNow());
   if (!tab) return;
   tab.classList.toggle('has-dot', noticeCount() > 0); // красная точка: есть непрочитанные уведомления (2.28)
   const old = tab.querySelector('svg');
@@ -829,6 +831,9 @@ app.addEventListener('click', async (e) => {
   if (nagClick(act, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   if (yearClick(act, b, ctx)) return;
+  const sk = streakClick(act);
+  if (sk === 'tab') { V.tab = 'learn'; V.pages = learnResume(); window.scrollTo(0, 0); render(); return; }
+  if (sk) return;
   switch (act) {
     case 'go': go(b.dataset.page); if (b.dataset.focus) showSpot(b.dataset.focus); break;
     case 'help-clear': V.helpQ = ''; rerender(); app.querySelector('#help-q')?.focus(); break;
