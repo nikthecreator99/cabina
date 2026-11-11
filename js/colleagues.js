@@ -990,7 +990,7 @@ export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
     ${grs || ginvRows ? `<div class="group-title">Группы</div><div class="panel" id="my-groups">${grs}${ginvRows}</div>` : ''}
     ${invRows ? `<div class="group-title">Приглашения</div><div class="panel">${invRows}</div>` : ''}
     ${ideas ? `<div class="group-title">Ваши идеи</div><div class="panel">${ideas}</div>` : ''}
-    <div class="notice ok">${I.shield}<div><b>Не на сервере:</b> поездки, заработок, норма, отвлечения, документы, заметки и телефонная книжка — они только в вашем телефоне.</div></div>
+    <div class="notice ok">${I.shield}<div><b>Не на сервере:</b> поездки, заработок, отвлечения, норма часов, документы, заметки и телефонная книжка — они только в вашем телефоне.</div></div>
     <div class="hint">Ещё 30 дней сервер хранит журнал входов (IP-адрес, браузер, время) — для защиты от взлома. Его можно запросить на ${esc(OPERATOR.email)}.</div>`;
 }
 
