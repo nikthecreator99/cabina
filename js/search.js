@@ -4,6 +4,7 @@ import { I, esc, small, pageHead, highlight, searchWords, normSearch, MONTHS, MO
 import { S, statsOf, routeOf, locoLabel, isLive, nowLocal, locosOf, locosText } from './store.js';
 import { fmtDur } from './calc.js';
 import { TRIP_KINDS, kindOf } from './forms.js';
+import { matesText } from './mates.js';
 
 export const SEARCH_LIMIT = 100;
 const p2 = (n) => String(n).padStart(2, '0');
@@ -23,7 +24,7 @@ export function tripHaystack(t) {
   const note = S.notes.find((n) => n.tripId === t.id)?.text || '';
   const locos = locosOf(t).flatMap((l) => [locoLabel(l.type, l.number), l.type, l.number]);
   return normSearch([routeOf(t), ...locos, t.routeNo ? `маршрут ${t.routeNo}` : '', ...(t.passenger || []).map((p) => (p?.train ? `поезд ${String(p.train).slice(0, 8)}` : '')),
-    TRIP_KINDS[kindOf(t)].label, d.text, d.alt, note].join(' '));
+    TRIP_KINDS[kindOf(t)].label, d.text, d.alt, note, matesText(t)].join(' '));
 }
 
 export function searchTrips(q, trips = S.trips) {

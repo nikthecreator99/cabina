@@ -7,6 +7,7 @@ import { fmtDur, parseLocal, dateKeyOf, DAY, MIN, legsOf, LEG_NAMES } from './ca
 import { tripPay, hasRate, fmtRub } from './pay.js';
 import { dayOffIntervals } from './rest.js';
 import { TRIP_KINDS, ABS_TYPES, openTripForm, openAbsenceForm } from './forms.js';
+import { matesOf, matesText } from './mates.js';
 
 const dayStart = (key) => parseLocal(`${key}T00:00`);
 
@@ -55,6 +56,7 @@ function tripCard(t, key, ctx) {
       ${pass ? kv(`${small(I.passenger, 14)} Пассажиром`, fmtDur(pass)) : ''}
       ${loco ? kv(`${small(I.train, 14)} Локомотив`, esc(loco)) : ''}
       ${t.routeNo ? kv('Номер маршрута', esc(t.routeNo)) : ''}
+      ${matesOf(t).length ? kv(matesOf(t).length > 1 ? 'Напарники' : 'Напарник', esc(matesText(t))) : ''}
       ${trainsOf(t) ? kv(`${small(I.passenger, 14)} Поезд (пассажиром)`, esc(trainsOf(t))) : ''}
       ${pay && pay.net > 0 ? kv(`${small(I.wallet, 14)} Заработок`, `<span class="money">≈ ${fmtRub(pay.net)}</span>`) : ''}
     </div>
