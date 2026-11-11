@@ -24,7 +24,7 @@ export async function mockServer(context, init = {}) {
     groups: [], members: [], ginvites: [], codes: {}, bans: [], groupsOff: false, oldGroups: false,
     // 2.28: просьбы показать статус (как в миграции 0010). asksOff — сервер без шага 10; sentAsks — что отправил я
     asks: [], sentAsks: [], asksOff: false,
-    // 2.29: заметки о локомотивах (как в миграции 0011): чужие — от коллег; мои — то, что прислал sync_loco_notes. notesOff — сервер без шага 11
+    // 2.30: заметки о локомотивах (как в миграции 0011): чужие — от коллег; мои — то, что прислал sync_loco_notes. notesOff — сервер без шага 11
     colNotes: [], myNotes: [], votes: [], notesOff: false, ...init,
   };
   let seq = 0;

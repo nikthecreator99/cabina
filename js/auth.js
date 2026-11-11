@@ -49,7 +49,7 @@ function store(s) {
     else { localStorage.removeItem(KEY); localStorage.removeItem(TOUCH_KEY); localStorage.removeItem(COLLEAGUES_KEY); }
   } catch {}
 }
-// выход: вход забываем, а заметки коллег (2.29, это чужие данные) стираем из телефона
+// выход: вход забываем, а заметки коллег (2.30, это чужие данные) стираем из телефона
 export const forget = () => { store(null); try { localStorage.removeItem('cabina-col-notes'); } catch {} };
 
 // Ответ сервера о входе → то, что храним в телефоне

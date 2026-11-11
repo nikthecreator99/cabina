@@ -30,7 +30,7 @@ function account(name = 'Иван') {
   const code = `LCN${++n}`.padEnd(10, 'X');
   q(`insert into private.invites (code_hash) values (private.hash_code('${code}'))`);
   const r = db.sql(`insert into auth.users (email, raw_user_meta_data)
-    values ('l${n}@example.test', '{"consent":"privacy-5","invite":"${code}","platform":"web","version":"2.29.0"}'::jsonb) returning id`, 'auth');
+    values ('l${n}@example.test', '{"consent":"privacy-5","invite":"${code}","platform":"web","version":"2.30.0"}'::jsonb) returning id`, 'auth');
   assert.ok(r.ok, r.err);
   const id = r.rows[0];
   q(`select public.save_card(${lit(name)}, null, null, null, false)`, id);

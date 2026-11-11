@@ -6,7 +6,7 @@ import { computeAwards, grantAccountAward, awardArt, AWARDS, AWARD_GROUPS, MEDAL
 
 beforeEach(() => { S.trips = []; S.routes = []; S.profile = { id: 'profile' }; });
 
-test('«Свой человек»: особая награда в группе «Особые», одна ступень; всего наград — 40 (с 2.20: «Наставник» и «Идейный», с 2.29 — «Полезный совет»)', () => {
+test('«Свой человек»: особая награда в группе «Особые», одна ступень; всего наград — 40 (с 2.20: «Наставник» и «Идейный», с 2.30 — «Полезный совет»)', () => {
   const a = AWARDS.find((x) => x.id === 'account');
   assert.ok(a);
   assert.equal(a.name, 'Свой человек');

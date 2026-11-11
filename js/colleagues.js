@@ -169,7 +169,7 @@ export function buildSnapshot(me, { consents, links, cards, statuses, places, ac
   return out;
 }
 
-// Заметки о локомотивах (2.29): свои (сколько «полезно») и заметки коллег, которые сервер мне отдал (RLS).
+// Заметки о локомотивах (2.30): свои (сколько «полезно») и заметки коллег, которые сервер мне отдал (RLS).
 // Всё с сервера — непроверенное: строки только через cleanText, месяц — только «ГГГГ-ММ», чужие — только от моих коллег.
 // Старый сервер без таблицы — notesOn: false (заметки коллег не показываем, свои не отправляем).
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])/;
@@ -374,7 +374,7 @@ export function loadColleagues({ force = false } = {}) {
   C.loading = (async () => {
     // просьбы показать статус (2.28) — отдельно и необязательно: сервер без шага 10 «Коллег» не ломает
     const asking = restGet('status_asks?select=asker,state,asked_at&state=eq.open&order=asked_at.desc&limit=50');
-    // заметки о локомотивах (2.29) — тоже необязательно: скачиваем все видимые и ищем локомотив в телефоне
+    // заметки о локомотивах (2.30) — тоже необязательно: скачиваем все видимые и ищем локомотив в телефоне
     const noting = Promise.all([
       restGet('loco_notes?select=id,user_id,note_key,loco_type,loco_num,body,month,useful&limit=2000'),
       restGet('loco_note_votes?select=note_id&limit=2000'),
@@ -488,7 +488,7 @@ async function sync() {
       const r = await rpc('clear_status');
       if (r?.ok) { last.status = ''; last.statusAt = 0; snap.myStatus = null; }
     }
-    // заметки для коллег (2.29): весь список целиком; показывать некому — пустой (сервер и так ничего не хранит)
+    // заметки для коллег (2.30): весь список целиком; показывать некому — пустой (сервер и так ничего не хранит)
     if (snap.notesOn) {
       const want = accessMode(snap, 'notes').mode === 'none' ? [] : notesPayload();
       const m = mark(want);
@@ -501,7 +501,7 @@ async function sync() {
   } finally { syncing = false; }
 }
 
-// ---------------------------------------------------------------- заметки о локомотивах для коллег (2.29)
+// ---------------------------------------------------------------- заметки о локомотивах для коллег (2.30)
 
 // Мои заметки, у которых включено «Показать коллегам»: что уходит на сервер. Только серия, номер, текст до 300 знаков
 // и месяц (без дня и времени, без поездки). Свежие — первыми, не больше 200.
@@ -1047,7 +1047,7 @@ export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
       ${nums || fact('Коллеги', 'Пока нет')}`
     : '<div class="row"><div class="grow t2">Вы не включали «Коллеги» — о коллегах на сервере ничего нет.</div></div>';
 
-  // заметки для коллег (2.29): локомотив, текст, месяц, сколько «полезно»
+  // заметки для коллег (2.30): локомотив, текст, месяц, сколько «полезно»
   const lnRows = arr(d.loco_notes).filter((x) => x && typeof x === 'object' && typeof x.body === 'string').map((x) => {
     const m = MONTH_RE.exec(typeof x.month === 'string' ? x.month : '');
     const useful = Number.isInteger(x.useful) && x.useful > 0 ? x.useful : 0;
