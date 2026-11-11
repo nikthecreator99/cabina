@@ -1308,7 +1308,6 @@ export function openRouteForm(id, preset, opts = {}) {
         ${rows.map((r, i) => `<div class="st-item" data-k="${esc(r.k)}">
           <span class="st-dot" aria-hidden="true"></span>
           <input class="input" data-st-name value="${esc(r.name)}" maxlength="60" autocomplete="off" placeholder="Станция ${i + 1}" aria-label="Станция ${i + 1}">
-          <button type="button" class="icon-btn" data-act="st-up" ${i ? '' : 'disabled'} aria-label="Выше">${small(I.up, 18)}</button>
           <button type="button" class="icon-btn danger" data-act="st-del" aria-label="Убрать станцию">${small(I.x, 18)}</button>
         </div>`).join('')}
         <div class="st-end"><span class="st-dot" aria-hidden="true"></span>${esc(endName('#rf-to', 'Конец участка'))}</div>
@@ -1358,11 +1357,10 @@ export function openRouteForm(id, preset, opts = {}) {
       return;
     }
     if (act === 'st-add') { const r = { k: uid(), orig: null, name: '' }; rows.push(r); renderSt(); focusRow(r.k); return; }
-    if (act === 'st-del' || act === 'st-up') {
-      const r = rowOf(b); const i = rows.indexOf(r);
+    if (act === 'st-del') {
+      const i = rows.indexOf(rowOf(b));
       if (i < 0) return;
-      if (act === 'st-del') rows.splice(i, 1);
-      else if (i > 0) [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]];
+      rows.splice(i, 1);
       renderSt(); return;
     }
     if (act === 'st-done') { rows = rows.filter((r) => r.name.trim()); stOpen = false; renderSt(); return; }
