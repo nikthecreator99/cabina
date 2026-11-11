@@ -1544,7 +1544,12 @@ button.pr-status svg { color: var(--text-2); }
 }
 
 /* ---- 2.22: группы ---- */
-.grp-btns { display: grid; gap: 10px; }
+.grp-btns { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.grp-btns .btn { min-height: 48px; padding: 6px 14px; gap: 8px; line-height: 1.15; text-align: center; white-space: nowrap; }
+@media (max-width: 380px) { .grp-btns .btn { white-space: normal; padding: 6px 10px; } }
+:root[data-text] .grp-btns .btn { white-space: normal; }
+.grp-btns .btn svg { flex: none; }
+@media (max-width: 340px) { .grp-btns .btn { font-size: calc(15px * var(--fs)); gap: 6px; padding: 6px 8px; } }
 .grp-ava { display: grid; place-items: center; background: color-mix(in srgb, var(--night) 18%, transparent); color: var(--night); }
 .grp-ava svg { width: 22px; height: 22px; }
 .grp-sub { margin-top: -6px; }
@@ -2260,3 +2265,16 @@ button.pr-status svg { color: var(--text-2); }
 .col-ask { margin-top: 10px; width: 100%; }
 .col-asked { margin-top: 8px; }
 .col-ask-note { margin-bottom: 12px; }
+
+/* 2.29: «Группы» — шестерёнка, поиск, выпадающие списки приватности */
+.grp-gear-btn svg { width: 24px; height: 24px; }
+.grp-search { margin: 14px 0 0; }
+.grp-search + #grp-list .grp-sec-title:first-child { margin-top: 18px; }
+.grp-drop { margin-bottom: 10px; }
+.grp-drop-head { width: 100%; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card-solid); text-align: left; }
+.grp-drop-head[aria-expanded="true"] { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.grp-chev { flex: none; color: var(--muted); display: grid; transition: transform .15s; }
+.grp-drop-head[aria-expanded="true"] .grp-chev { transform: rotate(180deg); }
+.grp-drop-list { border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 0; }
+.grp-col-priv { display: block; margin: 14px 0 4px; background: none; border: 0; padding: 0; min-height: 36px; color: var(--text); text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .grp-chev { transition: none; } }

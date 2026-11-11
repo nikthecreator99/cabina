@@ -44,16 +44,15 @@ const openGroup = async (page, name) => {
   await page.locator('#grp-members').waitFor();
 };
 
-test('«Группы» по макету: «Создать» и «Вступить по коду» рядом, «Вы администратор» / «Вы участник», приватность и «?»', async () => {
+test('«Группы» (2.29): шестерёнка вместо «?», «Создать» и «Вступить» спрятаны, поиск, «Вы администратор» / «Вы участник»', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, NEW, TWO);
   await openGroups(page);
-  // кнопки — рядом, «Создать» слева
-  const cr = await box(page.locator('#grp-new'));
-  const jn = await box(page.locator('#grp-join'));
-  assert.ok(Math.abs(cr.y - jn.y) < 2 && cr.x < jn.x, 'кнопки в одну строку');
-  assert.match(await text(page, '#grp-new'), /Создать/);
-  assert.match(await text(page, '#grp-join'), /Вступить по коду/);
+  // на экране с группами нет «Создать» / «Вступить» / «?» / нижней ссылки — они в шестерёнке
+  assert.equal(await page.locator('#grp-new, #grp-join, #grp-help, #grp-privacy').count(), 0);
+  const gear = await box(page.locator('#grp-gear'));
+  const back = await box(page.locator('.page-head [data-act=back]'));
+  assert.ok(gear.x > back.x && Math.abs(gear.y - back.y) < 6, 'шестерёнка справа в шапке');
   // разделы и порядок
   const all = await text(page, '#grp-list');
   assert.match(all, /Вы администратор\s*1[\s\S]*ТД-64[\s\S]*2 участника[\s\S]*Вы участник\s*1[\s\S]*Колонна № 3[\s\S]*3 участника/);
@@ -65,14 +64,62 @@ test('«Группы» по макету: «Создать» и «Вступит
   // напоминание у групп, где я свой статус не показываю
   assert.match(await text(page, '#grp-mem'), /Покажите свой статус — увидите коллег/);
   await shot(page, 'groups-dark-390');
-  // «?» — как работают группы
-  await page.locator('#grp-help').click();
-  assert.match(await text(page, '#grp-help-body'), /Вы администратор[\s\S]*Вы участник[\s\S]*Статус — взаимно[\s\S]*геолокации в приложении нет/);
+  // поиск по названию: «тд64» → только ТД-64; «колонна» → только участник; пусто — «такой нет»
+  await page.locator('#grp-q').fill('тд64');
+  assert.equal(await page.locator('#grp-list [data-act=grp-open]').count(), 1);
+  assert.match(await text(page, '#grp-list'), /ТД-64/);
+  assert.doesNotMatch(await text(page, '#grp-list'), /Колонна/);
+  await page.locator('#grp-q').fill('колонна 3');
+  assert.match(await text(page, '#grp-list'), /Вы участник[\s\S]*Колонна № 3/);
+  assert.doesNotMatch(await text(page, '#grp-list'), /Вы администратор/);
+  await page.locator('#grp-q').fill('ыыы');
+  assert.match(await text(page, '#grp-none'), /Группы с таким названием нет/);
+  await page.locator('.grp-search .search-x').click();
+  assert.equal(await page.locator('#grp-list [data-act=grp-open]').count(), 2, 'очистили — снова все');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'grp-q');
+  // шестерёнка: создать, вступить по коду, как работают группы, приватность по всем группам
+  await page.locator('#grp-gear').click();
+  const g = top(page);
+  await g.locator('#grp-gear-body').waitFor();
+  assert.match(await text(page, '#grp-gear-body'), /Создать группу[\s\S]*Вступить по коду[\s\S]*Как работают группы[\s\S]*Приватность[\s\S]*Кто меня видит[\s\S]*Видят, где я[\s\S]*Приватность для коллег/i);
+  await shot(page, 'groups-gear-dark-390');
+  await g.locator('#gear-help').click();
+  assert.match(await text(page, '#grp-help-body'), /Вы администратор[\s\S]*Вы участник[\s\S]*Шестерёнка[\s\S]*Статус — взаимно[\s\S]*геолокации в приложении нет/);
   await top(page).locator('.sheet-head [data-close]').click();
-  // «Настройки приватности» ведут в «Приватность»
-  assert.match(await text(page, '.grp-priv'), /Вы сами решаете, кому виден ваш статус/);
-  await page.locator('#grp-privacy').click();
+  // «Приватность для коллег» ведёт в «Приватность»
+  await page.locator('#grp-gear').click();
+  await top(page).locator('#gear-col-priv').click();
   await page.locator('#pv-access').waitFor();
+  assert.deepEqual(realErrors(errors), []);
+  await context.close();
+});
+
+test('шестерёнка: «Кто меня видит» и «Видят, где я» — выпадающие списки своих групп, включение по группам', async () => {
+  const { context, page, errors } = await openApp(env);
+  const srv = await ready(context, page, NEW, TWO);
+  await openGroups(page);
+  await page.locator('#grp-gear').click();
+  const g = () => top(page);
+  assert.match(await text(page, '#grp-gear-priv'), /Кто меня видит\s*Никто · статус группе[\s\S]*Видят, где я\s*Никто/);
+  assert.equal(await page.locator('#grp-drop-status').count(), 0, 'список закрыт, пока не раскрыли');
+  await g().locator('[data-act=grp-drop][data-k=status]').click();
+  const dropText = await text(page, '#grp-drop-status');
+  assert.match(dropText, /ТД-64\s*Не видят/);
+  assert.match(dropText, /Колонна № 3\s*Не видят/);
+  // «где я» без статуса — выключено
+  await g().locator('[data-act=grp-drop][data-k=place]').click();
+  assert.equal(await g().locator('#grp-drop-place .switch:not([disabled])').count(), 0);
+  // включаем статус для «Колонны № 3»
+  const col = g().locator('#grp-drop-status .row', { hasText: 'Колонна № 3' }).locator('.switch');
+  await col.click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#grp-drop-status .row')].some((r) => /Колонна № 3/.test(r.innerText) && r.querySelector('.switch')?.getAttribute('aria-checked') === 'true'));
+  assert.equal(srv.calls('set_group_share').at(-1).body.p_status, true);
+  assert.match(await text(page, '#grp-gear-priv'), /Кто меня видит\s*1 из 2 групп/);
+  // «где я» теперь доступно только у этой группы
+  assert.equal(await g().locator('#grp-drop-place .switch:not([disabled])').count(), 1);
+  await g().locator('.sheet-head [data-close]').click();
+  assert.match(await text(page, '#grp-mem'), /Колонна № 3/);
+  assert.doesNotMatch(await text(page, '#grp-mem'), /Покажите свой статус — увидите коллег/, 'на экране групп напоминание ушло');
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });
@@ -204,11 +251,9 @@ test('картинка группы: текст «ТД-64» (размер, шр�
   await top(page).locator('#gpic-text').fill('  ');
   await top(page).locator('#gpic-save').click();
   await top(page).getByText(/Впишите текст/).waitFor();
-  // цифра
-  await top(page).locator('[data-act=gpic-kind][data-v=num]').click();
-  await top(page).locator('[data-act=gpic-n][data-v="7"]').click();
-  assert.equal(await top(page).locator('#gpic-preview text').innerHTML(), '7');
-  await shot(page, 'pic-editor-num');
+  // цифр в редакторе нет (2.29, просьба Никиты): только «Рисунок» и «Текст»
+  assert.equal(await top(page).locator('[data-act=gpic-kind][data-v=num], [data-act=gpic-n]').count(), 0);
+  assert.equal(await top(page).locator('[data-act=gpic-kind]').count(), 2);
   // рисунок: восемь своих
   await top(page).locator('[data-act=gpic-kind][data-v=art]').click();
   assert.equal(await top(page).locator('[data-act=gpic-a]').count(), 8);
@@ -235,6 +280,35 @@ test('картинка группы: текст «ТД-64» (размер, шр�
   await context.close();
 });
 
+test('группа администратора (2.29): «Пригласить коллегу» и «QR-код» в одну строку, без «Изменить картинку» и значка на картинке, карандаш — название и картинка', async () => {
+  const { context, page, errors } = await openApp(env);
+  const srv = await ready(context, page, NEW, TWO);
+  await openGroups(page);
+  await openGroup(page, 'ТД-64');
+  const a = await box(page.locator('#grp-invite'));
+  const b = await box(page.locator('#grp-code'));
+  assert.ok(Math.abs(a.y - b.y) < 2 && a.x < b.x, 'две кнопки в одну строку');
+  assert.match(await text(page, '#grp-invite'), /Пригласить коллегу/);
+  assert.match(await text(page, '#grp-code'), /QR-код/);
+  assert.equal(await page.locator('.grp-pic-edit').count(), 0, 'значка-карандаша на картинке нет');
+  assert.doesNotMatch(await text(page, '#grp-page'), /Изменить картинку|Сделать картинку/);
+  await shot(page, 'group-admin-dark-390');
+  // карандаш вверху справа: название и картинка
+  await page.locator('#grp-edit').click();
+  assert.match(await text(page, '#layers'), /Изменить группу[\s\S]*Название[\s\S]*ТД-64[\s\S]*Картинка/);
+  await top(page).locator('#edit-pic').click();
+  await top(page).locator('#gpic-preview').waitFor();
+  await top(page).locator('.sheet-head [data-close]').click();
+  assert.equal(srv.calls('set_group_pic').length, 0, 'закрыли без сохранения — ничего не ушло');
+  // участник: карандаша и кнопок нет, но «Приватность» есть
+  await page.locator('.page-head [data-act=back]').click();
+  await openGroup(page, 'Колонна № 3');
+  assert.equal(await page.locator('#grp-edit, #grp-invite, #grp-code').count(), 0);
+  assert.equal(await page.locator('#grp-priv-btn').count(), 1);
+  assert.deepEqual(realErrors(errors), []);
+  await context.close();
+});
+
 for (const theme of ['light', 'dark']) {
   test(`320 px, очень крупный текст, ${theme === 'light' ? 'светлая' : 'тёмная'} тема: всё влезает`, async () => {
     const { context, page, errors } = await openApp(env);
@@ -245,6 +319,11 @@ for (const theme of ['light', 'dark']) {
     await openGroups(page);
     assert.ok(await fits(page), 'экран «Группы» без прокрутки вбок');
     await shot(page, `groups-${theme}-320-xl`);
+    await page.locator('#grp-gear').click();
+    await top(page).locator('[data-act=grp-drop][data-k=status]').click();
+    assert.ok(await fits(page), 'шестерёнка без прокрутки вбок');
+    await shot(page, `groups-gear-${theme}-320-xl`);
+    await top(page).locator('.sheet-head [data-close]').click();
     await openGroup(page, 'Колонна № 3');
     assert.ok(await fits(page), 'группа без прокрутки вбок');
     await page.waitForSelector('#grp-nudge');
