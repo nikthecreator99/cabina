@@ -19,11 +19,11 @@ test('вещи за приглашения: Премиум их не откры�
   assert.equal(prem0.hat, null);
   assert.equal(prem0.bg, 'mist');
   const prem3 = A.normalizeAvatar(worn, { premium: true, invited: 3 });
-  assert.equal(prem3.outfit, 'leather');
+  assert.equal(prem3.hat, 'ushanka');
   assert.equal(prem3.bg, 'beam');
-  assert.equal(prem3.hat, null, 'ушанка — за 5');
+  assert.equal(prem3.outfit, 'vestO', 'кожанка — за 5 (с 2.32.1)');
   const free5 = A.normalizeAvatar(worn, { premium: false, invited: 5 });
-  assert.equal(free5.hat, 'ushanka');
+  assert.equal(free5.outfit, 'leather');
   // без invited и с premium — «нарисовать как есть»: примерка в редакторе и карточка коллеги
   assert.equal(A.normalizeAvatar(worn, { premium: true }).outfit, 'leather');
   // без Премиума и без числа — вещи снимаются

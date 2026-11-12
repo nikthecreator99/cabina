@@ -49,6 +49,9 @@ export const AWARDS = [
   { id: 'holiday', g: 'holidays', color: 'repeat', name: 'Праздник в кабине', how: 'Работа в официальный праздничный день. Даётся за каждый такой день.', fun: 'Пока все отдыхали, вы работали.', key: 'holiday', repeat: true, goals: [1] },
   // 2.19.4, просьба Никиты: за аккаунт CABINA. flag — «да или нет», без счёта и полоски прогресса
   { id: 'account', g: 'special', color: 'special', name: 'Свой человек', how: 'Создать аккаунт CABINA.', fun: 'Пропуск выдан — добро пожаловать в команду!', key: 'account', flag: true, goals: [1] },
+  // 2.32.1, просьба Никиты: за созданную группу коллег. Как «Свой человек» — только день в телефоне (profile.groupAward).
+  // Рисунок group.webp — временный (Никита потом заменит)
+  { id: 'group', g: 'special', color: 'special', name: 'Своя бригада', how: 'Создать группу коллег (Профиль → «Группы»).', fun: 'Собрали своих — теперь вы бригадир.', key: 'groupMade', flag: true, goals: [1] },
   // 2.20: числа с сервера (засчитанные приглашения, принятые идеи) хранятся в телефоне и только растут — полученное не отбираем
   { id: 'mentor', g: 'special', name: 'Наставник', how: 'Коллеги, пришедшие по вашему личному приглашению: подтвердили почту и заходили в CABINA в 3 разных дня', fun: 'Вы привели коллег — теперь вы наставник.', key: 'invited', goals: [1, 5, 10], unit: (n) => plural(n, 'коллега', 'коллеги', 'коллег') },
   // 2.31, просьба Никиты: коллеги отметили «Полезно» вашу заметку о локомотиве. Число с сервера, только растёт; даётся каждый раз
@@ -153,6 +156,8 @@ export function computeAwards(trips = S.trips) {
   // Из резервной копии — непроверенное, поэтому только строка-дата.
   const acc = S.profile?.accountAward;
   if (typeof acc === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(acc)) { c.account = 1; Object.assign(aw.account, { tier: 1, days: [acc] }); }
+  const grp = S.profile?.groupAward;
+  if (typeof grp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(grp)) { c.groupMade = 1; Object.assign(aw.group, { tier: 1, days: [grp] }); }
   // «Наставник» и «Идейный»: числа, запомненные в телефоне (countOf), и день каждой ступени
   for (const [id, key] of [['mentor', 'invited'], ['idea', 'ideas']]) {
     const x = countOf(key);
@@ -181,6 +186,14 @@ const medalsOf = (aw) => AWARDS.reduce((s, a) => s + aw[a.id].tier, 0);
 export async function grantAccountAward(day) {
   if (S.profile?.accountAward || !/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return false;
   await saveProfile({ accountAward: day });
+  return true;
+}
+
+// «Своя бригада» (2.32.1): отметить, что человек создал группу (или уже администратор группы). Только день, на сервер не уходит;
+// группа удалена или права переданы — награда остаётся
+export async function grantGroupAward(day) {
+  if (S.profile?.groupAward || !/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return false;
+  await saveProfile({ groupAward: day });
   return true;
 }
 

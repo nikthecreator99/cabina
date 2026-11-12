@@ -50,7 +50,8 @@ test('следование и ожидание: заполненные — ко�
   const pass = f.locator('#tf-pass .interval.short[data-pid=p1]');
   await pass.waitFor();
   assert.match(await pass.innerText(), /Пассажиром[\s\S]*11:00 – 14:00[\s\S]*3 ч[\s\S]*поезд 6501/);
-  assert.match(await f.locator('#tf-pass .interval.wait.short[data-pid=w1]').innerText(), /Ожидание[\s\S]*10:00 – 11:00/);
+  // с 2.32.1 ожидание — в той же строке, что и его следование
+  assert.match(await pass.innerText(), /ожидание 10:00 – 11:00 · 1 ч/);
   assert.equal(await f.locator('#tf-pass input[data-pf=st]').count(), 0, 'свёрнуто — полей нет');
   // компактная строка ниже карточки
   const h = (await pass.boundingBox()).height;
@@ -192,7 +193,7 @@ test('профиль: «Найти», «Пригласить коллег» бе
   await context.close();
 });
 
-test('ожидание стоит строго над своим следованием: второе следование — кнопка ожидания над ним', async () => {
+test('ожидание — внутри своего следования (с 2.32.1): у второго следования своя кнопка ожидания', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { trips: [{ id: 't1', routeLabel: 'Сосновка → Ольховка', start: '2026-10-19T06:00', end: '2026-10-19T20:00', restType: 'turnaround',
     passenger: [{ id: 'p1', start: '2026-10-19T11:00', end: '2026-10-19T14:00' }], waiting: [{ id: 'w1', start: '2026-10-19T10:00', end: '2026-10-19T11:00' }] }] });
@@ -200,16 +201,12 @@ test('ожидание стоит строго над своим следова�
   await page.locator('[data-act=trip][data-id=t1]').first().click();
   const f = sheet(page);
   await f.locator('#tf-pass [data-pid=p1]').waitFor();
-  const order = () => f.locator('#tf-pass > *').evaluateAll((els) => els.map((e) => e.id === 'tf-add-wait' ? 'add-wait' : `${e.classList.contains('wait') ? 'w' : 'p'}:${e.dataset.pid}`));
-  assert.deepEqual(await order(), ['w:w1', 'p:p1']);
+  assert.equal(await f.locator('#tf-pass > *').count(), 1, 'одна строка: следование с ожиданием');
   await f.locator('[data-act=add-pass]').click();
-  const p2 = (await order()).at(-1);
-  assert.deepEqual(await order(), ['w:w1', 'p:p1', 'add-wait', p2]);
-  await f.locator('#tf-add-wait').click();
-  const o = await order();
-  assert.equal(o.length, 4);
-  assert.deepEqual([o[0], o[1], o[3]], ['w:w1', 'p:p1', p2]);
-  assert.match(o[2], /^w:/, 'второе ожидание — прямо над вторым следованием');
+  const p2 = f.locator('#tf-pass > .interval').nth(1);
+  assert.equal(await p2.locator('#tf-add-wait').count(), 1);
+  await p2.locator('#tf-add-wait').click();
+  assert.equal(await p2.locator('.iv-wait').count(), 1, 'второе ожидание — в карточке второго следования');
   assert.equal(await f.locator('#tf-add-wait').count(), 0);
   assert.doesNotMatch(await f.locator('#tf-pass').innerText(), /Окончание можно не указывать|не локомотива/);
   assert.deepEqual(realErrors(errors), []);

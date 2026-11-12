@@ -192,7 +192,7 @@ test('награды: в профиле над коллегами, своих ч
   trips.push({ id: 'long', routeId: 'r1', start: '2026-10-08T06:00', end: '2026-10-08T18:30' });
   await seed(page, { routes: [{ ...ROUTES[0], weightNorm: 5199 }, ROUTES[1]], trips });
   await tab(page, 'profile');
-  assert.match(await text(page, '#pr-awards .group-title'), /Награды\s+Все \d+ из 40/i);
+  assert.match(await text(page, '#pr-awards .group-title'), /Награды\s+Все \d+ из 41/i);
   assert.equal(await page.locator('.profile-tiles').count(), 0, 'своих часов и поездок в профиле нет');
   assert.equal(await page.locator('#pr-records, .screen #aw-records').count(), 0, 'рекордов в профиле нет (2.19.2) — они внутри наград');
   await page.locator('#pr-awards .aw-strip').click();

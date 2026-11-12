@@ -314,6 +314,7 @@ export function openTripForm(tripId) {
 
   const body = `
     ${existing ? '<div class="summary-top" id="tf-summary"></div>' : `<button class="btn btn-ghost btn-sm recv-btn" type="button" data-act="tf-receive">${I.qr} Получить поездки от напарника</button>`}
+    <div class="field" id="tf-mates-field"><div id="tf-mates"></div></div>
     <div class="field">
       <div class="label" id="tf-route-cap">Участок <span class="opt">· необязательно</span></div>
       <button class="pick" type="button" data-act="pick-route">${I.route}<span class="grow" id="tf-route-label"></span>${I.right}</button>
@@ -367,7 +368,6 @@ export function openTripForm(tripId) {
         <label for="tf-rn" class="mini-label">Номер маршрута</label>
         <input id="tf-rn" class="input" inputmode="numeric" placeholder="Например, 123456" autocomplete="off" maxlength="20">
       </div>
-      <div id="tf-mates"></div>
     </div>
     <div class="field"><div id="tf-calc"></div></div>
     <div class="field rest-field" id="tf-rest-field">
@@ -556,37 +556,55 @@ export function openTripForm(tripId) {
     else setHTML(box, '');
   }
   // интервал «пассажиром» (kind = 'pass') или «ожидание следования пассажиром» (kind = 'wait')
-  // 2.21.2 (Никита): заполненное (есть начало и окончание) — компактная строка, нажатие разворачивает
+  // 2.21.2 (Никита): заполненное (есть начало и окончание) — компактная строка, нажатие разворачивает.
+  // 2.32.1 (Никита): отдельной кнопки «Ожидание следования пассажиром» нет — ожидание указывается в карточке своего
+  // следования пассажиром (сверху, потому что сначала ждут, потом едут). Ожидания по-прежнему по одному на следование,
+  // по порядку: ожидание №1 — к следованию №1 (F.waiting[i] ↔ F.passenger[i])
   const done = (p) => !!(p.sd && p.st && p.ed && p.et);
+  const waitOf = (i) => (i < F.passenger.length ? F.waiting[i] || null : null);
+  const ivDur = (p) => Math.max(0, (parseLocal(`${p.ed}T${p.et}`) - parseLocal(`${p.sd}T${p.st}`)) / MIN);
   const shortHtml = (p, i, kind) => {
     const a = `${p.sd}T${p.st}`, b = `${p.ed}T${p.et}`;
     const day = (x) => (x.slice(0, 10) !== (F.sd || x.slice(0, 10)) ? `${dayMonth(parseLocal(x))}, ` : '');
-    const dur = Math.max(0, (parseLocal(b) - parseLocal(a)) / MIN);
+    const w = kind === 'pass' ? waitOf(i) : null;
     const what = kind === 'wait' ? `${I.clock} Ожидание${F.passenger.length > 1 || F.waiting.length > 1 ? ` №${i + 1}` : ''}` : `${I.passenger} Пассажиром${F.passenger.length > 1 ? ` №${i + 1}` : ''}`;
-    return `<button type="button" class="interval short${kind === 'wait' ? ' wait' : ''}" data-act="pass-open" data-pid="${esc(p.id)}" data-iv="${kind}" aria-label="${kind === 'wait' ? 'Ожидание' : 'Следование пассажиром'}: развернуть">
-        <span class="iv-what">${what}</span>
-        <span class="iv-when"><b>${day(a)}${esc(p.st)} – ${day(b)}${esc(p.et)}</b><small>${fmtDur(dur, { short: true })}${kind === 'pass' && trainNo(p.train) ? ` · поезд ${esc(trainNo(p.train))}` : ''}</small></span>
+    return `<button type="button" class="interval short${kind === 'wait' ? ' wait' : ''}" data-act="pass-open" data-pid="${esc(p.id)}" data-iv="${kind}" aria-label="${kind === 'wait' ? 'Ожидание' : `Следование пассажиром${w ? ' и ожидание' : ''}`}: развернуть">
+        <span class="iv-what"><span class="iv-name">${what}</span>${w ? `<small class="iv-wait-sum">${small(I.clock, 14)} ожидание ${esc(w.st)} – ${esc(w.et)} · ${fmtDur(ivDur(w), { short: true })}</small>` : ''}</span>
+        <span class="iv-when"><b>${day(a)}${esc(p.st)} – ${day(b)}${esc(p.et)}</b><small>${fmtDur(ivDur(p), { short: true })}${kind === 'pass' && trainNo(p.train) ? ` · поезд ${esc(trainNo(p.train))}` : ''}</small></span>
         <span class="chev">${I.down}</span></button>`;
   };
-  const intervalHtml = (p, i, kind) => done(p) && !p.open ? shortHtml(p, i, kind) : `
-      <div class="interval${kind === 'wait' ? ' wait' : ''}" data-pid="${esc(p.id)}" data-kind="${kind}">
-        <div class="interval-head"><span>${kind === 'wait' ? `${I.clock} Ожидание №${i + 1}` : `${I.passenger} Пассажиром №${i + 1}`}</span>
-          <button type="button" class="icon-btn danger" data-act="del-pass" data-pid="${esc(p.id)}" aria-label="Удалить интервал">${I.trash}</button></div>
-        <div class="mini-label">Начало</div>
+  const timesHtml = (p) => `<div class="mini-label">Начало</div>
         <div class="dt"><input type="date" class="input" data-pf="sd" value="${p.sd}" aria-label="Дата начала"><input type="time" class="input" data-pf="st" value="${p.st}" aria-label="Время начала"></div>
         <div class="mini-label">Окончание</div>
-        <div class="dt"><input type="date" class="input" data-pf="ed" value="${p.ed}" aria-label="Дата окончания"><input type="time" class="input" data-pf="et" value="${p.et}" aria-label="Время окончания"></div>
+        <div class="dt"><input type="date" class="input" data-pf="ed" value="${p.ed}" aria-label="Дата окончания"><input type="time" class="input" data-pf="et" value="${p.et}" aria-label="Время окончания"></div>`;
+  // ожидание внутри карточки следования: убрать можно последнее (иначе следующие ожидания «съедут» к другим следованиям)
+  const waitBlock = (w, i) => `<div class="iv-wait" data-pid="${esc(w.id)}" data-kind="wait">
+        <div class="interval-head"><span>${I.clock} Ожидание следования</span>
+          ${i === F.waiting.length - 1 ? `<button type="button" class="icon-btn danger" data-act="del-wait" data-pid="${esc(w.id)}" aria-label="Убрать ожидание">${I.trash}</button>` : ''}</div>
+        ${timesHtml(w)}</div>`;
+  const cardDone = (p, i, kind) => done(p) && (kind !== 'pass' || !waitOf(i) || done(waitOf(i)));
+  const intervalHtml = (p, i, kind) => {
+    if (cardDone(p, i, kind) && !p.open) return shortHtml(p, i, kind);
+    const w = kind === 'pass' ? waitOf(i) : null;
+    const canWait = kind === 'pass' && !w && i === F.waiting.length;
+    return `
+      <div class="interval${kind === 'wait' ? ' wait' : ''}" data-pid="${esc(p.id)}" data-kind="${kind}">
+        <div class="interval-head"><span>${kind === 'wait' ? `${I.clock} Ожидание №${i + 1}` : `${I.passenger} Пассажиром №${i + 1}`}</span>
+          <button type="button" class="icon-btn danger" data-act="del-pass" data-pid="${esc(p.id)}" aria-label="${kind === 'pass' && w ? 'Удалить следование и ожидание' : 'Удалить интервал'}">${I.trash}</button></div>
+        ${w ? waitBlock(w, i) : ''}
+        ${canWait ? `<button type="button" class="link-btn iv-add-wait" data-act="add-wait" id="tf-add-wait">${small(I.plus, 16)} Ожидание следования <small>· если ждали поезд</small></button>` : ''}
+        ${w ? `<div class="iv-sub">${I.passenger} Следование</div>` : ''}
+        ${timesHtml(p)}
         ${kind === 'pass' ? `<label class="mini-label" for="pf-train-${esc(p.id)}">Номер поезда <small>(необязательно)</small></label>
         <input class="input" id="pf-train-${esc(p.id)}" data-pf="train" value="${esc(p.train || '')}" maxlength="8" autocomplete="off" autocapitalize="characters" inputmode="text" placeholder="Например, 6501">` : ''}
-        ${done(p) ? `<button type="button" class="link-btn iv-fold" data-act="pass-fold" data-pid="${esc(p.id)}">${I.up} Свернуть</button>` : ''}
+        ${cardDone(p, i, kind) ? `<button type="button" class="link-btn iv-fold" data-act="pass-fold" data-pid="${esc(p.id)}">${I.up} Свернуть</button>` : ''}
       </div>`;
+  };
   function renderPass() {
-    // 2.21.2 (Никита): ожидание стоит строго над своим следованием пассажиром (по одному на каждое);
-    // кнопка «Ожидание следования пассажиром» — над первым следованием, у которого ожидания ещё нет
-    const addWait = `<button type="button" class="add-btn" data-act="add-wait" id="tf-add-wait">${I.clock} Ожидание следования пассажиром</button>`;
-    $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => (F.waiting[i] ? intervalHtml(F.waiting[i], i, 'wait') : i === F.waiting.length ? addWait : '') + intervalHtml(p, i, 'pass')).join('')
+    // ожидания сверх числа следований (старые записи) — отдельными карточками в конце
+    $(el, '#tf-pass').innerHTML = F.passenger.map((p, i) => intervalHtml(p, i, 'pass')).join('')
       + F.waiting.slice(F.passenger.length).map((w, j) => intervalHtml(w, F.passenger.length + j, 'wait')).join('');
-    if (F.passenger.length && !F.waiting.length) setTimeout(() => waitTour(el), 400);
+    if ($(el, '#tf-add-wait') && !F.waiting.length) setTimeout(() => waitTour(el), 400);
   }
   function renderKind() {
     $(el, '#tf-kind-label').textContent = TRIP_KINDS[F.kind].label;
@@ -801,7 +819,7 @@ export function openTripForm(tripId) {
       const list = box.dataset.kind === 'wait' ? F.waiting : F.passenger;
       const i = list.findIndex((x) => x.id === box.dataset.pid);
       const p = list[i];
-      if (!p || !done(p)) return;
+      if (!p || !cardDone(p, i, box.dataset.kind)) return;
       p.open = false;
       box.outerHTML = intervalHtml(p, i, box.dataset.kind);
     }, 0);
@@ -873,11 +891,18 @@ export function openTripForm(tripId) {
     } else if (act === 'add-wait') {
       if (F.waiting.length >= F.passenger.length) return;
       // сначала ждали, потом поехали: окончание ожидания = начало следования пассажиром (можно поправить)
-      const ref = F.passenger[Math.min(F.waiting.length, F.passenger.length - 1)];
+      const ref = F.passenger[F.waiting.length];
       const day = ref?.sd || F.ed || F.sd || today;
-      F.waiting.push({ id: uid(), sd: day, st: '', ed: day, et: ref?.st || '' });
+      const w = { id: uid(), sd: day, st: '', ed: day, et: ref?.st || '' };
+      F.waiting.push(w);
+      if (ref) ref.open = true;
       renderPass(); refreshAll();
-      const last = el.querySelectorAll('.interval.wait'); last[last.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const box = el.querySelector(`#tf-pass [data-pid="${CSS.escape(w.id)}"]`);
+      box?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      box?.querySelector('input[data-pf=st]')?.focus({ preventScroll: true });
+    } else if (act === 'del-wait') {
+      F.waiting = F.waiting.filter((p) => p.id !== b.dataset.pid);
+      renderPass(); refreshAll();
     } else if (act === 'pass-open' || act === 'pass-fold') {
       const p = [...F.passenger, ...F.waiting].find((x) => x.id === b.dataset.pid);
       if (!p) return;
@@ -887,7 +912,9 @@ export function openTripForm(tripId) {
       if (act === 'pass-open') box?.querySelector('input[data-pf=st]')?.focus({ preventScroll: true });
       else box?.focus({ preventScroll: true });
     } else if (act === 'del-pass') {
-      F.passenger = F.passenger.filter((p) => p.id !== b.dataset.pid);
+      // следование удаляется вместе со своим ожиданием (иначе ожидания «съедут» к другим следованиям)
+      const pi = F.passenger.findIndex((p) => p.id === b.dataset.pid);
+      if (pi >= 0) { if (pi < F.waiting.length) F.waiting.splice(pi, 1); F.passenger.splice(pi, 1); }
       F.waiting = F.waiting.filter((p) => p.id !== b.dataset.pid);
       renderPass(); refreshAll();
     } else if (act === 'loco-notes') {

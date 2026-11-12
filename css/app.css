@@ -120,7 +120,14 @@ svg { flex: none; }
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); color: #fff; font-size: calc(13px * var(--fs)); font-weight: 600;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.home-head { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 8px; min-height: 48px; }
+.home-head { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 8px; min-height: 48px; position: relative; }
+/* 2.32.1: солнце в шапке слева от лупы (за кнопками, над небом) */
+.home-sun { position: absolute; z-index: -1; top: 50%; right: 50px; width: 34px; height: 34px; margin-top: -21px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, var(--sun-core) 0 46%, color-mix(in srgb, var(--sun-mid) 80%, transparent) 60%, transparent 71%);
+  box-shadow: 0 0 26px 10px color-mix(in srgb, var(--sun-mid) 45%, transparent), 0 0 70px 30px color-mix(in srgb, var(--sun-mid) 22%, transparent); }
+.home-sun[data-phase="sunrise"], .home-sun[data-phase="sunset"] { width: 40px; height: 40px; margin-top: -16px; }
+/* узкий экран: стрелки месяца чуть уже, солнце меньше — чтобы оно было видно между месяцем и лупой */
+@media (max-width: 370px) { .home-head .month-switch button { width: 32px; } .home-sun, .home-sun[data-phase] { width: 26px; height: 26px; right: 46px; margin-top: -17px; } }
 .home-head .month-switch { justify-self: center; max-width: 100%; min-width: 0; }
 .home-head .month-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* очень крупный текст на узком экране: месяц не толкает кнопку поиска за край */
@@ -527,6 +534,17 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .interval .iv-fold { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; }
 .interval .iv-fold svg { width: 16px; height: 16px; }
 .interval .mini-label small { font-weight: 500; color: var(--muted); }
+.interval .iv-wait { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: color-mix(in srgb, var(--warn) 8%, var(--card)); border: 1px dashed color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.interval .iv-wait .interval-head > span, .interval .iv-sub { display: inline-flex; align-items: center; gap: 6px; }
+.interval .iv-wait .interval-head svg, .interval .iv-sub svg { width: 18px; height: 18px; }
+@media (max-width: 370px) { .interval .iv-wait { padding: 8px 4px; margin: 0 -6px; } }
+.interval .iv-sub { font-size: calc(13px * var(--fs)); font-weight: 700; color: var(--text-2); margin-top: 2px; }
+.interval .iv-add-wait { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 40px; text-align: left; }
+.interval .iv-add-wait small { font-weight: 500; color: var(--muted); }
+.interval.short .iv-what { flex-direction: column; align-items: flex-start; gap: 2px; }
+.interval.short .iv-name { display: inline-flex; align-items: center; gap: 6px; }
+.interval.short .iv-wait-sum { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; font-size: calc(12px * var(--fs)); color: var(--muted); overflow-wrap: anywhere; }
+.interval.short .iv-wait-sum svg { width: 14px; height: 14px; flex: none; }
 .mini-label { font-size: calc(12px * var(--fs)); color: var(--muted); }
 .link-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 12px; color: var(--night); font-weight: 700; background: color-mix(in srgb, var(--night) 10%, transparent); border: 1px solid color-mix(in srgb, var(--night) 25%, transparent); align-self: flex-start; }
 .add-btn { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); color: var(--text); font-weight: 700; width: 100%; text-align: left; }
@@ -2296,7 +2314,7 @@ button.pr-status svg { color: var(--text-2); }
 .ln-vote[data-vote="down"][aria-pressed="true"] { color: var(--text); border-color: var(--muted); background: var(--card-2); }
 .ln-from { margin-top: 18px; }
 /* 2.29: напарник в поездке — кнопка «+» и компактные «таблетки» */
-#tf-mates:not(:empty) { margin-top: 8px; }
+#tf-mates .mini-label:first-child { margin-top: 0; }
 #tf-mates .mini-label { display: block; margin: 4px 0 6px; }
 .mate-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .mate-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; max-width: 100%; padding: 0 4px 0 12px; border-radius: 99px; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--text); font-weight: 600; font-size: calc(14px * var(--fs)); }

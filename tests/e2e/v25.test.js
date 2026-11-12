@@ -107,11 +107,11 @@ test('ожидание следования: блок выше следован�
   await pass.locator('[data-pf=st]').fill('14:30');
   await pass.locator('[data-pf=et]').fill('16:00');
   await f.locator('#tf-add-wait').click();
-  const w = f.locator('.interval.wait');
+  const w = f.locator('.iv-wait');
   assert.equal(await w.locator('[data-pf=et]').inputValue(), '14:30');
   const wy = (await w.boundingBox()).y;
-  // 2.21.2: ожидание — в том же списке, прямо над своим следованием (оно уже свёрнуто в строку)
-  const py = (await f.locator('#tf-pass [data-iv=pass], #tf-pass div.interval[data-kind=pass]').first().boundingBox()).y;
+  // 2.32.1: ожидание — в карточке своего следования, над его временем
+  const py = (await pass.locator('> .dt').first().boundingBox()).y;
   assert.ok(wy < py, 'ожидание выше следования пассажиром');
   // 2.7: на одно следование — одно ожидание, кнопка больше не показывается
   assert.equal(await f.locator('#tf-add-wait').isHidden(), true, 'второе ожидание к одному следованию не добавить');
