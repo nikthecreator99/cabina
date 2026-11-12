@@ -19,7 +19,7 @@ import { awardSnapshot, awardNews, celebrate } from './awards.js';
 import { locoNotesButton, openLocoNotesSheet as openNotesSheet, shareSwitchHtml, toggleShare, shareTooLong } from './loconotes.js';
 import { NOTE_SHARE_MAX } from './colleagues.js';
 import { tripOverlap, tripAbsences, absenceTrips, tripLength, LONG_TRIP_MIN } from './checks.js';
-import { matesOf, mateKey, MATES_MAX } from './mates.js';
+import { matesOf, mateKey, MATES_MAX, lastMates } from './mates.js';
 import { openMatePicker } from './mate-pick.js';
 import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour, sectionPickTour } from './tours.js';
 
@@ -218,7 +218,8 @@ export function openTripForm(tripId) {
     weight: base.weight ? String(base.weight) : '', axles: base.axles ? String(base.axles) : '', length: base.length ? String(base.length) : '',
     trainOpen: !!hasTrain(base),
     routeNo: base.routeNo || '', routeNoOpen: !!base.routeNo,
-    mates: matesOf(base), // напарник (2.32) — только в этом телефоне
+    mates: existing ? matesOf(base) : lastMates(S.trips), // напарник (2.32) — только в этом телефоне; в новой — как в прошлой поездке
+    matesAuto: !existing && lastMates(S.trips).length > 0,
     // смена локомотива (2.19.7): следующие локомотивы — карточками под первым
     legs: (Array.isArray(base.legs) ? base.legs : []).slice(0, LEGS_MAX).map((l) => ({
       id: l.id || uid(), sd: String(l.start || '').slice(0, 10), st: String(l.start || '').slice(11, 16),
@@ -422,7 +423,7 @@ export function openTripForm(tripId) {
   function renderMates() {
     const box = $(el, '#tf-mates');
     if (!F.mates.length) { setHTML(box, `<button type="button" class="add-btn" data-act="add-mate" id="tf-add-mate">${I.users} Напарник</button>`); return; }
-    setHTML(box, `<div class="mini-label" id="tf-mates-cap">${F.mates.length > 1 ? 'Напарники' : 'Напарник'}</div><div class="mate-chips">${F.mates.map((m) => `<span class="mate-chip">${small(I.user, 16)}<span class="mate-name">${esc(m.name)}</span><button type="button" class="mate-x" data-act="mate-del" data-k="${esc(mateKey(m))}" aria-label="Убрать напарника: ${esc(m.name)}">${small(I.x, 14)}</button></span>`).join('')}${F.mates.length < MATES_MAX ? `<button type="button" class="qchip mate-more" data-act="add-mate" aria-label="Добавить ещё напарника">+ Ещё</button>` : ''}</div>`);
+    setHTML(box, `<div class="mini-label" id="tf-mates-cap">${F.mates.length > 1 ? 'Напарники' : 'Напарник'}${F.matesAuto ? ' · как в прошлой поездке' : ''}</div><div class="mate-chips">${F.mates.map((m) => `<span class="mate-chip">${small(I.user, 16)}<span class="mate-name">${esc(m.name)}</span><button type="button" class="mate-x" data-act="mate-del" data-k="${esc(mateKey(m))}" aria-label="Убрать напарника: ${esc(m.name)}">${small(I.x, 14)}</button></span>`).join('')}${F.mates.length < MATES_MAX ? `<button type="button" class="qchip mate-more" data-act="add-mate" aria-label="Добавить ещё напарника">+ Ещё</button>` : ''}</div>`);
   }
   function renderRouteNo() {
     $(el, '#tf-add-routeno').hidden = F.routeNoOpen;
@@ -844,9 +845,9 @@ export function openTripForm(tripId) {
     } else if (act === 'add-mate') {
       if (F.mates.length >= MATES_MAX) return;
       const m = await openMatePicker(F.mates.map(mateKey));
-      if (m && !F.mates.some((x) => mateKey(x) === mateKey(m))) { F.mates.push(m); renderMates(); }
+      if (m && !F.mates.some((x) => mateKey(x) === mateKey(m))) { F.mates.push(m); F.matesAuto = false; renderMates(); }
     } else if (act === 'mate-del') {
-      F.mates = F.mates.filter((x) => mateKey(x) !== b.dataset.k); renderMates();
+      F.mates = F.mates.filter((x) => mateKey(x) !== b.dataset.k); F.matesAuto = false; renderMates();
     } else if (act === 'add-routeno') {
       F.routeNoOpen = true; renderRouteNo(); $(el, '#tf-rn').focus();
     } else if (act === 'add-train') {

@@ -61,3 +61,14 @@ export function recentMates(trips, n = 8) {
   }
   return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : 0)).slice(0, n);
 }
+
+// Напарники последней поездки, где они отмечены (просьба Никиты 12.11.2026: «с одним бывает ездишь целый год») —
+// новая поездка начинается с них, убрать можно крестиком
+export function lastMates(trips) {
+  let best = null;
+  for (const t of trips) {
+    if (!matesOf(t).length) continue;
+    if (!best || String(t.start || '') > String(best.start || '')) best = t;
+  }
+  return best ? matesOf(best) : [];
+}

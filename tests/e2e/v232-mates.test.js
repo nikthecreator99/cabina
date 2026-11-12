@@ -95,6 +95,10 @@ test('без аккаунта: «Ездили вместе» из прошлых
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
   await page.locator('[data-act=add-trip]').click();
   const f = top(page);
+  // напарник последней поездки уже стоит; чужая разметка в имени — просто текст
+  await f.locator('.mate-chip').first().waitFor();
+  assert.match(await f.locator('#tf-mates').innerText(), /как в прошлой поездке[\s\S]*<b>Семён<\/b>/);
+  await f.locator('.mate-x').click();
   await f.locator('#tf-add-mate').click();
   const p = top(page);
   await p.locator('#mt-recent').waitFor();
@@ -124,7 +128,7 @@ test('без аккаунта: «Ездили вместе» из прошлых
   await context.close();
 });
 
-test('поездка без напарника — поля mates нет, блока в статистике нет; «Поделиться напарнику» его не передаёт', async () => {
+test('напарник прошлой поездки стоит сам; убрали — поля mates нет, блока в статистике нет; «Поделиться напарнику» его не передаёт', async () => {
   const { context, page, errors } = await openApp(env);
   await seed(page, { trips: [{ id: 's1', start: '2026-10-15T08:00', end: '2026-10-15T16:00', routeLabel: 'Сосновка → Ольховка', restType: 'turnaround', mates: [{ id: '', name: 'Пётр Выдуманный' }] }] });
   const shared = await page.evaluate(async () => {
@@ -136,11 +140,25 @@ test('поездка без напарника — поля mates нет, бло
   await page.locator('[data-act=add-trip]').click();
   const f = top(page);
   await f.locator('#tf-sd').fill('2026-10-18'); await f.locator('#tf-st').fill('08:00'); await f.locator('#tf-et').fill('16:00');
+  // просьба Никиты 12.11: напарник из прошлой поездки уже стоит — уберём его, поездка без напарника
+  assert.match(await f.locator('#tf-mates').innerText(), /Напарник · как в прошлой поездке\s+Пётр Выдуманный/i);
+  await f.locator('.mate-x').click();
+  assert.equal(await f.locator('.mate-chip').count(), 0);
   await f.locator('[data-rest=turnaround]').click();
   await f.locator('[data-act=save-trip]').click();
   await waitNoLayers(page);
   const t = (await page.evaluate(async () => (await import('./js/store.js')).S.trips)).find((x) => x.id !== 's1');
   assert.equal('mates' in t, false);
+  // следующая — снова с напарником из последней поездки, где он был (s1), и сохраняется с ним
+  await page.locator('[data-act=add-trip]').click();
+  const g = top(page);
+  await g.locator('#tf-sd').fill('2026-10-19'); await g.locator('#tf-st').fill('08:00'); await g.locator('#tf-et').fill('16:00');
+  assert.equal(await g.locator('.mate-chip').count(), 1);
+  await g.locator('[data-rest=turnaround]').click();
+  await g.locator('[data-act=save-trip]').click();
+  await waitNoLayers(page);
+  const u = (await page.evaluate(async () => (await import('./js/store.js')).S.trips)).find((x) => x.start === '2026-10-19T08:00');
+  assert.deepEqual(u.mates, [{ id: '', name: 'Пётр Выдуманный' }]);
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });

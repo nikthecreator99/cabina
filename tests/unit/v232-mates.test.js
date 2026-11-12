@@ -1,7 +1,7 @@
 // CABINA 2.32: напарник в поездке — проверка полей и «с кем ездил». Имена выдуманные.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanMates, matesOf, matesStats, recentMates, mateKey, MATES_MAX } from '../../js/mates.js';
+import { cleanMates, matesOf, matesStats, recentMates, mateKey, MATES_MAX, lastMates } from '../../js/mates.js';
 
 const A = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
 
@@ -36,4 +36,7 @@ test('matesStats: сколько поездок и часов вместе, им
   assert.deepEqual([s[1].name, s[1].n, s[1].work], ['Олег', 1, 600]);
   assert.deepEqual(recentMates(trips).map((m) => m.name), ['Анна Тестовая', 'Олег']);
   assert.deepEqual(matesOf(trips[2]), []);
+  // новая поездка — с напарниками последней поездки, где они есть (поездка 3 позже 1, но без напарника)
+  assert.deepEqual(lastMates(trips), [{ id: A, name: 'Анна Тестовая' }]);
+  assert.deepEqual(lastMates([]), []);
 });
