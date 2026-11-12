@@ -51,6 +51,8 @@ export const AWARDS = [
   { id: 'account', g: 'special', color: 'special', name: 'Свой человек', how: 'Создать аккаунт CABINA.', fun: 'Пропуск выдан — добро пожаловать в команду!', key: 'account', flag: true, goals: [1] },
   // 2.20: числа с сервера (засчитанные приглашения, принятые идеи) хранятся в телефоне и только растут — полученное не отбираем
   { id: 'mentor', g: 'special', name: 'Наставник', how: 'Коллеги, пришедшие по вашему личному приглашению: подтвердили почту и заходили в CABINA в 3 разных дня', fun: 'Вы привели коллег — теперь вы наставник.', key: 'invited', goals: [1, 5, 10], unit: (n) => plural(n, 'коллега', 'коллеги', 'коллег') },
+  // 2.31, просьба Никиты: коллеги отметили «Полезно» вашу заметку о локомотиве. Число с сервера, только растёт; даётся каждый раз
+  { id: 'useful', g: 'special', color: 'repeat', art: ['idea'], name: 'Полезный совет', how: 'Коллега отметил «Полезно» вашу заметку о локомотиве. Даётся за каждую такую отметку.', fun: 'Ваш совет пригодился коллеге в рейсе.', key: 'useful', repeat: true, goals: [1] },
   { id: 'idea', g: 'special', name: 'Идейный', how: 'Ваши идеи, которые приняли в CABINA («Ещё» → «Предложить идею»)', fun: 'Ваша идея сделала CABINA лучше.', key: 'ideas', goals: [1, 3, 10], unit: (n) => plural(n, 'идея', 'идеи', 'идей') },
 ];
 export const MEDALS_TOTAL = AWARDS.reduce((s, a) => s + a.goals.length, 0);
@@ -88,7 +90,7 @@ export function computeAwards(trips = S.trips) {
     .map((t) => ({ t, st: statsOf(t) })).filter((x) => x.st.work > 0)
     .sort((a, b) => a.st.end - b.st.end);
   const cfg = myPay();
-  const c = { account: 0, invited: 0, ideas: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
+  const c = { account: 0, invited: 0, ideas: 0, useful: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
   const aw = Object.fromEntries(AWARDS.map((a) => [a.id, { tier: 0, n: 0, days: [], last: null }]));
   const locos = new Set(); const years = new Set(); const hdays = new Set();
   const months = {}; const monthTrips = {}; const byRoute = new Map();
@@ -159,6 +161,8 @@ export function computeAwards(trips = S.trips) {
     const tier = a.goals.filter((g) => x.n >= g).length;
     Object.assign(aw[id], { tier, days: a.goals.slice(0, tier).map((g, i) => x.days[i] || x.days[x.days.length - 1] || null) });
   }
+  // «Полезный совет» (2.31): повторяемая — счётчик «×N» отметок «Полезно» к моим заметкам
+  { const x = countOf('useful'); c.useful = x.n; if (x.n > 0) Object.assign(aw.useful, { tier: 1, n: x.n, days: [x.days[0] || null], last: x.days[1] || x.days[0] || null }); }
   // рекорд «самая быстрая»: по маршруту, где хотя бы 3 поездки, — та, что короче всех относительно обычной (медианы)
   for (const { list, sorted } of byRoute.values()) {
     if (list.length < FAST_MIN_TRIPS) continue;
@@ -180,7 +184,8 @@ export async function grantAccountAward(day) {
   return true;
 }
 
-// Числа с сервера, запомненные в телефоне: invited — засчитанные приглашения, ideas — принятые идеи.
+// Числа с сервера, запомненные в телефоне: invited — засчитанные приглашения, ideas — принятые идеи,
+// useful — отметки «Полезно» к моим заметкам о локомотивах (2.31; days — [первый раз, последний раз]).
 // Из резервной копии — непроверенное: только целое число и даты. days[i] — день, когда достигнута i-я ступень.
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 export function countOf(key, p = S.profile) {
@@ -191,11 +196,11 @@ export function countOf(key, p = S.profile) {
 }
 // Запомнить новое число, если оно больше прежнего (меньше — не уменьшаем: коллега удалил аккаунт, идею стёрли — награда остаётся)
 export async function noteCount(key, n, day) {
-  if (!['invited', 'ideas'].includes(key) || !Number.isInteger(n) || n < 0 || n > 100000 || !DAY_RE.test(day || '')) return false;
+  if (!['invited', 'ideas', 'useful'].includes(key) || !Number.isInteger(n) || n < 0 || n > 100000 || !DAY_RE.test(day || '')) return false;
   const cur = countOf(key);
   if (n <= cur.n) return false;
   const a = AWARDS.find((x) => x.key === key);
-  const days = a.goals.map((g, i) => cur.days[i] || (n >= g ? day : null)).filter(Boolean);
+  const days = a.repeat ? [cur.days[0] || day, day] : a.goals.map((g, i) => cur.days[i] || (n >= g ? day : null)).filter(Boolean);
   await saveProfile({ [key]: { n, days } });
   return true;
 }

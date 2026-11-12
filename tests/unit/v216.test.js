@@ -25,8 +25,8 @@ test('правила с сервера: свои, «все коллеги» и �
     { user_id: ME, item: 'place', viewer_id: 'не-идентификатор' },
     null, 'строка',
   ]);
-  assert.deepEqual(s.access, { status: { all: true, ids: [] }, place: { all: false, ids: [ANNA] }, hours: { all: false, ids: [] } });
-  assert.deepEqual(snapWith(undefined).access, { status: { all: false, ids: [] }, place: { all: false, ids: [] }, hours: { all: false, ids: [] } }, 'нет ответа — никому');
+  assert.deepEqual(s.access, { status: { all: true, ids: [] }, place: { all: false, ids: [ANNA] }, hours: { all: false, ids: [] }, notes: { all: false, ids: [] } });
+  assert.deepEqual(snapWith(undefined).access, { status: { all: false, ids: [] }, place: { all: false, ids: [] }, hours: { all: false, ids: [] }, notes: { all: false, ids: [] } }, 'нет ответа — никому');
 });
 
 test('режим: статус выключен в телефоне — никому; «где я» без статуса — никому; выбранные — только нынешние коллеги', () => {

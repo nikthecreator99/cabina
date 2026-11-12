@@ -16,6 +16,8 @@ import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from 
 import { openReceive, sectionFor } from './share.js';
 import { openRemind } from './remind.js';
 import { awardSnapshot, awardNews, celebrate } from './awards.js';
+import { locoNotesButton, openLocoNotesSheet as openNotesSheet, shareSwitchHtml, toggleShare, shareTooLong } from './loconotes.js';
+import { NOTE_SHARE_MAX } from './colleagues.js';
 import { tripOverlap, tripAbsences, absenceTrips, tripLength, LONG_TRIP_MIN } from './checks.js';
 import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour, sectionPickTour } from './tours.js';
 
@@ -226,6 +228,7 @@ export function openTripForm(tripId) {
     waiting: (base.waiting || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
     note: linkedNote?.text || '',
     noteOpen: !!linkedNote?.text,
+    noteShared: linkedNote?.shared === true,
     // вид отдыха выбирается только после окончания поездки: у новой и у поездки «в пути» он не выбран
     restType: wasLive || !base.end ? null : base.restType || null,
     homeSel: base.homeRest?.ids ? [...base.homeRest.ids] : [],
@@ -342,6 +345,7 @@ export function openTripForm(tripId) {
           <label for="tf-note" class="mini-label">Заметка о локомотиве</label>
           <textarea id="tf-note" class="input" placeholder="Например: не работает обогрев" maxlength="1000"></textarea>
           <div class="hint">Увидите её, когда снова попадёте на этот локомотив.</div>
+          ${shareSwitchHtml('tf-note-share', F.noteShared, linkedNote?.id)}
         </div>
       </div>
     </div>
@@ -467,7 +471,7 @@ export function openTripForm(tripId) {
     qb.hidden = !q.length;
     card.querySelectorAll('[data-ltype]').forEach((b) => b.setAttribute('aria-pressed', String(locoKey(b.dataset.ltype, '') === locoKey(l.locoType, ''))));
     const notes = l.locoType.trim() && normNum(l.locoNumber) ? notesFor(l.locoType, l.locoNumber).filter((n) => n.tripId !== base.id) : [];
-    setHTML(card.querySelector('[data-leg-notes]'), notes.length ? `<button type="button" class="link-btn" data-act="leg-notes">${I.note} Заметки по этому локомотиву (${notes.length})</button>` : '');
+    setHTML(card.querySelector('[data-leg-notes]'), l.locoType.trim() && normNum(l.locoNumber) ? locoNotesButton(l.locoType, l.locoNumber, notes.length, 'leg-notes') : '');
     const tb = card.querySelector('[data-leg-train]');
     const can = F.kind === 'freight' || l.weight || l.axles || l.length;
     if (!can) setHTML(tb, '');
@@ -533,7 +537,8 @@ export function openTripForm(tripId) {
     const notes = notesFor(F.locoType, F.locoNumber).filter((n) => n.tripId !== base.id);
     const key = locoKey(F.locoType, F.locoNumber);
     const tripsOn = S.trips.filter((t) => t.id !== base.id && locosOf(t).some((l) => locoKey(l.type, l.number) === key)).length;
-    if (notes.length) setHTML(box, `<button type="button" class="link-btn" data-act="loco-notes">${I.note} Посмотреть заметки по этому локомотиву (${notes.length})</button>`);
+    const btn = locoNotesButton(F.locoType, F.locoNumber, notes.length);
+    if (btn) setHTML(box, btn);
     else if (tripsOn) setHTML(box, `<div class="hint">Вы уже ездили на этом локомотиве (${tripsOn}). Заметок о нём пока нет.</div>`);
     else setHTML(box, '');
   }
@@ -820,6 +825,8 @@ export function openTripForm(tripId) {
       F.legs.push({ id: uid(), sd: going ? n.slice(0, 10) : F.sd || today, st: going ? n.slice(11, 16) : '', routeId: null, routeLabel: '', stFrom: '', stTo: '', locoType: '', locoNumber: '', weight: '', axles: '', length: '', trainOpen: false });
       renderLegs(); refreshAll();
       legCard(F.legs.length - 1)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (b.id === 'tf-note-share') {
+      F.noteShared = await toggleShare(el, 'tf-note-share', linkedNote?.id);
     } else if (act === 'add-note') {
       F.noteOpen = true; renderNoteBox(); $(el, '#tf-note').focus();
     } else if (act === 'add-routeno') {
@@ -878,6 +885,7 @@ export function openTripForm(tripId) {
       if (err) { showError(el, err); return; }
       const text = F.note.trim();
       if (text && (!d.locoType || !d.locoNumber)) { showError(el, 'Чтобы сохранить заметку, укажите тип и номер локомотива.'); return; }
+      if (text && F.noteShared && text.length > NOTE_SHARE_MAX) { showError(el, shareTooLong(text)); return; }
       // сначала ошибки в полях, потом — вид отдыха
       if (d.end && !d.restType && needRest()) { showError(el, ''); nudgeRest(); return; }
       if (d.end && needHome()) { showError(el, ''); nudgeHome(); return; }
@@ -889,9 +897,9 @@ export function openTripForm(tripId) {
       let noteOp = null;
       if (text) {
         noteOp = { put: linkedNote
-          ? { ...linkedNote, text, type: d.locoType, number: d.locoNumber, updatedAt: Date.now() }
-          : { id: uid(), tripId: d.id, type: d.locoType, number: d.locoNumber, text, createdAt: Date.now() } };
-        if (linkedNote && linkedNote.text === text && linkedNote.type === d.locoType && linkedNote.number === d.locoNumber) noteOp = null;
+          ? { ...linkedNote, text, type: d.locoType, number: d.locoNumber, shared: F.noteShared, updatedAt: Date.now() }
+          : { id: uid(), tripId: d.id, type: d.locoType, number: d.locoNumber, text, shared: F.noteShared, createdAt: Date.now() } };
+        if (linkedNote && linkedNote.text === text && linkedNote.type === d.locoType && linkedNote.number === d.locoNumber && (linkedNote.shared === true) === F.noteShared) noteOp = null;
       } else if (linkedNote) noteOp = { del: linkedNote.id };
       d.updatedAt = Date.now();
       delete d._stats; delete d._statsAt;
@@ -1028,14 +1036,8 @@ function fmtDate(ms) {
 }
 export { fmtDate };
 
-function openLocoNotesSheet(type, number, excludeTripId) {
-  const notes = notesFor(type, number).filter((n) => n.tripId !== excludeTripId);
-  const el = openLayer(sheet({
-    title: locoLabel(type, number), back: true,
-    body: `<div class="loco-group">${notes.map((n) => `<div class="note"><div><div class="txt">${esc(n.text)}</div><div class="when">${fmtDate(n.createdAt)}</div></div><span></span></div>`).join('')}</div>
-      <div class="hint">Изменить или удалить заметки можно в разделе «Дополнительно» → «Заметки о локомотивах».</div>`,
-  }));
-}
+const openLocoNotesSheet = (type, number, excludeTripId) => openNotesSheet(type, number, excludeTripId, fmtDate);
+export { openLocoNotesSheet };
 
 // =====================================================================
 // ОТВЛЕЧЕНИЕ
@@ -1443,6 +1445,7 @@ export function openNoteForm(id, preset = {}) {
       <datalist id="nf-types">${types.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
       ${types.length ? `<div class="quick">${types.slice(0, 10).map((t) => `<button type="button" class="qchip" data-type="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}
       <div class="field"><label for="nf-text">Заметка</label><textarea class="input" id="nf-text" placeholder="Например: часто ломается" maxlength="1000"></textarea></div>
+      ${shareSwitchHtml('nf-share', existing?.shared === true, existing?.id)}
       ${existing ? `<div class="hint">Добавлена ${fmtDate(existing.createdAt)}</div>` : ''}
       <div data-error></div>`,
     foot: `<button class="btn btn-primary" data-act="save-note">${I.check} Сохранить</button>`,
@@ -1456,13 +1459,16 @@ export function openNoteForm(id, preset = {}) {
     if (!b) return;
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
     if (b.dataset.type) { $(el, '#nf-type').value = b.dataset.type; $(el, '#nf-num').focus(); return; }
+    if (b.id === 'nf-share') { await toggleShare(el, 'nf-share', existing?.id); return; }
     if (b.dataset.act === 'save-note') {
       const type = $(el, '#nf-type').value.trim();
       const number = normNum($(el, '#nf-num').value);
       const text = $(el, '#nf-text').value.trim();
       if (!type || !number) { showError(el, 'Укажите тип и номер локомотива.'); return; }
       if (!text) { showError(el, 'Напишите текст заметки.'); return; }
-      await saveNote({ ...(existing || { id: uid(), tripId: null, createdAt: Date.now() }), type, number, text, updatedAt: Date.now() });
+      const shared = el.querySelector('#nf-share')?.getAttribute('aria-checked') === 'true' || (!el.querySelector('#nf-share') && existing?.shared === true);
+      if (shared && text.length > NOTE_SHARE_MAX) { showError(el, shareTooLong(text)); return; }
+      await saveNote({ ...(existing || { id: uid(), tripId: null, createdAt: Date.now() }), type, number, text, shared, updatedAt: Date.now() });
       closeLayer(el); toast(existing ? 'Заметка изменена' : 'Заметка добавлена');
     } else if (b.dataset.act === 'del-note') {
       const ok = await confirmDialog({ title: 'Удалить заметку?', text: 'Это действие нельзя отменить.' });
