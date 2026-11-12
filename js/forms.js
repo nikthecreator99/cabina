@@ -19,6 +19,8 @@ import { awardSnapshot, awardNews, celebrate } from './awards.js';
 import { locoNotesButton, openLocoNotesSheet as openNotesSheet, shareSwitchHtml, toggleShare, shareTooLong } from './loconotes.js';
 import { NOTE_SHARE_MAX } from './colleagues.js';
 import { tripOverlap, tripAbsences, absenceTrips, tripLength, LONG_TRIP_MIN } from './checks.js';
+import { matesOf, mateKey, MATES_MAX, lastMates } from './mates.js';
+import { openMatePicker } from './mate-pick.js';
 import { tripFormTour, homeRestButtonTour, homeRestPickTour, absenceTour, waitTour, routeNormsTour, sectionPickTour } from './tours.js';
 
 export { computeHomeRest };
@@ -216,6 +218,8 @@ export function openTripForm(tripId) {
     weight: base.weight ? String(base.weight) : '', axles: base.axles ? String(base.axles) : '', length: base.length ? String(base.length) : '',
     trainOpen: !!hasTrain(base),
     routeNo: base.routeNo || '', routeNoOpen: !!base.routeNo,
+    mates: existing ? matesOf(base) : lastMates(S.trips), // напарник (2.32) — только в этом телефоне; в новой — как в прошлой поездке
+    matesAuto: !existing && lastMates(S.trips).length > 0,
     // смена локомотива (2.19.7): следующие локомотивы — карточками под первым
     legs: (Array.isArray(base.legs) ? base.legs : []).slice(0, LEGS_MAX).map((l) => ({
       id: l.id || uid(), sd: String(l.start || '').slice(0, 10), st: String(l.start || '').slice(11, 16),
@@ -268,10 +272,12 @@ export function openTripForm(tripId) {
       kind: F.kind,
       weight: posInt(F.weight, 20000), axles: posInt(F.axles, 2000), length: posInt(F.length, 1000),
       routeNo: F.routeNo.trim().slice(0, 20),
+      mates: F.mates.map((m) => ({ id: m.id, name: m.name })),
       locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber),
       restType: F.restType, homeRest, homeChoice,
     };
     if (!d.legs.length) delete d.legs;
+    if (!d.mates.length) delete d.mates;
     if (!d.stFrom) { delete d.stFrom; delete d.stTo; }
     for (const l of d.legs || []) if (!l.stFrom) { delete l.stFrom; delete l.stTo; }
     // своё окончание полного отдыха (2.21.2) живёт, пока выбор отдыха и поездки для расчёта те же
@@ -361,6 +367,7 @@ export function openTripForm(tripId) {
         <label for="tf-rn" class="mini-label">Номер маршрута</label>
         <input id="tf-rn" class="input" inputmode="numeric" placeholder="Например, 123456" autocomplete="off" maxlength="20">
       </div>
+      <div id="tf-mates"></div>
     </div>
     <div class="field"><div id="tf-calc"></div></div>
     <div class="field rest-field" id="tf-rest-field">
@@ -411,6 +418,12 @@ export function openTripForm(tripId) {
     $(el, '#tf-add-note').hidden = F.noteOpen;
     $(el, '#tf-note-why').hidden = F.noteOpen;
     $(el, '#tf-note-field').hidden = !F.noteOpen;
+  }
+  // напарник (2.32): кнопка «+», выбранные — компактными «таблетками» с крестиком
+  function renderMates() {
+    const box = $(el, '#tf-mates');
+    if (!F.mates.length) { setHTML(box, `<button type="button" class="add-btn" data-act="add-mate" id="tf-add-mate">${I.users} Напарник</button>`); return; }
+    setHTML(box, `<div class="mini-label" id="tf-mates-cap">${F.mates.length > 1 ? 'Напарники' : 'Напарник'}${F.matesAuto ? ' · как в прошлой поездке' : ''}</div><div class="mate-chips">${F.mates.map((m) => `<span class="mate-chip">${small(I.user, 16)}<span class="mate-name">${esc(m.name)}</span><button type="button" class="mate-x" data-act="mate-del" data-k="${esc(mateKey(m))}" aria-label="Убрать напарника: ${esc(m.name)}">${small(I.x, 14)}</button></span>`).join('')}${F.mates.length < MATES_MAX ? `<button type="button" class="qchip mate-more" data-act="add-mate" aria-label="Добавить ещё напарника">+ Ещё</button>` : ''}</div>`);
   }
   function renderRouteNo() {
     $(el, '#tf-add-routeno').hidden = F.routeNoOpen;
@@ -751,7 +764,7 @@ export function openTripForm(tripId) {
   }
   function refreshAll() { renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
 
-  renderRoute(); renderKind(); renderTrain(); renderRouteNo(); renderPass(); renderLegs(); refreshAll();
+  renderRoute(); renderKind(); renderTrain(); renderRouteNo(); renderMates(); renderPass(); renderLegs(); refreshAll();
   setTimeout(() => tripFormTour(el), 450);
 
   // автодата окончания
@@ -829,6 +842,12 @@ export function openTripForm(tripId) {
       F.noteShared = await toggleShare(el, 'tf-note-share', linkedNote?.id);
     } else if (act === 'add-note') {
       F.noteOpen = true; renderNoteBox(); $(el, '#tf-note').focus();
+    } else if (act === 'add-mate') {
+      if (F.mates.length >= MATES_MAX) return;
+      const m = await openMatePicker(F.mates.map(mateKey));
+      if (m && !F.mates.some((x) => mateKey(x) === mateKey(m))) { F.mates.push(m); F.matesAuto = false; renderMates(); }
+    } else if (act === 'mate-del') {
+      F.mates = F.mates.filter((x) => mateKey(x) !== b.dataset.k); F.matesAuto = false; renderMates();
     } else if (act === 'add-routeno') {
       F.routeNoOpen = true; renderRouteNo(); $(el, '#tf-rn').focus();
     } else if (act === 'add-train') {

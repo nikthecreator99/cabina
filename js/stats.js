@@ -12,6 +12,7 @@ import { openDay } from './day.js';
 import { eyeBtn } from './money.js';
 import { openRecap } from './recap.js';
 import { openYear, yearTripCount } from './year.js';
+import { matesStats } from './mates.js';
 
 const MONTHS_DAT = ['январю', 'февралю', 'марту', 'апрелю', 'маю', 'июню', 'июлю', 'августу', 'сентябрю', 'октябрю', 'ноябрю', 'декабрю'];
 const ROMAN = ['I', 'II', 'III', 'IV'];
@@ -123,6 +124,8 @@ function collect(p) {
   }
   R.arms = [...arms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   R.series = locoSeries(trips);
+  MATES = matesStats(trips, (t) => statsOf(t).work, (t) => t.start); // с кем ездил (2.32)
+  R.mates = MATES;
   // время явки: по два часа, начиная с полуночи
   R.calls = Array(12).fill(0);
   for (const t of trips) { const st = statsOf(t).start; if (Number.isFinite(st)) R.calls[Math.floor(new Date(st).getUTCHours() / 2)]++; }
@@ -364,6 +367,7 @@ function tripsView(R) {
   }
   if (R.count) html += homeDaysHtml(homeDays(ST));
   if (R.series.length) html += block('Локомотивы', locosHtml(R.series));
+  if (R.mates.length) html += block('С кем ездил', matesHtml(R.mates), 'st-mates-b');
   if (R.count >= 1 && R.callTop) { // с первой поездки (Никита, 05.11.2026; до 2.21.9 — от 3)
     const items = R.calls.map((v, i) => ({ v, label: i % 2 ? '' : String(i * 2), full: callRange(i * 2) }));
     html += block('Время явки', `<div class="kv-grid">${kv('Чаще всего вызывают', callRange(R.callTop.from, true), `${R.callTop.n} из ${R.count} ${plural(R.count, 'явки', 'явок', 'явок')}`)}</div>
@@ -388,13 +392,28 @@ function locosHtml(series) {
   }).join('')}</div>`;
 }
 
+// С кем ездил (2.32): напарник — сколько поездок и часов вместе; нажатие — эти поездки
+let MATES = [];
+function matesHtml(list) {
+  const max = list[0].n;
+  return `<div class="rows st-mates">${list.slice(0, 30).map((m, i) => `<button class="r bar-r" data-act="st-mate" data-i="${i}">
+    <span class="grow"><span class="mt-n">${esc(m.name)}</span>${m.work > 0 ? `<small>${fmtDur(m.work, { short: true })} вместе</small>` : ''}</span><b>${m.n} ${plural(m.n, 'поездка', 'поездки', 'поездок')}</b><span class="chev">${small(I.right, 16)}</span><i style="width:${(m.n / max) * 100}%"></i></button>`).join('')}</div>
+    <div class="hint">Напарников вы отмечаете в поездке. Это видно только вам.</div>`;
+}
+function openMate(i) {
+  const m = MATES[+i];
+  if (m) tripsSheet(m.name, [...m.trips].reverse());
+}
+
 // поездки одного локомотива за период: дата, маршрут, время; нажатие открывает поездку
 function openLoco(key) {
   let found = null; let ser = null;
   for (const s of LOCOS) { const n = s.nums.find((x) => x.key === key); if (n) { found = n; ser = s; break; } }
   if (!found) return;
   const title = ser.unknown ? found.label : found.unknown ? `${ser.label}, без номера` : `${ser.label} ${found.label}`;
-  const list = [...found.trips].reverse();
+  tripsSheet(title, [...found.trips].reverse());
+}
+function tripsSheet(title, list) {
   const el = openLayer(sheet({
     title,
     body: `<div class="hint">${times(list.length)} ${periodPrep()}</div>
@@ -497,6 +516,7 @@ export function statsClick(act, b, ctx) {
     case 'cal-day': openDay(b.dataset.d); return true;
     case 'st-series': { const k = b.dataset.k; if (openSeries.has(k)) openSeries.delete(k); else openSeries.add(k); ctx.rerender(); return true; }
     case 'st-loco': openLoco(b.dataset.k); return true;
+    case 'st-mate': openMate(b.dataset.i); return true;
     case 'st-recap': openRecap(recapData()); return true;
     case 'st-year': openYear(ST.y); return true;
     case 'st-month': ST.period = 'month'; ST.y = +b.dataset.y; ST.m = +b.dataset.m; ctx.rerender(); window.scrollTo(0, 0); return true;
