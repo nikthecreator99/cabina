@@ -30,7 +30,7 @@ function account(name = 'Иван') {
   const code = `LCN${++n}`.padEnd(10, 'X');
   q(`insert into private.invites (code_hash) values (private.hash_code('${code}'))`);
   const r = db.sql(`insert into auth.users (email, raw_user_meta_data)
-    values ('l${n}@example.test', '{"consent":"privacy-5","invite":"${code}","platform":"web","version":"2.30.0"}'::jsonb) returning id`, 'auth');
+    values ('l${n}@example.test', '{"consent":"privacy-6","invite":"${code}","platform":"web","version":"2.30.0"}'::jsonb) returning id`, 'auth');
   assert.ok(r.ok, r.err);
   const id = r.rows[0];
   q(`select public.save_card(${lit(name)}, null, null, null, false)`, id);
@@ -177,7 +177,7 @@ test('проверка присланного: длина, лимит, меся�
   assert.equal(data.loco_notes[0].month, month());
   assert.equal(data.loco_notes_marked_useful, 0);
   // отозвал согласие (новая редакция не принята) — новые заметки не принимаются
-  q(`update public.consents set withdrawn_at = now() where user_id = '${a}' and document = 'privacy-5'`);
+  q(`update public.consents set withdrawn_at = now() where user_id = '${a}' and document = 'privacy-6'`);
   fails(`select public.sync_loco_notes('[]'::jsonb)`, a, /consent required/);
 });
 
