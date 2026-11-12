@@ -501,9 +501,8 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .st-edit::before { content: ""; position: absolute; left: 9px; top: 18px; bottom: 18px; width: 3px; background: var(--line-2); }
 .st-end { display: flex; align-items: center; gap: 12px; min-height: 36px; font-weight: 800; padding-left: 0; overflow-wrap: anywhere; }
 .st-end .st-dot { border: 6px solid var(--accent); }
-.st-item { display: grid; grid-template-columns: 21px minmax(0, 1fr) 44px 44px; gap: 8px; align-items: center; }
+.st-item { display: grid; grid-template-columns: 21px minmax(0, 1fr) 44px; gap: 8px; align-items: center; }
 .st-item .input { min-width: 0; }
-.st-item .icon-btn[disabled] { opacity: .35; }
 .st-edit + .add-btn { margin-top: 8px; }
 #rf-st .btn-sm { margin-top: 8px; }
 .kind-list, .choice-list { display: grid; gap: 6px; margin-top: 8px; }

@@ -311,7 +311,9 @@ export async function workChange(e) {
   if (t.dataset.pf) {
     const v = parseNum(t.value);
     if (Number.isNaN(v)) { toast('Введите число, например 12 или 12,5', { error: true }); return true; }
-    if (v !== '' && v > (PAY_FIELDS.find((f) => f.k === t.dataset.pf)?.unit === '%' ? 300 : 100000)) { toast('Проверьте значение — слишком большое', { error: true }); return true; }
+    const pf = PAY_FIELDS.find((f) => f.k === t.dataset.pf);
+    if (v !== '' && pf?.max && v > pf.max) { toast(`${pf.label}: не больше ${pf.max}${pf.unit}`, { error: true }); return true; }
+    if (v !== '' && v > (pf?.unit === '%' ? 300 : 100000)) { toast('Проверьте значение — слишком большое', { error: true }); return true; }
     await savePaySet({ [t.dataset.pf]: v === '' ? '' : v });
     return true;
   }

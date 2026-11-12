@@ -11,7 +11,8 @@
 //  • отдых в пункте оборота сверх нормы — 2/3 ставки (норма = привезённое рабочее время);
 //  • премия — процент от заработка за работу этого же месяца;
 //  • районный коэффициент, северная, зональная и бамовская надбавки — на заработок вместе с премией;
-//  • НДФЛ 13%, необязательные удержания (профсоюз, корпоративная пенсия);
+//  • НДФЛ 13%, необязательные удержания (профсоюз, корпоративная пенсия — от начисленного; алименты — от начисленного
+//    за вычетом НДФЛ, как в ст. 99 закона об исполнительном производстве; не больше 70%);
 //  • ком. расходы за поездку — компенсация, налогом не облагается;
 //  • резерв (вид движения «Резерв» — работа на одиночно следующем локомотиве) — по тарифу отдельной строкой
 //    («ОплЗаРабНаОдиночСледЛоком»); ночные, вредность, класс, праздничные и переработка — как обычно, без доплаты за тяжёлый поезд;
@@ -25,6 +26,7 @@ import { dayInfo } from './calendar.js';
 
 export const ROLES = { assistant: 'Помощник машиниста', driver: 'Машинист' };
 export const NDFL = 13;
+export const ALIMONY_MAX = 70; // больше 70% удерживать нельзя (ст. 99 закона № 229-ФЗ)
 export const OVERREST_MAX = 48 * HOUR; // больше 48 ч между поездками — это уже не отдых в пункте оборота
 
 // Поля набора ставок. pct — проценты, rub — рубли. def — значение по умолчанию.
@@ -43,6 +45,7 @@ export const PAY_FIELDS = [
   { k: 'avgHour', label: 'Средний заработок за час', unit: '₽/ч', def: null, hint: '', group: 'avg', ph: 'Например, 600' },
   { k: 'union', label: 'Профсоюзный взнос', unit: '%', def: null, hint: 'Удержание, если вы в профсоюзе. В квитке — «Профсоюз…», обычно 1%.', deduct: true },
   { k: 'pension', label: 'Корпоративная пенсия', unit: '%', def: null, hint: 'Добровольный взнос, если вы его платите. В квитке — «Удержание взнос КорпПенсия».', deduct: true },
+  { k: 'alimony', label: 'Алименты', unit: '%', def: null, max: ALIMONY_MAX, hint: 'Процент из решения суда или соглашения (на одного ребёнка обычно 25%, на двоих — 33,33%, на троих и больше — 50%). Удерживается из заработка после вычета НДФЛ. Если алименты — твёрдая сумма, этот расчёт не подойдёт.', deduct: true },
 ];
 
 const num = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : 0; };
@@ -67,6 +70,7 @@ export function payCfg(sets, role = 'assistant') {
     if (f.role && f.role !== role) { cfg[f.k] = 0; continue; }
     const v = raw[f.k];
     cfg[f.k] = v === undefined || v === null ? num(f.def) : num(v); // пустое поле, введённое человеком, = 0
+    if (f.max) cfg[f.k] = Math.min(cfg[f.k], f.max);
   }
   return cfg;
 }
@@ -175,6 +179,8 @@ function hoursPay(part, rate, cfg, trip, heavy = 0) {
   };
 }
 const sumObj = (o) => Object.values(o).reduce((s, v) => s + v, 0);
+// Алименты — процент от заработка после НДФЛ (ком. расходы — компенсация, с них не удерживают)
+const alimonyOf = (gross, ndfl, cfg) => Math.max(0, gross - ndfl) * (cfg.alimony || 0) / 100;
 const regionalPct = (cfg) => cfg.rk + cfg.sn + cfg.zone + cfg.bam;
 
 // Заработок за одну поездку на руки: все доплаты к часам, отдых сверх нормы после неё, премия,
@@ -190,7 +196,7 @@ export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
     const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3;
     gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
   }
-  const ded = gross * (NDFL + cfg.union + cfg.pension) / 100;
+  const ded = gross * (NDFL + cfg.union + cfg.pension) / 100 + alimonyOf(gross, gross * NDFL / 100, cfg);
   return { gross: round2(gross), net: round2(gross - ded + (st.live ? 0 : cfg.trip)) };
 }
 
@@ -299,6 +305,7 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   D('ndfl', 'НДФЛ', NDFL, res.ndfl);
   D('union', 'Профсоюзный взнос', cfg.union, gross * cfg.union / 100);
   D('pension', 'Корпоративная пенсия', cfg.pension, gross * cfg.pension / 100);
+  D('alimony', 'Алименты', cfg.alimony, alimonyOf(gross, res.ndfl, cfg));
   res.comp = round2(comp);
   res.net = round2(gross - res.deductions.reduce((s, d) => s + d.amount, 0) + comp);
   res.overRestMin = orMin;
@@ -342,7 +349,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', 'overOther', 'overWeekend', 'shift1', 'shift2', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension'];
+  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', 'overOther', 'overWeekend', 'shift1', 'shift2', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension', 'alimony'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));
