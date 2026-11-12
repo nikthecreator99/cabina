@@ -180,8 +180,8 @@ export const PREMIUM = { hat: ['peaked'], bg: ['ocean', 'depot'], mazut: true, c
 // Пока поля вещи нет в LISTS, её нельзя выбрать в редакторе, а ступень показывает «скоро».
 export const REWARDS = [
   { k: 'bg', id: 'beam', n: 1, name: 'Фон «Прожектор»', off: 'mist' },
-  { k: 'outfit', id: 'leather', n: 3, name: 'Кожанка машиниста', off: 'vestO' },
-  { k: 'hat', id: 'ushanka', n: 5, name: 'Ушанка', off: null },
+  { k: 'hat', id: 'ushanka', n: 3, name: 'Ушанка', off: null }, // 2.32.1 (Никита): ушанка — за 3, кожанка — за 5
+  { k: 'outfit', id: 'leather', n: 5, name: 'Кожанка машиниста', off: 'vestO' },
   { k: 'outfit', id: 'kitel', n: 10, name: 'Китель паровозника', off: 'vestO' },
   { k: 'hat', id: 'retro', n: 10, name: 'Фуражка паровозника', off: null },
 ];

@@ -45,7 +45,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.32.0';
+export const VERSION = '2.32.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -65,11 +65,13 @@ function applyTheme() {
 
 // ---------------------------------------------------------------- небо
 // Сцены неба по положению солнца: рассвет, день, закат; ночь — исходная сцена темы.
+// 2.32.1 (Никита): без опор и проводов контактной сети — просто небо. Солнце — не в картинке, а кружком в шапке
+// слева от лупы (homeSun): так оно видно на любой ширине экрана, а не прячется за карточкой месяца. glow — зарево под ним.
 const SCENES = {
-  sunrise: { vars: { '--sky-1': '#22305a', '--sky-2': '#7a5b8f', '--sky-3': '#f2956b', '--sky-4': '#ffd99a', '--silhouette': '#0e1424', '--star': 'rgba(255,255,255,.28)', '--rail': '#ffd08a' }, sun: [88, 175, 19], core: '#fff6d8', mid: '#ffc46e', glowR: 190, clouds: 0.35, dip: [52, 128] },
-  day: { vars: { '--sky-1': '#2a66cf', '--sky-2': '#4f8fe3', '--sky-3': '#8fc0f0', '--sky-4': '#d4eafc', '--silhouette': '#15304a', '--star': 'transparent', '--rail': '#ffffff' }, sun: [236, 100, 11], core: '#fffdf2', mid: '#fff1a8', glowR: 120, clouds: 0.8 },
-  sunset: { vars: { '--sky-1': '#1a1436', '--sky-2': '#5c1f48', '--sky-3': '#d9482c', '--sky-4': '#ffab45', '--silhouette': '#08060e', '--star': 'rgba(255,255,255,.35)', '--rail': '#ffb070' }, sun: [300, 177, 16], core: '#ffe1a0', mid: '#ff7a2e', glowR: 170, clouds: 0.25 },
-  night: { vars: null, sun: null, glowR: 150, clouds: 0 },
+  sunrise: { vars: { '--sky-1': '#22305a', '--sky-2': '#7a5b8f', '--sky-3': '#f2956b', '--sky-4': '#ffd99a', '--silhouette': '#0e1424', '--star': 'rgba(255,255,255,.28)', '--rail': '#ffd08a' }, glow: [300, 176], core: '#fff6d8', mid: '#ffc46e', glowR: 190, clouds: 0.35, dip: [262, 338] },
+  day: { vars: { '--sky-1': '#2a66cf', '--sky-2': '#4f8fe3', '--sky-3': '#8fc0f0', '--sky-4': '#d4eafc', '--silhouette': '#15304a', '--star': 'transparent', '--rail': '#ffffff' }, glow: [300, 96], core: '#fffdf2', mid: '#fff1a8', glowR: 130, clouds: 0.8 },
+  sunset: { vars: { '--sky-1': '#1a1436', '--sky-2': '#5c1f48', '--sky-3': '#d9482c', '--sky-4': '#ffab45', '--silhouette': '#08060e', '--star': 'rgba(255,255,255,.35)', '--rail': '#ffb070' }, glow: [300, 178], core: '#ffe1a0', mid: '#ff7a2e', glowR: 170, clouds: 0.25 },
+  night: { vars: null, glow: null, glowR: 150, clouds: 0 },
 };
 export const sceneVars = (phase) => (SCENES[phase]?.vars ? Object.entries(SCENES[phase].vars).map(([k, v]) => `${k}:${v}`).join(';') : '');
 function skySVG(phase = 'night') {
@@ -86,27 +88,17 @@ function skySVG(phase = 'night') {
   d += ' L400 186 L400 250 Z';
   const stars = Array.from({ length: 26 }, () => `<circle cx="${(rnd() * 400).toFixed(0)}" cy="${(rnd() * 90).toFixed(0)}" r="${(0.4 + rnd() * 0.8).toFixed(2)}" style="fill:var(--star)" opacity="${(0.3 + rnd() * 0.7).toFixed(2)}"/>`).join('');
   const vp = [318, 183];
-  const masts = [[394, 58], [366, 104], [349, 134], [338, 152], [331, 163], [326, 170]];
-  const mastSvg = masts.map(([x, y], i) => {
-    const arm = 22 - i * 3.2;
-    return `<line x1="${x}" y1="${y}" x2="${x}" y2="${190 + (5 - i) * 10}" stroke-width="${2.6 - i * 0.35}"/><line x1="${x}" y1="${y + 6 - i}" x2="${x - arm}" y2="${y + 8 - i}" stroke-width="${1.6 - i * 0.2}"/>`;
-  }).join('');
-  const wire = `M${masts.map(([x, y], i) => `${x - (22 - i * 3.2)} ${y + 8 - i}`).join(' L')} L${vp[0] + 2} ${vp[1] - 18}`;
   return `<svg viewBox="0 0 400 250" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
     <defs>
       <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--sky-1)"/><stop offset=".42" style="stop-color:var(--sky-2)"/><stop offset=".68" style="stop-color:var(--sky-3)"/><stop offset=".76" style="stop-color:var(--sky-4)"/></linearGradient>
-      <radialGradient id="sun" cx="${S0.sun ? S0.sun[0] : vp[0]}" cy="${S0.sun ? S0.sun[1] : vp[1] - 4}" r="${S0.glowR}" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:var(--sky-4)" stop-opacity=".95"/><stop offset=".35" style="stop-color:var(--sky-3)" stop-opacity=".45"/><stop offset="1" style="stop-color:var(--sky-3)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="sun" cx="${S0.glow ? S0.glow[0] : vp[0]}" cy="${S0.glow ? S0.glow[1] : vp[1] - 4}" r="${S0.glowR}" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:var(--sky-4)" stop-opacity=".95"/><stop offset=".35" style="stop-color:var(--sky-3)" stop-opacity=".45"/><stop offset="1" style="stop-color:var(--sky-3)" stop-opacity="0"/></radialGradient>
       <radialGradient id="lamp" r=".5"><stop offset="0" stop-color="#fff6d8"/><stop offset=".3" stop-color="#ffd27a" stop-opacity=".8"/><stop offset="1" stop-color="#ff7a2e" stop-opacity="0"/></radialGradient>
       <linearGradient id="railg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" style="stop-color:var(--rail)" stop-opacity=".15"/><stop offset="1" style="stop-color:var(--rail)" stop-opacity=".9"/></linearGradient>
     </defs>
     <rect width="400" height="250" fill="url(#sk)"/>${stars}
     <rect width="400" height="250" fill="url(#sun)"/>
-    ${S0.sun ? `<radialGradient id="disc" r=".5"><stop offset="0" stop-color="${S0.core}"/><stop offset=".55" stop-color="${S0.core}"/><stop offset=".72" stop-color="${S0.mid}" stop-opacity=".55"/><stop offset="1" stop-color="${S0.mid}" stop-opacity="0"/></radialGradient>
-      <circle cx="${S0.sun[0]}" cy="${S0.sun[1]}" r="${S0.sun[2] * 2.2}" fill="url(#disc)"/>` : ''}
     ${S0.clouds ? [[60, 112, 1], [170, 128, 0.8], [300, 104, 0.9], [120, 150, 0.6]].map(([cx, cy, k]) => `<g fill="#fff" opacity="${(S0.clouds * k * 0.75).toFixed(2)}"><ellipse cx="${cx}" cy="${cy}" rx="${26 * k}" ry="${5 * k}"/><ellipse cx="${cx - 8 * k}" cy="${cy - 4 * k}" rx="${11 * k}" ry="${6 * k}"/><ellipse cx="${cx + 7 * k}" cy="${cy - 5 * k}" rx="${13 * k}" ry="${7.5 * k}"/></g>`).join('') : ''}
     <path d="${d}" style="fill:var(--silhouette)"/>
-    <g style="stroke:var(--silhouette)" stroke-linecap="round">${mastSvg}</g>
-    <path d="${wire}" fill="none" style="stroke:var(--silhouette)" stroke-width=".8"/>
     <g stroke="url(#railg)" stroke-width="1.4" fill="none"><path d="M168 250 L${vp[0] - 4} ${vp[1] + 3}"/><path d="M276 250 L${vp[0] + 4} ${vp[1] + 3}"/></g>
     <g>
       <rect x="${vp[0] - 11}" y="${vp[1] - 18}" width="22" height="20" rx="6" style="fill:var(--silhouette)"/>
@@ -118,6 +110,8 @@ function skySVG(phase = 'night') {
 }
 const SKY_CACHE = {};
 const skyFor = (phase) => SKY_CACHE[phase] || (SKY_CACHE[phase] = skySVG(phase));
+// солнце в шапке главной — слева от кнопки поиска; ночью его нет
+const homeSun = (phase) => (SCENES[phase]?.glow ? `<span class="home-sun" data-phase="${phase}" style="--sun-core:${SCENES[phase].core};--sun-mid:${SCENES[phase].mid}" aria-hidden="true"></span>` : '');
 
 // ---------------------------------------------------------------- главная
 function ring(pct) {
@@ -279,6 +273,7 @@ function renderHome() {
           <button data-act="next" aria-label="Следующий месяц">${small(I.right, 18)}</button>
         </div>
         <button class="round-btn" data-act="go" data-page="search" aria-label="Поиск по поездкам">${I.search}</button>
+        ${homeSun(phase)}
       </div>
       <section class="glass hero" data-act="stats" role="button" tabindex="0" aria-label="Итоги месяца — открыть статистику">
         <div class="hero-top">${normHead}<span class="hero-link">Статистика ›</span></div>

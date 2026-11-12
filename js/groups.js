@@ -9,7 +9,9 @@
 // постоянное напоминание со стрелкой к переключателю, «Предложить стать коллегами» из окна участника.
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, layerCount } from './ui.js';
 import { privacyOf } from './profile.js';
-import { S, saveProfile } from './store.js';
+import { S, saveProfile, nowLocal } from './store.js';
+import { dateKeyOf } from './calc.js';
+import { awardSnapshot, awardNews, celebrate, grantGroupAward } from './awards.js';
 import { rpc, errorText } from './auth.js';
 import { legalReady } from './legal.js';
 import { qrSvg } from './share.js';
@@ -131,6 +133,7 @@ export function renderGroups() {
     return `${head}<div id="grp-sec"><div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились группы коллег. Чтобы создать группу или вступить в неё, прочитайте и примите согласие.</div></div>
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
+  if (!S.profile?.groupAward && snap.groups.some((g) => g.admin) && !layerCount()) setTimeout(groupAward, 0);
   const full = snap.groups.length >= GROUPS_MAX;
   const q = G.q;
   return `${head}<div id="grp-sec">
@@ -291,6 +294,17 @@ async function ready() {
   return snap;
 }
 
+// «Своя бригада» (2.32.1): награда за созданную группу; тем, кто уже администратор группы, — при открытии «Групп»
+let awardBusy = false;
+async function groupAward() {
+  if (awardBusy || S.profile?.groupAward) return;
+  awardBusy = true;
+  try {
+    const before = awardSnapshot();
+    if (await grantGroupAward(dateKeyOf(nowLocal()))) { const news = awardNews(before); if (news) setTimeout(() => celebrate(news), 900); }
+  } catch {} finally { awardBusy = false; }
+}
+
 async function createGroup() {
   if (!(await ready()) || !(await ensureCard())) return;
   const name = await nameSheet({ title: 'Новая группа', ok: 'Создать' });
@@ -299,6 +313,7 @@ async function createGroup() {
   if (!r?.ok) { fail(r); return; }
   await reload();
   toast('Группа создана. Пригласите коллег — или покажите им код группы');
+  groupAward();
   if (UUID.test(String(r.data))) openGroupPage(String(r.data).toLowerCase());
 }
 

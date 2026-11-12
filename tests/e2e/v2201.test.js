@@ -27,7 +27,7 @@ test('без поездок, но с принятой идеей — полос�
   });
   await tab(page, 'profile');
   await page.waitForSelector('#pr-awards .aw-strip');
-  assert.match(await text(page, '#pr-awards .group-title'), /Награды\s+Все 1 из 40/i);
+  assert.match(await text(page, '#pr-awards .group-title'), /Награды\s+Все 1 из 41/i);
   await page.locator('#pr-awards .aw-strip').click();
   await page.waitForSelector('.aw-grid');
   assert.doesNotMatch(await page.locator('.aw[data-id=idea]').getAttribute('class'), /locked/);

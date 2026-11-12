@@ -76,9 +76,9 @@ test('ожидание следования пассажиром: кнопка �
   await pass.locator('[data-pf=st]').fill('14:30');
   await pass.locator('[data-pf=et]').fill('16:00');
   await f.locator('#tf-add-wait').click();
-  const w = f.locator('.interval.wait');
+  const w = f.locator('.iv-wait');
   assert.equal(await w.count(), 1);
-  assert.match(await w.innerText(), /Ожидание №1/);
+  assert.match(await w.innerText(), /Ожидание следования/);
   await w.locator('[data-pf=st]').fill('12:00');
   await w.locator('[data-pf=et]').fill('14:30');
   assert.match(await text(f, '#tf-calc'), /В том числе ожидание следования\s+2 ч 30 мин/);
@@ -94,10 +94,10 @@ test('ожидание следования пассажиром: кнопка �
   // удалить ожидание
   await tab(page, 'home');
   await page.locator('.trip').first().click();
-  // 2.21.2: заполненное ожидание свёрнуто в строку — сначала развернуть
-  await sheet(page).locator('.interval.wait.short').click();
-  await sheet(page).locator('.interval.wait [data-act=del-pass]').click();
-  assert.equal(await sheet(page).locator('.interval.wait').count(), 0);
+  // 2.32.1: ожидание — в строке своего следования; развернуть и убрать
+  await sheet(page).locator('#tf-pass .interval.short').click();
+  await sheet(page).locator('.iv-wait [data-act=del-wait]').click();
+  assert.equal(await sheet(page).locator('.iv-wait').count(), 0);
   assert.equal(await sheet(page).locator('#tf-pass .interval').count(), 1, 'следование пассажиром осталось');
   await sheet(page).locator('[data-act=save-trip]').click();
   await waitNoLayers(page);

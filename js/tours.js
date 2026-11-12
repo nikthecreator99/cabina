@@ -68,8 +68,8 @@ export function payModeTour() {
 
 export function waitTour(el) {
   if (!tourDone('trip3') || tourActive()) return;
-  runTour('waitBtn', [
-    { target: q(el, '#tf-add-wait'), title: 'Ожидание следования', text: 'Если перед тем, как ехать пассажиром, вы <b>ждали поезд</b>, добавьте время ожидания. Оно войдёт в рабочее время и в заработок.' },
+  runTour('waitBtn2', [
+    { target: q(el, '#tf-add-wait'), title: 'Ожидание следования', text: 'Если перед тем, как ехать пассажиром, вы <b>ждали поезд</b>, укажите здесь время ожидания. Оно войдёт в рабочее время и в заработок.' },
   ]);
 }
 

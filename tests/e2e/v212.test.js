@@ -296,7 +296,7 @@ test('конь и скелет (2.20): у каждого своя фраза и 
   await page.locator('[data-act=av-group][data-g=hair]').click();
   assert.match(await page.locator('#av-panel').innerText(), /Волосы давно выпали/);
   await page.locator('[data-act=av-group][data-g=acc]').click();
-  assert.match(await page.locator('[data-k=hat][data-v=ushanka]').innerText(), /За 5/, 'вещь за приглашения — со значком «За 5» (2.20)');
+  assert.match(await page.locator('[data-k=hat][data-v=ushanka]').innerText(), /За 3/, 'вещь за приглашения — со значком «За 3» (с 2.32.1)');
   assert.equal(await page.locator('[data-k=scarf]').count(), 0, 'шарфа больше нет (Никита, 01.11)');
   await page.locator('[data-act=av-rand]').click();
   assert.match(await page.locator('.av-try').innerText(), /скелет/);

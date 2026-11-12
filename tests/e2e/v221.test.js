@@ -216,7 +216,7 @@ test('Карьера: сверху стаж, потом нынешняя и пр
   await context.close();
 });
 
-test('вещи за приглашения: с Премиумом (admin) — тоже только примерка; кнопка «Отправить приглашение»', async () => {
+test('вещи за приглашения: администратор (с 2.32.1) надевает любую вещь, в том числе за приглашения', async () => {
   const { context, page, errors } = await openApp(env);
   const EXP = Math.floor(Date.parse('2026-10-20T12:00:00+03:00') / 1000) + 30 * 86400;
   const SUB = '0d2b6c1e-7a44-4f1b-9c3e-5a6b7c8d9e0f';
@@ -232,22 +232,14 @@ test('вещи за приглашения: с Премиумом (admin) — т
   await page.waitForFunction(() => !!localStorage.getItem('cabina-premium-dev'));
   await page.locator('[data-act=av-group][data-g=wear]').click();
   const leather = page.locator('[data-k=outfit][data-v=leather]');
-  assert.match(await leather.innerText(), /За 3/, 'значок «За 3» виден и с Премиумом');
+  assert.doesNotMatch(await leather.innerText(), /За \d/, 'администратору вещь открыта — без значка «За 5»');
   await leather.click();
-  const note = page.locator('.av-rwnote');
-  await note.waitFor();
-  assert.match(await note.innerText(), /Только за приглашения\.[\s\S]*Кожанка машиниста — за 3 приглашения, сейчас засчитано 0[\s\S]*Отправить приглашение/);
-  assert.match(await text(page, '.av-try'), /Кожанка машиниста/);
-  // сохранить нельзя: окно «Пока только примерка», вещь снимается
+  assert.equal(await page.locator('.av-rwnote').count(), 0, 'пометки «Только за приглашения» нет');
   await page.locator('[data-act=av-save]').click();
-  const dlg = page.locator('.dialog');
-  assert.match(await dlg.innerText(), /Пока только примерка/);
-  await dlg.locator('[data-act=yes]').click();
-  await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.avatar?.outfit === 'vestO');
-  // «Отправить приглашение» без согласия новой редакции на сервере → экран приглашений не ломается
-  await page.locator('[data-act=av-open]').click();
-  await page.locator('[data-act=av-group][data-g=wear]').click();
-  await page.locator('[data-k=outfit][data-v=leather]').click();
+  await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.avatar?.outfit === 'leather');
+  assert.equal(await page.locator('.dialog').count(), 0, 'окна «Пока только примерка» нет');
+  // в профиле кожанка осталась
+  assert.match(await page.locator('.screen').innerHTML(), /<svg/);
   for (const w of [320]) { await page.setViewportSize({ width: w, height: 700 }); assert.equal(await fits(page), true); }
   assert.deepEqual(realErrors(errors), []);
   await context.close();

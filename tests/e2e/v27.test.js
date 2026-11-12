@@ -129,12 +129,14 @@ test('ожидание: к одному следованию пассажиро�
   await page.locator('.trip').first().click();
   const f = sheet(page);
   await page.waitForTimeout(500);
+  // 2.32.1: ожидание — в карточке следования; заполненное следование свёрнуто — сначала развернуть
+  await f.locator('#tf-pass .interval.short').click();
   assert.equal(await f.locator('#tf-add-wait').isVisible(), true);
   await f.locator('#tf-add-wait').click();
-  assert.equal(await f.locator('.interval.wait').count(), 1);
-  assert.equal(await f.locator('#tf-add-wait').isVisible(), false, 'второе ожидание к тому же следованию добавить нельзя');
-  // удалили ожидание — кнопка вернулась
-  await f.locator('.interval.wait [data-act=del-pass]').click();
+  assert.equal(await f.locator('.iv-wait').count(), 1);
+  assert.equal(await f.locator('#tf-add-wait').count(), 0, 'второе ожидание к тому же следованию добавить нельзя');
+  // убрали ожидание — кнопка вернулась
+  await f.locator('.iv-wait [data-act=del-wait]').click();
   assert.equal(await f.locator('#tf-add-wait').isVisible(), true);
   assert.deepEqual(errors, []);
   await context.close();
