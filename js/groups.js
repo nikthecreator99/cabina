@@ -7,6 +7,9 @@
 // 2.27 (просьбы Никиты 10.11.2026): экран «Группы» по его макету («Вы администратор» / «Вы участник»), картинка группы (grp-pic.js),
 // статус в группе — взаимно (видишь чужие, только если показываешь свой; станции — за станции; на сервере — private.allowed, шаг 9),
 // постоянное напоминание со стрелкой к переключателю, «Предложить стать коллегами» из окна участника.
+// 2.33 (решения Никиты 12.11.2026): поиск групп по названию. В поиске — только название и картинка (состава и числа участников нет).
+// Администратор сам решает, видна ли группа в поиске (у новой — да, у старых — нет, пока не включит) и открытая ли она:
+// в открытую вступают сразу, в закрытую — по заявке, которую администратор принимает или отклоняет (сервер — шаг 13).
 import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, plural, layerCount } from './ui.js';
 import { privacyOf } from './profile.js';
 import { S, saveProfile } from './store.js';
@@ -41,6 +44,8 @@ export function groupError(r) {
   const m = String(r.data?.message || '');
   if (/groups limit/.test(m)) return `Вы уже в ${GROUPS_MAX} группах — это наибольшее число. Выйдите из ненужной, чтобы вступить в новую.`;
   if (/group full/.test(m)) return 'В группе уже 200 человек — больше нельзя.';
+  if (/short query/.test(m)) return 'Введите хотя бы 3 буквы или цифры.';
+  if (/cabina: later/.test(m)) return 'Сейчас нельзя: администратор отклонил вашу заявку или исключил вас. Попробовать снова можно через 30 дней.';
   if (/banned/.test(m)) return 'Администратор исключил вас из этой группы. Вернуться можно только по его приглашению.';
   if (/cabina: limit/.test(m)) return 'На сегодня слишком много попыток. Попробуйте завтра.';
   if (/name required/.test(m)) return 'Сначала укажите имя в профиле.';
@@ -53,6 +58,8 @@ const fail = (r) => toast(groupError(r), { error: true, ms: 6000 });
 const members = (n) => `${n} ${plural(n, 'участник', 'участника', 'участников')}`;
 const groupOf = (id) => colSnap()?.groups.find((g) => g.id === id) || null;
 const reload = () => loadColleagues({ force: true });
+// Заявок в мои группы (я администратор) — для красного кружка и колокольчика
+export const groupRequestsCount = (snap = colSnap()) => (snap?.groups || []).reduce((n, g) => n + (g.admin ? g.requests.length : 0), 0);
 
 // ---------------------------------------------------------------- профиль: строка «Группы»
 
@@ -62,9 +69,11 @@ export function groupsRowHtml() {
   if (snap && (!snap.groupsOn || !snap.consent.main)) return '';
   const n = snap?.groups.length || 0;
   const k = snap?.groupInvites.length || 0;
-  const sub = !snap ? 'Загружаем…' : n ? `${n} ${plural(n, 'группа', 'группы', 'групп')}${k ? ` · приглашений: ${k}` : ''}` : k ? 'Вас пригласили в группу' : 'Бригада, колонна или депо — списком';
+  const r = groupRequestsCount(snap);
+  const sub = !snap ? 'Загружаем…' : n ? `${n} ${plural(n, 'группа', 'группы', 'групп')}${k ? ` · приглашений: ${k}` : ''}${r ? ` · заявок: ${r}` : ''}` : k ? 'Вас пригласили в группу' : 'Бригада, колонна или депо — списком';
+  const badge = k + r;
   return `<button class="row" data-act="go" data-page="groups" id="grp-entry"><span class="ico" style="--c:var(--night)">${I.grid}</span>
-    <div class="grow"><div class="t1">Группы</div><div class="t2">${esc(sub)}</div></div>${k ? `<span class="col-badge" aria-label="Приглашений в группы: ${k}">${k}</span>` : ''}${small(I.right, 18)}</button>`;
+    <div class="grow"><div class="t1">Группы</div><div class="t2">${esc(sub)}</div></div>${badge ? `<span class="col-badge" aria-label="Приглашений и заявок: ${badge}">${badge}</span>` : ''}${small(I.right, 18)}</button>`;
 }
 
 // ---------------------------------------------------------------- кто что видит в группе
@@ -109,11 +118,19 @@ function inviteRow(i) {
     <div class="col-btns"><button class="btn btn-plain btn-sm" data-act="grp-decline" data-id="${esc(i.id)}">Отказаться</button><button class="btn btn-primary btn-sm" data-act="grp-accept" data-id="${esc(i.id)}">Вступить</button></div>
   </div>`;
 }
+function myRequestRow(r) {
+  return `<div class="col-offer">
+    <div class="col-who"><span class="grp-pic" aria-hidden="true">${picSvg(r.pic, { size: 44 })}</span><div class="grow"><div class="t1">${esc(r.name)}</div>
+      <div class="t2">Ждёт решения администратора</div></div></div>
+    <div class="col-btns"><button class="btn btn-plain btn-sm" data-act="grp-unrequest" data-id="${esc(r.id)}">Отозвать заявку</button></div>
+  </div>`;
+}
 function groupRow(g) {
   const sh = myShare(g);
   const nudge = hiddenForMe(g) ? `<div class="grp-row-nudge">${small(I.lock, 14)}<span>Покажите свой статус — увидите коллег</span></div>` : '';
+  const r = g.admin ? g.requests.length : 0;
   return `<button class="row col-row grp-row" data-act="grp-open" data-id="${esc(g.id)}"><span class="grp-pic" aria-hidden="true">${picSvg(g.pic, { size: 48 })}</span>
-    <div class="grow"><div class="t1">${esc(g.name)}</div><div class="t2">${esc([members(g.members.length), sh.status ? 'видят ваш статус' : ''].filter(Boolean).join(' · '))}</div>${nudge}</div>${small(I.right, 18)}</button>`;
+    <div class="grow"><div class="t1">${esc(g.name)}</div><div class="t2">${esc([members(g.members.length), sh.status ? 'видят ваш статус' : '', r ? `заявок: ${r}` : ''].filter(Boolean).join(' · '))}</div>${nudge}</div>${r ? `<span class="col-badge" aria-label="Заявок: ${r}">${r}</span>` : ''}${small(I.right, 18)}</button>`;
 }
 const section = (title, list, id) => (list.length ? `<div class="grp-sec-title"><h2>${title}</h2><span class="grp-count">${list.length}</span></div>
   <div class="grp-cards" id="${id}">${list.map(groupRow).join('')}</div>` : '');
@@ -128,7 +145,7 @@ export function renderGroups() {
   if (!snap) { if (!layerCount()) loadColleagues(); return `${head}<div class="hint" id="grp-sec">Загружаем…</div>`; }
   if (!snap.groupsOn) return `${head}<div class="notice">${I.info}<div>${SERVER_OFF}</div></div>`;
   if (!snap.consent.main) {
-    return `${head}<div id="grp-sec"><div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились группы коллег. Чтобы создать группу или вступить в неё, прочитайте и примите согласие.</div></div>
+    return `${head}<div id="grp-sec"><div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> В ней появились поиск групп и заявки. Чтобы создать группу или вступить в неё, прочитайте и примите согласие.</div></div>
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button></div>`;
   }
   const full = snap.groups.length >= GROUPS_MAX;
@@ -140,10 +157,13 @@ export function renderGroups() {
       <button class="btn btn-plain" data-act="grp-code-enter" id="grp-join">${small(I.qr, 20)} Вступить по коду</button>
     </div>`}
     ${full ? `<div class="hint">Групп уже ${GROUPS_MAX} — больше нельзя. Выйдите из ненужной, чтобы вступить в новую.</div>` : ''}
+    ${snap.searchOn ? `<div class="panel grp-find-panel"><button class="row" data-act="grp-find" id="grp-find"><span class="ico" style="--c:var(--info, var(--ok))">${I.search}</span>
+      <div class="grow"><div class="t1">Найти группу</div><div class="t2">По названию — бригаду, колонну, депо</div></div>${small(I.right, 18)}</button></div>` : ''}
+    ${snap.myRequests.length ? `<div class="grp-sec-title"><h2>Ваши заявки</h2><span class="grp-count">${snap.myRequests.length}</span></div><div class="panel col-offers" id="grp-myreq">${snap.myRequests.map(myRequestRow).join('')}</div>` : ''}
     ${snap.groupInvites.length ? `<div class="grp-sec-title"><h2>Приглашают в группу</h2><span class="grp-count">${snap.groupInvites.length}</span></div><div class="panel col-offers" id="grp-invites">${snap.groupInvites.map(inviteRow).join('')}</div>` : ''}
-    ${snap.groups.length ? `<div class="search grp-search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="grp-q" placeholder="Поиск группы по названию" autocomplete="off" enterkeyhint="search" value="${esc(q)}" aria-label="Поиск среди ваших групп">${q ? `<button class="search-x" data-act="grp-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>
+    ${snap.groups.length ? `<div class="search grp-search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="grp-q" placeholder="Поиск среди ваших групп" autocomplete="off" enterkeyhint="search" value="${esc(q)}" aria-label="Поиск среди ваших групп">${q ? `<button class="search-x" data-act="grp-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>
       <div id="grp-list">${groupsListHtml(snap)}</div>`
-      : '<div class="hint grp-empty">Вы пока не в группе. Создайте свою или вступите по коду, который даст администратор группы.</div>'}
+      : `<div class="hint grp-empty">Вы пока не в группе. Создайте свою${snap.searchOn ? ', найдите по названию' : ''} или вступите по коду, который даст администратор группы.</div>`}
   </div>`;
 }
 
@@ -241,10 +261,13 @@ export function renderGroup() {
     <div id="grp-page" data-id="${esc(g.id)}">
     <div class="grp-hero">
       ${g.admin ? `<button class="grp-pic grp-pic-big" data-act="grp-pic" id="grp-pic" aria-label="Изменить картинку группы">${pic}</button>` : `<span class="grp-pic grp-pic-big" aria-hidden="true">${pic}</span>`}
-      <div class="grow"><p class="hint grp-sub">${esc(members(g.members.length))}${g.admin ? ' · вы администратор' : ''}</p></div>
+      <div class="grow"><p class="hint grp-sub">${esc(members(g.members.length))}${g.admin ? ' · вы администратор' : ''}</p>
+        ${g.listed ? `<p class="hint grp-mode" id="grp-mode">${g.open ? 'Открытая группа: её найдут по названию, вступить может любой' : `Группу найдут по названию. Вступить — по заявке${g.admin ? '' : ', которую одобряет администратор'}`}</p>` : ''}</div>
     </div>
     ${g.admin ? `<div class="grp-btns"><button class="btn btn-primary" data-act="grp-invite" id="grp-invite">${I.plus} Пригласить коллегу</button>
       <button class="btn btn-plain" data-act="grp-code" id="grp-code" aria-label="Код и QR-код группы">${small(I.qr, 18)} QR-код</button></div>` : ''}
+    ${g.admin && g.requests.length ? `<div class="grp-sec-title"><h2>Заявки на вступление</h2><span class="grp-count">${g.requests.length}</span></div>
+      <div class="panel col-offers" id="grp-reqs">${g.requests.map(requestRow).join('')}</div>` : ''}
     ${nudgeHtml(g)}
     <div class="panel grp-privpanel"><button class="row" data-act="grp-priv" id="grp-priv-btn"><span class="ico" style="--c:var(--ok)">${I.shield}</span>
       <div class="grow"><div class="t1">Приватность</div><div class="t2">${esc(privSummary(g))}</div></div>${small(I.right, 18)}</button></div>
@@ -259,23 +282,37 @@ export function renderGroup() {
 }
 export const openGroupPage = (id) => { G.id = id; colGo('group'); };
 
+// Заявка в мою группу (администратор): имя, должность и то, что человек разрешил в «Приватности»
+function requestRow(r) {
+  return `<div class="col-offer grp-req" data-id="${esc(r.id)}">
+    <div class="col-who">${avaBox(r.card)}<div class="grow"><div class="t1">${esc(r.card.name)}</div><div class="t2">${esc(cardSub(r.card) || 'Хочет вступить в группу')}</div></div></div>
+    <div class="col-btns"><button class="btn btn-plain btn-sm" data-act="grp-req-no" data-id="${esc(r.id)}" aria-label="Отклонить заявку: ${esc(r.card.name)}">Отклонить</button><button class="btn btn-primary btn-sm" data-act="grp-req-yes" data-id="${esc(r.id)}" aria-label="Принять в группу: ${esc(r.card.name)}">Принять</button></div>
+  </div>`;
+}
+
 // ---------------------------------------------------------------- окна
 
 // Название группы: создать или переименовать
-function nameSheet({ title, value = '', ok }) {
+// listed — показать переключатель «Показывать в поиске» (у новой группы — включён, решение Никиты 12.11.2026)
+function nameSheet({ title, value = '', ok, listed = null }) {
   return new Promise((resolve) => {
     let result = null;
+    let inSearch = listed === true;
     const el = openLayer(sheet({ title, body: `<div class="pay-field"><label for="grp-name">Название группы</label>
         <input class="input" id="grp-name" maxlength="${GROUP_NAME_MAX}" autocomplete="off" enterkeyhint="done" placeholder="Например, Колонна 3" value="${esc(value)}">
-        <div class="hint">До ${GROUP_NAME_MAX} знаков. Не пишите в названии служебную информацию.</div></div>
+        <div class="hint">До ${GROUP_NAME_MAX} знаков. Не пишите в названии имена, телефоны и служебную информацию.</div></div>
+      ${listed === null ? '' : `<div class="panel"><div class="row"><div class="grow"><div class="t1">Показывать в поиске</div>
+        <div class="t2">Найдут по названию и подадут заявку. Видны только название и картинка, кто в группе — нет</div></div>
+        <button class="switch" role="switch" id="grp-name-listed" aria-checked="${inSearch}" aria-label="Показывать в поиске"></button></div></div>`}
       <div id="grp-name-err" class="acc-err" role="alert" aria-live="assertive"></div>`,
     foot: `<button class="btn btn-primary" data-act="grp-name-ok">${esc(ok)}</button>` }), { onClose: () => resolve(result) });
     const input = el.querySelector('#grp-name');
     const done = () => {
       const v = cleanText(input.value, GROUP_NAME_MAX);
       if (!v) { el.querySelector('#grp-name-err').innerHTML = `<div class="error-box">${I.alert}<span>Введите название.</span></div>`; input.focus(); return; }
-      result = v; closeLayer(el);
+      result = listed === null ? v : { name: v, listed: inSearch }; closeLayer(el);
     };
+    el.querySelector('#grp-name-listed')?.addEventListener('click', (e) => { inSearch = !inSearch; e.currentTarget.setAttribute('aria-checked', String(inSearch)); });
     el.querySelector('[data-act="grp-name-ok"]').addEventListener('click', done);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } });
     setTimeout(() => input.focus(), 60);
@@ -293,12 +330,20 @@ async function ready() {
 
 async function createGroup() {
   if (!(await ready()) || !(await ensureCard())) return;
-  const name = await nameSheet({ title: 'Новая группа', ok: 'Создать' });
+  const searchOn = !!colSnap()?.searchOn;
+  const res = await nameSheet({ title: 'Новая группа', ok: 'Создать', listed: searchOn ? true : null });
+  const name = typeof res === 'string' ? res : res?.name;
   if (!name) return;
   const r = await rpc('create_group', { p_name: name });
   if (!r?.ok) { fail(r); return; }
+  let listed = false;
+  if (res?.listed && UUID.test(String(r.data))) {
+    const s2 = await rpc('set_group_search', { p_group: String(r.data), p_listed: true, p_open: false });
+    listed = !!s2?.ok;
+    if (!listed) toast('Группа создана, но в поиск не попала. Включите это в карандаше вверху группы', { error: true, ms: 6000 });
+  }
   await reload();
-  toast('Группа создана. Пригласите коллег — или покажите им код группы');
+  toast(listed ? 'Группа создана и видна в поиске. Заявки появятся в группе' : 'Группа создана. Пригласите коллег — или покажите им код группы');
   if (UUID.test(String(r.data))) openGroupPage(String(r.data).toLowerCase());
 }
 
@@ -489,16 +534,141 @@ async function editPic(g) {
 }
 
 // Карандаш вверху группы (администратор): название и картинка — в одном окне
+function searchRows(g) {
+  return `<div class="group-title">Поиск</div><div class="panel" id="grp-search-set">
+    <div class="row"><div class="grow"><div class="t1">Показывать в поиске</div><div class="t2">${g.listed ? 'Группу находят по названию' : 'Найти можно только по коду и приглашению'}</div></div>
+      <button class="switch" role="switch" data-act="grp-listed" id="grp-listed" aria-checked="${g.listed}" aria-label="Показывать в поиске"></button></div>
+    <div class="row"><div class="grow"><div class="t1">Открытая группа</div><div class="t2">${!g.listed ? 'Сначала включите «Показывать в поиске»' : g.open ? 'Вступают сразу, без вашего одобрения' : 'Вступают по заявке — вы принимаете или отклоняете'}</div></div>
+      <button class="switch" role="switch" data-act="grp-open-sw" id="grp-open-sw" aria-checked="${g.open}" aria-label="Открытая группа" ${g.listed ? '' : 'disabled'}></button></div></div>
+  <p class="hint">В поиске видны только название и картинка. Кто в группе и сколько вас, не видит никто, кроме участников.</p>`;
+}
 function editSheet(g) {
+  const searchOn = !!colSnap()?.searchOn;
   const el = openLayer(sheet({ title: 'Изменить группу', body: `<div class="panel">
     <button class="row" data-act="grp-rename" id="edit-name"><div class="grow"><div class="t1">Название</div><div class="t2">${esc(g.name)}</div></div>${small(I.right, 18)}</button>
-    <button class="row" data-act="grp-pic" id="edit-pic"><span class="grp-pic" aria-hidden="true">${picSvg(g.pic, { size: 36 })}</span><div class="grow"><div class="t1">Картинка</div><div class="t2">${g.pic ? 'Изменить' : 'Сделать картинку'}</div></div>${small(I.right, 18)}</button></div>` }));
-  el.addEventListener('click', (e) => {
+    <button class="row" data-act="grp-pic" id="edit-pic"><span class="grp-pic" aria-hidden="true">${picSvg(g.pic, { size: 36 })}</span><div class="grow"><div class="t1">Картинка</div><div class="t2">${g.pic ? 'Изменить' : 'Сделать картинку'}</div></div>${small(I.right, 18)}</button></div>
+    ${searchOn ? `<div id="grp-search-box">${searchRows(g)}</div>` : ''}` }), { onClose: () => colRerender() });
+  el.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-act]');
-    if (!b) return;
+    if (!b || b.disabled) return;
+    if (b.dataset.act === 'grp-listed' || b.dataset.act === 'grp-open-sw') {
+      if (G.busy) return;
+      G.busy = true;
+      try { await setSearch(g.id, b.dataset.act === 'grp-listed' ? 'listed' : 'open'); } finally { G.busy = false; }
+      const fresh = groupOf(g.id);
+      const box = el.querySelector('#grp-search-box');
+      if (box && fresh) box.innerHTML = searchRows(fresh);
+      return;
+    }
     closeLayer(el);
     groupsClick(b.dataset.act, b);
   });
+}
+
+// «Показывать в поиске» и «Открытая группа» (администратор). Включить — с предупреждением, выключить — сразу.
+async function setSearch(id, what) {
+  const g = groupOf(id);
+  if (!g?.admin) return;
+  let listed = g.listed; let open = g.open;
+  if (what === 'listed') { listed = !listed; if (!listed) open = false; } else { if (!listed) return; open = !open; }
+  if (what === 'listed' && listed) {
+    const ok = await confirmDialog({ title: 'Показывать группу в поиске?', ok: 'Показывать', danger: false,
+      text: `Название «${g.name}» и картинку увидят все пользователи CABINA с аккаунтом. Кто в группе и сколько вас, не увидит никто, кроме участников. Проверьте, что в названии нет имён и телефонов. Вступать будут по заявке — вы решаете.` });
+    if (!ok) return;
+  }
+  if (what === 'open' && open) {
+    const ok = await confirmDialog({ title: 'Сделать группу открытой?', ok: 'Сделать открытой', danger: false,
+      text: 'Вступить сможет любой, кто найдёт группу, без вашего одобрения, и сразу увидит имена участников. Если хотите решать сами, оставьте заявки.' });
+    if (!ok) return;
+  }
+  if ((listed || open) && !(await ensureConsent())) return;
+  const r = await rpc('set_group_search', { p_group: g.id, p_listed: listed, p_open: open });
+  if (!r?.ok) { fail(r); return; }
+  g.listed = listed; g.open = open;
+  toast(what === 'listed' ? (listed ? 'Группа видна в поиске' : 'Группа убрана из поиска') : (open ? 'Группа открытая: вступают сразу' : 'Вступают по заявке'));
+  await reload();
+}
+
+// ---------------------------------------------------------------- поиск групп (2.33)
+
+const F = { q: '', list: null };
+const MODE = { member: 'Вы в группе', pending: 'Заявка отправлена', declined: 'Заявку отклонили' };
+function findRow(x) {
+  const btn = x.me === 'member' ? `<button class="btn btn-plain btn-sm" data-act="grp-find-open" data-id="${esc(x.id)}">Открыть группу</button>`
+    : x.me ? `<span class="hint grp-find-state">${MODE[x.me]}</span>`
+      : `<button class="btn btn-primary btn-sm" data-act="grp-find-join" data-id="${esc(x.id)}">${x.open ? 'Вступить' : 'Подать заявку'}</button>`;
+  return `<div class="col-offer grp-find-row" data-id="${esc(x.id)}">
+    <div class="col-who"><span class="grp-pic" aria-hidden="true">${picSvg(x.pic, { size: 44 })}</span><div class="grow"><div class="t1">${esc(x.name)}</div>
+      <div class="t2">${x.open ? 'Открытая — вступить сразу' : 'Закрытая — вступить по заявке'}</div></div></div>
+    <div class="col-btns">${btn}</div></div>`;
+}
+const findResHtml = () => (F.list === null ? '' : F.list.length ? `<div class="panel" id="grp-find-list">${F.list.map(findRow).join('')}</div>`
+  : '<div class="hint grp-empty" id="grp-find-none">Ничего не нашлось. Возможно, администратор не показывает группу в поиске — попросите у него код.</div>');
+// Ответ сервера — непроверенный: только uuid, название через cleanText, картинка через normPic, состояния из списка
+export const cleanFound = (data) => (Array.isArray(data) ? data : []).filter((x) => x && typeof x === 'object' && UUID.test(String(x.id))).slice(0, 10)
+  .map((x) => ({ id: String(x.id).toLowerCase(), name: cleanText(typeof x.name === 'string' ? x.name : '', GROUP_NAME_MAX) || 'Группа', pic: normPic(x.pic),
+    open: x.open === true, me: ['member', 'pending', 'declined'].includes(x.me) ? x.me : null }));
+
+async function openFind() {
+  if (!(await ready())) return;
+  F.list = null;
+  const el = openLayer(sheet({ title: 'Найти группу', tall: true, body: `<div class="search grp-search"><span aria-hidden="true">${small(I.search, 18)}</span>
+      <input type="search" class="input" id="grp-find-q" placeholder="Название группы" autocomplete="off" enterkeyhint="search" maxlength="${GROUP_NAME_MAX}" value="${esc(F.q)}" aria-label="Название группы"></div>
+    <p class="hint grp-find-how">Находятся группы, которые администратор показал в поиске. Видно только название и картинку — кто в группе, не видно.</p>
+    <div id="grp-find-err" class="acc-err" role="alert" aria-live="assertive"></div>
+    <div id="grp-find-res"></div>`,
+  foot: '<button class="btn btn-primary" data-act="grp-find-go" id="grp-find-go">Найти</button>' }), { onClose: () => colRerender() });
+  const input = el.querySelector('#grp-find-q');
+  const box = el.querySelector('#grp-find-res');
+  const err = (t) => { el.querySelector('#grp-find-err').innerHTML = t ? `<div class="error-box">${I.alert}<span>${esc(t)}</span></div>` : ''; };
+  const go = async () => {
+    if (G.busy) return;
+    F.q = input.value;
+    if (cleanText(F.q, 60).replace(/[^0-9a-zа-яё]/gi, '').length < 3) { err('Введите хотя бы 3 буквы или цифры.'); input.focus(); return; }
+    err('');
+    G.busy = true;
+    try {
+      const r = await rpc('find_groups', { p_q: cleanText(F.q, 60) });
+      if (!r?.ok) { err(groupError(r)); return; }
+      F.list = cleanFound(r.data);
+      box.innerHTML = findResHtml();
+    } finally { G.busy = false; }
+  };
+  el.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'grp-find-go') { go(); return; }
+    const x = F.list?.find((v) => v.id === b.dataset.id);
+    if (!x) return;
+    if (b.dataset.act === 'grp-find-open') { closeLayer(el); await reload(); openGroupPage(x.id); return; }
+    if (b.dataset.act !== 'grp-find-join' || G.busy) return;
+    G.busy = true;
+    try {
+      const res = await requestGroup(x);
+      if (res === 'joined' || res === 'member') { closeLayer(el); openGroupPage(x.id); return; }
+      if (res === 'sent') { x.me = 'pending'; box.innerHTML = findResHtml(); }
+    } finally { G.busy = false; }
+  });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  setTimeout(() => input.focus(), 60);
+}
+
+// Вступить в найденную группу: открытая — сразу, закрытая — заявка. Сначала говорим, кто что увидит.
+async function requestGroup(x) {
+  const pv = privacyOf();
+  const shown = ['имя', 'должность', pv.depot ? 'депо' : '', pv.avatar ? 'персонажа' : ''].filter(Boolean).join(', ');
+  const ok = await confirmDialog(x.open
+    ? { title: `Вступить в «${x.name}»?`, ok: 'Вступить', danger: false,
+      text: `Это открытая группа. Участники увидят ваше ${shown}, вы — их. Свой статус группе вы показываете, только если сами включите.` }
+    : { title: `Подать заявку в «${x.name}»?`, ok: 'Подать заявку', danger: false,
+      text: `Администратор группы увидит ваше ${shown} и решит, принять ли вас. Участников вы увидите после того, как вас примут.` });
+  if (!ok || !(await ensureCard())) return null;
+  const r = await rpc('request_group', { p_group: x.id });
+  if (!r?.ok) { fail(r); return null; }
+  await reload();
+  if (r.data === 'joined' || r.data === 'member') { toast(`Вы в группе «${x.name}»`); return r.data; }
+  toast('Заявка отправлена. Когда администратор примет её, группа появится у вас', { ms: 5000 });
+  return 'sent';
 }
 
 // «Как работают группы» — строка в шестерёнке экрана «Группы»
@@ -506,7 +676,8 @@ function openGroupsHelp() {
   openLayer(sheet({ title: 'Как работают группы', body: `<div class="grp-help" id="grp-help-body">
     <p><b>Группа</b> — список ваших людей с названием: бригада, колонна, депо. Переписки в группе нет.</p>
     <p><b>Вы администратор</b> — группы, которые вы создали (или вам передали права): приглашаете коллег, показываете код и QR-код, меняете название и картинку (карандаш вверху группы), исключаете.</p>
-    <p><b>Вы участник</b> — группы, в которые вы вступили по коду или приглашению.</p>
+    <p><b>Вы участник</b> — группы, в которые вы вступили по коду, приглашению или из поиска.</p>
+    <p><b>Поиск.</b> Группу можно найти по названию, если администратор показывает её в поиске. Видно только название и картинку — кто в группе, не видно. В закрытую группу подают заявку, администратор принимает или отклоняет; в открытую вступают сразу.</p>
     <p><b>Шестерёнка</b> на экране «Группы»: создать группу, вступить по коду и приватность сразу по всем группам — кому из групп виден ваш статус и где вы.</p>
     <p><b>Статус — взаимно.</b> Пока вы не показываете группе свой статус, вы не видите статус участников. Станции видят только те, кто показывает свои.</p>
     <p><b>Коллеги.</b> Нажмите на участника — и предложите стать коллегами. Он сам решит.</p>
@@ -567,6 +738,7 @@ function openGear() {
   const el = openLayer(sheet({ title: 'Настройки групп', tall: true, body: `<div id="grp-gear-body">
     <div class="panel">
       <button class="row" data-act="grp-new" id="gear-new"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--ok)">${I.plus}</span><div class="grow"><div class="t1">Создать группу</div></div>${small(I.right, 18)}</button>
+      ${snap?.searchOn ? `<button class="row" data-act="grp-find" id="gear-find"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--info, var(--ok))">${I.search}</span><div class="grow"><div class="t1">Найти группу</div></div>${small(I.right, 18)}</button>` : ''}
       <button class="row" data-act="grp-code-enter" id="gear-join"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--info, var(--ok))">${small(I.qr, 20)}</span><div class="grow"><div class="t1">Вступить по коду</div></div>${small(I.right, 18)}</button>
       <button class="row" data-act="grp-help" id="gear-help"><span class="ico" style="--c:var(--muted)">${I.help}</span><div class="grow"><div class="t1">Как работают группы</div></div>${small(I.right, 18)}</button>
     </div>
@@ -584,7 +756,7 @@ function openGear() {
     if (act === 'grp-drop') { const k = b.dataset.k === 'place' ? 'place' : 'status'; G.open[k] = !G.open[k]; document.querySelector('#grp-gear-priv').innerHTML = gearPrivHtml(); return; }
     if (act === 'grp-share') { groupsClick(act, b); return; }
     if (act === 'grp-col-priv') { closeLayer(el); colGo('privacy'); return; }
-    if (act === 'grp-new' || act === 'grp-code-enter' || act === 'grp-help') { closeLayer(el); groupsClick(act, b); }
+    if (act === 'grp-new' || act === 'grp-code-enter' || act === 'grp-help' || act === 'grp-find') { closeLayer(el); groupsClick(act, b); }
   });
 }
 
@@ -599,6 +771,7 @@ export async function groupsClick(act, b) {
   if (act === 'grp-gear') { openGear(); return true; }
   if (act === 'grp-q-clear') { G.q = ''; colRerender(); document.getElementById('grp-q')?.focus(); return true; }
   if (act === 'grp-code-enter') { if (await ready()) enterCode(); return true; }
+  if (act === 'grp-find') { openFind(); return true; }
   if (G.busy) return true;
   G.busy = true;
   try {
@@ -621,13 +794,33 @@ export async function groupsClick(act, b) {
         break;
       }
       case 'grp-priv': if (g) openPriv(g); break;
+      case 'grp-req-yes': case 'grp-req-no': {
+        if (!g?.admin) break;
+        const id = String(b.dataset.id || '').toLowerCase();
+        const who = g.requests.find((x) => x.id === id);
+        if (!who) break;
+        const yes = act === 'grp-req-yes';
+        const r = await rpc('answer_group_request', { p_group: g.id, p_user: id, p_accept: yes });
+        if (!r?.ok) { fail(r); break; }
+        toast(yes ? `${who.card.name} теперь в группе` : 'Заявка отклонена. Снова подать её можно через 30 дней');
+        await reload();
+        break;
+      }
+      case 'grp-unrequest': {
+        const id = String(b.dataset.id || '').toLowerCase();
+        if (!UUID.test(id)) break;
+        const r = await rpc('cancel_group_request', { p_group: id });
+        if (!r?.ok) { fail(r); break; }
+        toast('Заявка отозвана'); await reload();
+        break;
+      }
       case 'grp-invite': if (g?.admin) inviteSheet(g); break;
       case 'grp-pic': if (g?.admin) await editPic(g); break;
       case 'grp-edit': if (g?.admin) editSheet(g); break;
       case 'grp-code': if (g?.admin) await showCode(g); break;
       case 'grp-rename': {
         if (!g?.admin) break;
-        const name = await nameSheet({ title: 'Переименовать группу', value: g.name, ok: 'Сохранить' });
+        const name = await nameSheet({ title: 'Переименовать группу', value: g.name, ok: 'Сохранить' }); // без переключателя — строка
         if (!name || name === g.name) break;
         const r = await rpc('rename_group', { p_group: g.id, p_name: name });
         if (!r?.ok) { fail(r); break; }

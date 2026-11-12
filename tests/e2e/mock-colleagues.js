@@ -27,7 +27,10 @@ export async function mockServer(context, init = {}) {
     // 2.31: часы для коллег (как в миграции 0011): hours — по id, hoursOff — сервер без шага 11. Часы коллег в подменном
     // сервере видны мне, если коллега их сюда положил (будто он разрешил мне)
     // заметки о локомотивах (как в миграции 0012): чужие — от коллег; мои — то, что прислал sync_loco_notes. notesOff — сервер без шага 12
-    hours: {}, hoursOff: false, colNotes: [], myNotes: [], votes: [], notesOff: false, ...init,
+    hours: {}, hoursOff: false, colNotes: [], myNotes: [], votes: [], notesOff: false,
+    // 2.33: поиск групп и заявки (как в миграции 0013): у группы listed / open, заявки greqs {group_id, user_id, state}.
+    // searchOff — сервер без шага 13
+    greqs: [], searchOff: false, ...init,
   };
   let seq = 0;
   const uuid = () => `aaaaaaaa-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
@@ -76,15 +79,22 @@ export async function mockServer(context, init = {}) {
       }
       case '/rest/v1/consents': return send(200, db.consents);
       case '/rest/v1/links': return send(200, db.links.filter(mine).map(({ from_id, to_id, state }) => ({ from_id, to_id, state })));
+      case '/rest/v1/group_requests': {
+        if (db.groupsOff || db.searchOff) return send(404, { code: 'PGRST205', message: 'not found' });
+        return send(200, db.greqs.filter((r) => r.user_id === ME || (r.state === 'pending' && isAdmin(r.group_id))));
+      }
       case '/rest/v1/groups': case '/rest/v1/group_members': case '/rest/v1/group_invites': {
         if (db.groupsOff) return send(404, { code: 'PGRST205', message: 'not found' });
         const mg = myGroups();
-        if (path.endsWith('/groups')) return send(200, db.groups.filter((g) => mg.has(g.id) || db.ginvites.some((i) => i.group_id === g.id && i.user_id === ME)));
+        const strip = (g) => (db.searchOff ? (({ listed, open, ...x }) => x)(g) : g);
+        if (path.endsWith('/groups')) return send(200, db.groups.filter((g) => mg.has(g.id) || db.ginvites.some((i) => i.group_id === g.id && i.user_id === ME)
+          || db.greqs.some((r) => r.group_id === g.id && r.user_id === ME)).map(strip));
         if (path.endsWith('/group_members')) return send(200, db.members.filter((m) => mg.has(m.group_id)));
         return send(200, db.ginvites.filter((i) => i.user_id === ME || isAdmin(i.group_id)));
       }
       case '/rest/v1/cards': {
-        const seen = new Set([ME, ...db.links.filter((l) => mine(l)).map(other), ...mates()]);
+        const seen = new Set([ME, ...db.links.filter((l) => mine(l)).map(other), ...mates(),
+          ...db.greqs.filter((r) => r.state === 'pending' && isAdmin(r.group_id)).map((r) => r.user_id)]);
         return send(200, Object.values(db.cards).filter((c) => seen.has(c.user_id)));
       }
       case '/rest/v1/statuses': {
@@ -287,6 +297,48 @@ export async function mockServer(context, init = {}) {
       if (db.oldGroups) return send(404, { code: 'PGRST202', message: 'not found' });
       if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
       db.groups.find((g) => g.id === body.p_group).pic = body.p_pic;
+      return send(204);
+    }
+    // 2.33: поиск групп и заявки
+    if (['set_group_search', 'find_groups', 'request_group', 'cancel_group_request', 'answer_group_request'].includes(rpc)) {
+      if (db.groupsOff || db.searchOff) return send(404, { code: 'PGRST202', message: 'not found' });
+      if (rpc !== 'cancel_group_request' && !main()) return fail('consent required');
+      const g = db.groups.find((x) => x.id === body.p_group);
+      if (rpc === 'set_group_search') {
+        if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+        g.listed = !!body.p_listed; g.open = !!body.p_open; return send(204);
+      }
+      if (rpc === 'find_groups') {
+        const fold = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, '');
+        const q = fold(body.p_q);
+        if (q.length < 3) return fail('short query');
+        db.searches = (db.searches || 0) + 1;
+        if (db.searches > 30) return fail('limit');
+        return send(200, db.groups.filter((x) => x.listed && fold(x.name).includes(q)).slice(0, 10).map((x) => ({ id: x.id, name: x.name, pic: x.pic ?? null, open: !!x.open,
+          me: db.members.some((m) => m.group_id === x.id && m.user_id === ME) ? 'member' : db.greqs.find((r) => r.group_id === x.id && r.user_id === ME)?.state || null })));
+      }
+      if (rpc === 'request_group') {
+        if (!g?.listed) return fail('not found');
+        if (db.members.some((m) => m.group_id === g.id && m.user_id === ME)) return send(200, 'member');
+        const r = db.greqs.find((x) => x.group_id === g.id && x.user_id === ME);
+        if (r?.state === 'declined' || db.bans.some((b) => b.group_id === g.id && b.user_id === ME)) return fail('later');
+        if (!db.cards[ME]) return fail('name required');
+        if (g.open) {
+          db.greqs = db.greqs.filter((x) => !(x.group_id === g.id && x.user_id === ME));
+          db.members.push({ group_id: g.id, user_id: ME, role: 'member', show_status: false, show_place: false, joined_at: NOW });
+          return send(200, 'joined');
+        }
+        if (!r) db.greqs.push({ group_id: g.id, user_id: ME, state: 'pending', created_at: NOW });
+        return send(200, 'sent');
+      }
+      if (rpc === 'cancel_group_request') { db.greqs = db.greqs.filter((x) => !(x.group_id === body.p_group && x.user_id === ME && x.state === 'pending')); return send(204); }
+      if (!isAdmin(body.p_group)) return send(403, { code: '42501', message: 'cabina: forbidden' });
+      const r = db.greqs.find((x) => x.group_id === body.p_group && x.user_id === body.p_user && x.state === 'pending');
+      if (!r) return fail('not found');
+      if (body.p_accept) {
+        db.greqs = db.greqs.filter((x) => x !== r);
+        db.members.push({ group_id: body.p_group, user_id: body.p_user, role: 'member', show_status: false, show_place: false, joined_at: NOW });
+      } else r.state = 'declined';
       return send(204);
     }
     if (rpc === 'offer_colleague') {

@@ -85,14 +85,14 @@ test('без новой редакции согласия — сначала с�
   // новая редакция: в ней есть часы; без неё «Коллеги» просят сначала принять её
   await page.locator('[data-act=col-consent]').click();
   await page.locator('#col-agree').waitFor();
-  assert.match(await text(page, '#layers .layer:last-child'), /privacy-5[\s\S]*отработанные часы/);
+  assert.match(await text(page, '#layers .layer:last-child'), /privacy-6[\s\S]*отработанные часы/);
   await top(page).locator('#col-agree').check();
   await top(page).locator('[data-act=col-agree-ok]').click();
   await waitNoLayers(page);
   await page.locator(`.col-row[data-id="${OLEG}"]`).click();
   await top(page).locator('#col-acc [data-item=hours]').click();
   await page.waitForFunction(() => document.querySelector('#layers #col-acc [data-item=hours]')?.getAttribute('aria-checked') === 'true');
-  assert.deepEqual(srv.calls('give_consent').at(-1).body, { p_document: 'privacy-5' });
+  assert.deepEqual(srv.calls('give_consent').at(-1).body, { p_document: 'privacy-6' });
   assert.deepEqual(srv.calls('set_access').at(-1).body, { p_item: 'hours', p_all: false, p_ids: [OLEG] });
   assert.equal(await top(page).locator('#col-acc [data-item=status]').getAttribute('aria-checked'), 'false', 'статус — отдельно, не включился');
   await top(page).locator('#col-acc [data-item=hours]').click();

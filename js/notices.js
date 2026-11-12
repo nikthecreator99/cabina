@@ -6,7 +6,8 @@
 import { I, esc, small, pageHead } from './ui.js';
 import { session } from './auth.js';
 import { legalReady } from './legal.js';
-import { colAsks, answerAsk, openColleague, avaBox, cardSub } from './colleagues.js';
+import { colAsks, colSnap, answerAsk, openColleague, avaBox, cardSub } from './colleagues.js';
+import { picSvg } from './grp-pic.js';
 import { ideasUnseen, markIdeasSeen, adminNewIdeas, openAdminIdeas, loadIdeas } from './ideas.js';
 
 const N = { shown: null };   // ответы на идеи, которые человек видит на экране (после открытия они «прочитаны», но с экрана не пропадают)
@@ -15,10 +16,12 @@ let rerender = () => {};
 export function initNotices(h) { admin = h.isAdmin || admin; rerender = h.rerender || rerender; }
 
 const isAdmin = () => !!session() && admin();
-// Сколько всего новых: просьбы мне + ответы на мои идеи + (админу) новые идеи
+// Заявки в группы, где я администратор (2.33): по группам
+const groupReqs = () => (colSnap()?.groups || []).filter((g) => g.admin && g.requests?.length);
+// Сколько всего новых: просьбы мне + ответы на мои идеи + заявки в мои группы + (админу) новые идеи
 export function noticeCount() {
   if (!session() || !legalReady()) return 0;
-  return colAsks().length + ideasUnseen().length + (isAdmin() ? adminNewIdeas() : 0);
+  return colAsks().length + ideasUnseen().length + groupReqs().reduce((n, g) => n + g.requests.length, 0) + (isAdmin() ? adminNewIdeas() : 0);
 }
 export const noticesOn = () => !!session() && legalReady();
 
@@ -54,12 +57,18 @@ export function renderNotices() {
   const adm = isAdmin() ? adminNewIdeas() : 0;
   const parts = [];
   if (asks.length) parts.push(`<div class="group-title">Просят показать статус</div><div class="panel ntc-list" id="ntc-asks">${asks.map(askRow).join('')}</div>`);
+  const reqs = groupReqs();
+  if (reqs.length) {
+    parts.push(`<div class="group-title">Заявки в ваши группы</div><div class="panel" id="ntc-groups">${reqs.map((g) => `<button class="row" data-act="grp-open" data-id="${esc(g.id)}">
+      <span class="grp-pic" aria-hidden="true">${picSvg(g.pic, { size: 40 })}</span><div class="grow"><div class="t1">${esc(g.name)}</div>
+      <div class="t2">Хотят вступить: ${g.requests.length}</div></div>${small(I.right, 18)}</button>`).join('')}</div>`);
+  }
   if (ideas.length) parts.push(`<div class="group-title">Ответы на ваши идеи</div><div class="panel" id="ntc-ideas">${ideas.map(ideaRow).join('')}</div>`);
   if (isAdmin()) {
     parts.push(`<div class="group-title">Для администратора</div><div class="panel"><button class="row" data-act="ntc-admin" id="ntc-admin"><span class="ico" style="--c:var(--warn)">${I.idea}</span>
       <div class="grow"><div class="t1">Идеи пользователей</div><div class="t2">${adm ? `Новых: ${adm}` : 'Новых нет'}</div></div>${small(I.right, 18)}</button></div>`);
   }
-  if (!asks.length && !ideas.length) parts.unshift(`<div class="empty ntc-empty"><div class="em-ico">${I.bell}</div><b>Пока уведомлений нет</b><p>Здесь появятся просьбы коллегов показать статус и ответы на ваши идеи.</p></div>`);
+  if (!asks.length && !ideas.length && !reqs.length) parts.unshift(`<div class="empty ntc-empty"><div class="em-ico">${I.bell}</div><b>Пока уведомлений нет</b><p>Здесь появятся просьбы коллегов показать статус и ответы на ваши идеи.</p></div>`);
   parts.push('<p class="hint ntc-hint">Телефон не звонит: уведомления видны, когда вы открываете CABINA.</p>');
   return `${head}<div id="ntc-page">${parts.join('')}</div>`;
 }

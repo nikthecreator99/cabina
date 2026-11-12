@@ -156,7 +156,8 @@ function accessRows(rows, me) {
 // Станции статуса (с 2.16) приходят отдельно — их сервер отдаёт только тем, кому человек показывает, где он.
 // Группы (2.22): groups/members/ginvites — null, если на сервере их ещё нет (тогда groupsOn = false).
 // Часы (2.31): hours — null, если на сервере их ещё нет (тогда hoursOn = false и выбора «Мои часы» нет).
-export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null, asks = null, hours = null, notes = null, votes = null }) {
+// Поиск групп (2.33): greqs — заявки (свои и в группы, где я администратор), null — сервер без шага 13 (тогда searchOn = false).
+export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null, greqs = null, asks = null, hours = null, notes = null, votes = null }) {
   me = String(me).toLowerCase();
   const ok = (doc) => arr(consents).some((c) => c && c.document === doc && !c.withdrawn_at);
   const cardOf = new Map();
@@ -196,7 +197,7 @@ export function buildSnapshot(me, { consents, links, cards, statuses, places, ac
     .map((a) => ({ id: a.asker.toLowerCase(), at: Date.parse(a.asked_at) || 0 }))
     .map((a) => ({ ...a, card: out.colleagues.find((c) => c.id === a.id)?.card }))
     .filter((a) => a.card).sort((a, b) => b.at - a.at).slice(0, 20);
-  Object.assign(out, buildGroups(me, { groups, members, ginvites, cardOf, statusOf }));
+  Object.assign(out, buildGroups(me, { groups, members, ginvites, greqs, cardOf, statusOf }));
   Object.assign(out, buildNotes(me, out.colleagues, notes, votes));
   return out;
 }
@@ -231,15 +232,20 @@ export function buildNotes(me, colleagues, notes, votes) {
 const noCard = (id) => ({ id, name: 'Без имени', role: '', depot: '', avatar: null, searchable: false });
 // Группы: в каких я, кто в них (статус участника — только если он показывает его этой группе), приглашения мне.
 // Всё — непроверенное: id только uuid, название — через txt (не длиннее 30), роли — из списка.
-function buildGroups(me, { groups, members, ginvites, cardOf, statusOf }) {
-  if (!Array.isArray(groups) || !Array.isArray(members) || !Array.isArray(ginvites)) return { groupsOn: false, groups: [], groupInvites: [] };
+function buildGroups(me, { groups, members, ginvites, greqs = null, cardOf, statusOf }) {
+  if (!Array.isArray(groups) || !Array.isArray(members) || !Array.isArray(ginvites)) return { groupsOn: false, searchOn: false, groups: [], groupInvites: [], myRequests: [] };
   const gname = new Map();
   const gpic = new Map();
+  const gflags = new Map();
   for (const g of groups) {
     if (!g || !UUID.test(String(g.id))) continue;
     gname.set(String(g.id).toLowerCase(), txt(g.name, 30) || 'Группа');
     gpic.set(String(g.id).toLowerCase(), normPic(g.pic));
+    gflags.set(String(g.id).toLowerCase(), { listed: g.listed === true, open: g.listed === true && g.open === true });
   }
+  // заявки: только uuid и известные состояния
+  const reqs = arr(greqs).filter((r) => r && UUID.test(String(r.group_id)) && UUID.test(String(r.user_id)) && (r.state === 'pending' || r.state === 'declined'))
+    .map((r) => ({ gid: String(r.group_id).toLowerCase(), uid: String(r.user_id).toLowerCase(), state: r.state, at: time(r.created_at) }));
   const by = new Map();
   for (const m of members) {
     if (!m || !UUID.test(String(m.group_id)) || !UUID.test(String(m.user_id))) continue;
@@ -257,7 +263,10 @@ function buildGroups(me, { groups, members, ginvites, cardOf, statusOf }) {
     const list = [...mm.values()].sort((a, b) => (b.admin - a.admin) || a.card.name.localeCompare(b.card.name, 'ru'));
     const pending = arr(ginvites).filter((i) => i && String(i.group_id).toLowerCase() === gid && UUID.test(String(i.user_id)) && String(i.user_id).toLowerCase() !== me)
       .map((i) => { const id = String(i.user_id).toLowerCase(); return { id, card: cardOf.get(id) || noCard(id) }; });
-    out.push({ id: gid, name: gname.get(gid), pic: gpic.get(gid), admin: mine.admin, me: mine.show, members: list, pending });
+    // заявки в мою группу видит только администратор
+    const requests = mine.admin ? reqs.filter((r) => r.gid === gid && r.state === 'pending' && r.uid !== me && !mm.has(r.uid))
+      .map((r) => ({ id: r.uid, card: cardOf.get(r.uid) || noCard(r.uid), at: r.at })).sort((a, b) => a.at - b.at) : [];
+    out.push({ id: gid, name: gname.get(gid), pic: gpic.get(gid), admin: mine.admin, me: mine.show, members: list, pending, requests, ...gflags.get(gid) });
   }
   out.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const invites = [];
@@ -268,7 +277,10 @@ function buildGroups(me, { groups, members, ginvites, cardOf, statusOf }) {
     const from = UUID.test(String(i.invited_by)) ? String(i.invited_by).toLowerCase() : '';
     invites.push({ id: gid, name: gname.get(gid), pic: gpic.get(gid), from: from ? (cardOf.get(from) || noCard(from)) : null });
   }
-  return { groupsOn: true, groups: out, groupInvites: invites };
+  // мои заявки, которые ждут ответа (отклонённые не показываем: о них человек узнает, если попробует снова)
+  const myRequests = reqs.filter((r) => r.uid === me && r.state === 'pending' && gname.has(r.gid) && !out.some((g) => g.id === r.gid))
+    .map((r) => ({ id: r.gid, name: gname.get(r.gid), pic: gpic.get(r.gid) }));
+  return { groupsOn: true, searchOn: Array.isArray(greqs), groups: out, groupInvites: invites, myRequests };
 }
 // Показываю ли я статус ('status') или «где я» ('place') хоть одной группе, где есть кто-то кроме меня
 export const groupShare = (snap, item) => !!snap?.groups?.some((g) => g.me[item] && g.members.length > 1);
@@ -414,6 +426,8 @@ export function loadColleagues({ force = false } = {}) {
       restGet('loco_notes?select=id,user_id,note_key,loco_type,loco_num,body,month,useful&limit=2000'),
       restGet('loco_note_votes?select=note_id&limit=2000'),
     ]);
+    // заявки в группы (2.33) — необязательно: сервер без шага 13 группы не ломает, только поиска групп нет
+    const greqP = GROUPS_LIVE ? restGet('group_requests?select=group_id,user_id,state,created_at') : Promise.resolve(null);
     const rs = await Promise.all([
       restGet('consents?select=document,withdrawn_at'),
       restGet('links?select=from_id,to_id,state'),
@@ -428,6 +442,7 @@ export function loadColleagues({ force = false } = {}) {
       restGet('group_members?select=group_id,user_id,role,show_status,show_place,joined_at'),
       restGet('group_invites?select=group_id,user_id,invited_by'),
     ]);
+
     if (mine()?.sub?.toLowerCase() !== sub) return null; // за это время вышли из аккаунта
     const gBad = gs.find((r) => !r?.ok);
     if (gBad !== undefined && !notReady(gBad)) rs.push(gBad);
@@ -440,10 +455,12 @@ export function loadColleagues({ force = false } = {}) {
     const [consents, links, cards, statuses, places, access] = rs.map((r) => r.data);
     const [groups, members, ginvites] = gBad === undefined ? gs.map((r) => r.data) : [null, null, null];
     const ar = await asking;
+    const greq = await greqP;
     const hr = await hrs;
     const [nr, vr] = await noting;
     const notesOk = nr?.ok && Array.isArray(nr.data);
     C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access, groups, members, ginvites,
+      greqs: greq?.ok && Array.isArray(greq.data) ? greq.data : null,
       asks: ar?.ok && Array.isArray(ar.data) ? ar.data : null, hours: hr?.ok && Array.isArray(hr.data) ? hr.data : null,
       notes: notesOk ? nr.data : null, votes: notesOk && vr?.ok && Array.isArray(vr.data) ? vr.data : [] });
     if (notesOk) { saveNotesCache(sub, C.snap); noteUsefulCount(C.snap.useful); }
