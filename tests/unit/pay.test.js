@@ -152,3 +152,29 @@ test('ожидание следования пассажиром — по тар
   assert.equal(r.gross, 2400);
   assert.deepEqual(r.lines.map((l) => l.key).slice(0, 3), ['base', 'pass', 'wait']);
 });
+
+test('алименты: процент от заработка после НДФЛ, не больше 70%, отдельной строкой удержаний', () => {
+  const trips = [T('a1', '2026-11-03T08:00', '2026-11-03T18:00')];
+  const base = payMonth(2026, 11, trips, [], cfgOf({}), st);
+  const cfg = cfgOf({ alimony: '25', union: 1 });
+  const r = payMonth(2026, 11, trips, [], cfg, st);
+  const al = r.deductions.find((d) => d.key === 'alimony');
+  assert.ok(al, 'есть строка «Алименты»');
+  assert.equal(al.label, 'Алименты');
+  assert.equal(al.pct, 25);
+  assert.equal(al.amount, Math.round((r.gross - r.ndfl) * 25) / 100);
+  assert.deepEqual(r.deductions.map((d) => d.key), ['ndfl', 'union', 'alimony']);
+  assert.equal(r.gross, base.gross, 'начисленное не меняется');
+  // больше 70% не бывает
+  assert.equal(cfgOf({ alimony: 90 }).alimony, 70);
+  assert.equal(cfgOf({}).alimony, 0);
+  // поездка: тоже после НДФЛ
+  const t = trips[0];
+  const p0 = tripPay(t, st(t), cfgOf({}));
+  const p1 = tripPay(t, st(t), cfgOf({ alimony: 50 }));
+  assert.equal(p1.gross, p0.gross);
+  assert.ok(Math.abs(p1.net - (p0.net - p0.gross * 0.87 * 0.5)) < 0.02);
+  // в сумме нескольких месяцев алименты — после профсоюза и пенсии
+  const tot = payTotal([r]);
+  assert.equal(tot.deductions.at(-1).key, 'alimony');
+});

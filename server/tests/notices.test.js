@@ -28,7 +28,7 @@ function account({ name = 'Иван' } = {}) {
   const code = `NTC${++n}`.padEnd(10, 'X');
   q(`insert into private.invites (code_hash) values (private.hash_code('${code}'))`);
   const r = db.sql(`insert into auth.users (email, raw_user_meta_data)
-    values ('n${n}@example.test', '{"consent":"privacy-4","invite":"${code}","platform":"web","version":"2.28.0"}'::jsonb) returning id`, 'auth');
+    values ('n${n}@example.test', '{"consent":"privacy-5","invite":"${code}","platform":"web","version":"2.28.0"}'::jsonb) returning id`, 'auth');
   assert.ok(r.ok, r.err);
   const id = r.rows[0];
   if (name) q(`select public.save_card(${lit(name)}, null, null, null, false)`, id);

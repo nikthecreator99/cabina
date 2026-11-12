@@ -4,11 +4,13 @@
 //   карточка — имя, должность и, если включено в «Приватности», депо и персонаж (набор деталей, не фото);
 //   «Меня можно найти» — отдельное согласие на распространение (152-ФЗ, ст. 10.1); выключил — согласие отозвано;
 //   статус — одна строка без истории: вид, станции или дом отдыха, часть суток, «до …»; сам стирается через 48 часов.
-// Номер поезда и локомотива, точное время явки, причина и даты отвлечения, телефон на сервер не уходят никогда.
+//   часы (2.31) — только два числа: отработано в этом месяце и итог прошлого; кому — выбирает человек (по умолчанию никому).
+// Номер поезда и локомотива, точное время явки, причина и даты отвлечения, норма, заработок, телефон на сервер не уходят никогда.
 // Всё, что пришло с сервера, — непроверенное: текст только через esc(), персонаж — через normalizeAvatar.
-import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, whenShort, plural, layerCount, MONTHS_GEN, hm } from './ui.js';
-import { S, saveProfile, nowLocal, onChange, legEnds } from './store.js';
-import { DAY } from './calc.js';
+import { I, esc, small, pageHead, openLayer, closeLayer, sheet, toast, confirmDialog, whenShort, plural, layerCount, MONTHS, MONTHS_GEN, hm } from './ui.js';
+import { S, saveProfile, nowLocal, onChange, legEnds, normNum, locoKey } from './store.js';
+import { awardSnapshot, awardNews, celebrate, noteCount } from './awards.js';
+import { DAY, dateKeyOf, monthSummary } from './calc.js';
 import { session, rpc, restGet, errorText } from './auth.js';
 import { GROUPS_LIVE, CONSENT_VERSION, PUBLISH_VERSION, OPERATOR, consentHtml, policyHtml, publishConsentHtml, legalReady } from './legal.js';
 import { statusFacts, privacyOf, normDepot } from './profile.js';
@@ -27,6 +29,7 @@ const own = (o, k) => typeof k === 'string' && Object.hasOwn(o, k);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const arr = (v) => (Array.isArray(v) ? v : []);
 const RESEND = 6 * 3600e3; // статус переотправляем раз в 6 часов, пока приложение открывают: сервер стирает его через 48 ч
+const HOURS_GAP = 10 * 60e3; // часы во время поездки «в пути» — не чаще раза в 10 минут (сервер стирает их через 7 дней)
 
 // ---------------------------------------------------------------- время
 
@@ -112,9 +115,35 @@ export function cleanStatus(x) {
   };
 }
 
+// Часы коллеги (2.31): месяц 'YYYY-MM', минуты за него и за прошлый месяц. Всё с сервера — проверяем.
+const HOURS_MAX = 31 * 24 * 60;
+const minOk = (v) => Number.isInteger(v) && v >= 0 && v <= HOURS_MAX;
+export function cleanHours(x) {
+  if (!x || typeof x !== 'object' || typeof x.month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(x.month) || !minOk(x.cur_min)) return null;
+  return { month: x.month, cur: x.cur_min, prev: minOk(x.prev_min) ? x.prev_min : null, at: time(x.updated_at) };
+}
+// Что уходит на сервер: месяц по настенному времени, отработано в нём и итог прошлого (как «Отработано» на главной)
+export function hoursPayload(trips = S.trips, absences = S.absences, now = nowLocal()) {
+  const d = new Date(now);
+  const y = d.getUTCFullYear(); const m = d.getUTCMonth() + 1;
+  const py = m === 1 ? y - 1 : y; const pm = m === 1 ? 12 : m - 1;
+  const cap = (v) => Math.min(HOURS_MAX, Math.max(0, Math.round(v || 0)));
+  return { p_month: `${y}-${String(m).padStart(2, '0')}`, p_cur: cap(monthSummary(y, m, trips, absences).work), p_prev: cap(monthSummary(py, pm, trips, absences).work) };
+}
+const MONTHS_PREP = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'];
+const hNum = (min) => { const h = Math.floor(min / 60); const r = min % 60; return r ? `${h} ч ${r} мин` : `${h} ч`; };
+// «112 ч 30 мин в ноябре» и строка прошлого месяца «179 ч в октябре» (если прислали)
+export function hoursLines(h) {
+  if (!h) return [];
+  const [y, m] = h.month.split('-').map(Number);
+  const out = [`${hNum(h.cur)} в ${MONTHS_PREP[m - 1]}`];
+  if (h.prev != null) out.push(`${hNum(h.prev)} в ${MONTHS_PREP[(m + 10) % 12]}${m === 1 ? ` ${y - 1}` : ''}`);
+  return out;
+}
+
 // Свои правила «кому видно» (чужие сервер не отдаёт): all — всем коллегам, ids — выбранным
 function accessRows(rows, me) {
-  const a = { status: { all: false, ids: [] }, place: { all: false, ids: [] } };
+  const a = { status: { all: false, ids: [] }, place: { all: false, ids: [] }, hours: { all: false, ids: [] }, notes: { all: false, ids: [] } };
   for (const r of arr(rows)) {
     if (!r || typeof r !== 'object' || !own(a, r.item) || (r.user_id != null && String(r.user_id).toLowerCase() !== me)) continue;
     if (r.viewer_id == null) a[r.item].all = true;
@@ -126,7 +155,8 @@ function accessRows(rows, me) {
 // Снимок с сервера: согласия, моя карточка, предложения мне, мои предложения, коллеги со статусом, кому что видно.
 // Станции статуса (с 2.16) приходят отдельно — их сервер отдаёт только тем, кому человек показывает, где он.
 // Группы (2.22): groups/members/ginvites — null, если на сервере их ещё нет (тогда groupsOn = false).
-export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null, asks = null }) {
+// Часы (2.31): hours — null, если на сервере их ещё нет (тогда hoursOn = false и выбора «Мои часы» нет).
+export function buildSnapshot(me, { consents, links, cards, statuses, places, access, groups = null, members = null, ginvites = null, asks = null, hours = null, notes = null, votes = null }) {
   me = String(me).toLowerCase();
   const ok = (doc) => arr(consents).some((c) => c && c.document === doc && !c.withdrawn_at);
   const cardOf = new Map();
@@ -141,7 +171,10 @@ export function buildSnapshot(me, { consents, links, cards, statuses, places, ac
     const v = cleanStatus(p ? { ...s, place: p.place, dest: p.dest } : s);
     if (v) statusOf.set(id, v);
   }
+  const hoursOf = new Map();
+  for (const h of arr(hours)) { const v = h && UUID.test(String(h.user_id)) ? cleanHours(h) : null; if (v) hoursOf.set(h.user_id.toLowerCase(), v); }
   const out = { consent: { main: ok(CONSENT_VERSION), publish: ok(PUBLISH_VERSION) }, card: cardOf.get(me) || null, myStatus: statusOf.get(me) || null,
+    hoursOn: Array.isArray(hours), myHours: hoursOf.get(me) || null,
     access: accessRows(access, me), incoming: [], outgoing: [], colleagues: [] };
   const seen = new Set();
   for (const l of arr(links)) {
@@ -152,7 +185,7 @@ export function buildSnapshot(me, { consents, links, cards, statuses, places, ac
     if (seen.has(other)) continue;
     seen.add(other);
     const item = { id: other, card: cardOf.get(other) || { id: other, name: 'Без имени', role: '', depot: '', avatar: null, searchable: false } };
-    if (l.state === 'accepted') out.colleagues.push({ ...item, status: statusOf.get(other) || null });
+    if (l.state === 'accepted') out.colleagues.push({ ...item, status: statusOf.get(other) || null, hours: hoursOf.get(other) || null });
     else if (l.state === 'pending') (from === me ? out.outgoing : out.incoming).push(item);
   }
   const byName = (a, b) => a.card.name.localeCompare(b.card.name, 'ru');
@@ -164,6 +197,34 @@ export function buildSnapshot(me, { consents, links, cards, statuses, places, ac
     .map((a) => ({ ...a, card: out.colleagues.find((c) => c.id === a.id)?.card }))
     .filter((a) => a.card).sort((a, b) => b.at - a.at).slice(0, 20);
   Object.assign(out, buildGroups(me, { groups, members, ginvites, cardOf, statusOf }));
+  Object.assign(out, buildNotes(me, out.colleagues, notes, votes));
+  return out;
+}
+
+// Заметки о локомотивах (2.31): свои (сколько «полезно») и заметки коллег, которые сервер мне отдал (RLS).
+// Всё с сервера — непроверенное: строки только через cleanText, месяц — только «ГГГГ-ММ», чужие — только от моих коллег.
+// Старый сервер без таблицы — notesOn: false (заметки коллег не показываем, свои не отправляем).
+const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])/;
+export function buildNotes(me, colleagues, notes, votes) {
+  const out = { notesOn: Array.isArray(notes), locoNotes: [], myNotes: {}, useful: 0, votes: [] };
+  const names = new Map(colleagues.map((c) => [c.id, c.card.name]));
+  for (const x of arr(notes)) {
+    if (!x || typeof x !== 'object' || !UUID.test(String(x.id)) || !UUID.test(String(x.user_id))) continue;
+    const from = String(x.user_id).toLowerCase();
+    const m = MONTH_RE.exec(typeof x.month === 'string' ? x.month : '');
+    const useful = Number.isInteger(x.useful) && x.useful >= 0 && x.useful <= 100000 ? x.useful : 0;
+    if (from === me) {
+      const k = txt(x.note_key, 40);
+      if (k) { out.myNotes[k] = useful; out.useful += useful; }
+      continue;
+    }
+    const num = txt(x.loco_num, 12); const body = txt(x.body, 300);
+    if (!names.has(from) || !num || !body || !m) continue;
+    out.locoNotes.push({ id: String(x.id).toLowerCase(), from, name: names.get(from), type: txt(x.loco_type, 20), number: num, text: body, month: `${m[1]}-${m[2]}`, useful });
+    if (out.locoNotes.length >= 2000) break;
+  }
+  out.locoNotes.sort((a, b) => b.month.localeCompare(a.month) || b.useful - a.useful);
+  out.votes = arr(votes).map((v) => String(v?.note_id || '').toLowerCase()).filter((id) => UUID.test(id));
   return out;
 }
 
@@ -299,6 +360,7 @@ function mine() {
     reset(sub);
     if (!sub) { try { localStorage.removeItem(SYNC_KEY); } catch {} }
   }
+  if (!sub) { try { localStorage.removeItem(NOTES_KEY); } catch {} }
   return sub ? s : null;
 }
 
@@ -317,6 +379,7 @@ export function initColleagues(h) {
 
 const OFFLINE = 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.';
 const SERVER_OFF = 'Раздел «Коллеги» на сервере ещё не включён. Попробуйте позже.';
+const HOURS_OFF = 'Часы для коллег на сервере ещё не включены. Попробуйте позже.';
 const notReady = (r) => r && (r.status === 404 || /^(PGRST20\d|42883|42P01|42703)$/.test(String(r.data?.code || '')));
 
 // Понятная причина отказа сервера
@@ -344,6 +407,13 @@ export function loadColleagues({ force = false } = {}) {
   C.loading = (async () => {
     // просьбы показать статус (2.28) — отдельно и необязательно: сервер без шага 10 «Коллег» не ломает
     const asking = restGet('status_asks?select=asker,state,asked_at&state=eq.open&order=asked_at.desc&limit=50');
+    // часы коллег (2.31) — тоже отдельно: сервер без шага 11 «Коллег» не ломает
+    const hrs = restGet('hours?select=user_id,month,cur_min,prev_min,updated_at');
+    // заметки о локомотивах (2.31) — тоже необязательно: скачиваем все видимые и ищем локомотив в телефоне
+    const noting = Promise.all([
+      restGet('loco_notes?select=id,user_id,note_key,loco_type,loco_num,body,month,useful&limit=2000'),
+      restGet('loco_note_votes?select=note_id&limit=2000'),
+    ]);
     const rs = await Promise.all([
       restGet('consents?select=document,withdrawn_at'),
       restGet('links?select=from_id,to_id,state'),
@@ -370,7 +440,13 @@ export function loadColleagues({ force = false } = {}) {
     const [consents, links, cards, statuses, places, access] = rs.map((r) => r.data);
     const [groups, members, ginvites] = gBad === undefined ? gs.map((r) => r.data) : [null, null, null];
     const ar = await asking;
-    C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access, groups, members, ginvites, asks: ar?.ok && Array.isArray(ar.data) ? ar.data : null });
+    const hr = await hrs;
+    const [nr, vr] = await noting;
+    const notesOk = nr?.ok && Array.isArray(nr.data);
+    C.snap = buildSnapshot(sub, { consents, links, cards, statuses, places, access, groups, members, ginvites,
+      asks: ar?.ok && Array.isArray(ar.data) ? ar.data : null, hours: hr?.ok && Array.isArray(hr.data) ? hr.data : null,
+      notes: notesOk ? nr.data : null, votes: notesOk && vr?.ok && Array.isArray(vr.data) ? vr.data : [] });
+    if (notesOk) { saveNotesCache(sub, C.snap); noteUsefulCount(C.snap.useful); }
     C.at = Date.now(); C.err = '';
     return C.snap;
   })().finally(() => { C.loading = null; });
@@ -449,8 +525,120 @@ async function sync() {
       const r = await rpc('clear_status');
       if (r?.ok) { last.status = ''; last.statusAt = 0; snap.myStatus = null; }
     }
+    // часы (2.31): только если кому-то из коллег их показываю. Во время поездки «в пути» минуты растут —
+    // отправляем не чаще раза в 10 минут; поправили запись — сразу.
+    if (snap.hoursOn && snap.colleagues.length && accessMode(snap, 'hours', pv).mode !== 'none') {
+      const h = hoursPayload();
+      const m = mark(h);
+      const live = S.trips.some((t) => !t.end);
+      if ((m !== last.hours && (!live || Date.now() - (last.hoursAt || 0) > HOURS_GAP || h.p_month !== last.hoursMonth)) || Date.now() - (last.hoursAt || 0) > RESEND) {
+        const r = await rpc('set_hours', h);
+        if (r?.ok) { last.hours = m; last.hoursAt = Date.now(); last.hoursMonth = h.p_month; snap.myHours = cleanHours({ month: h.p_month, cur_min: h.p_cur, prev_min: h.p_prev, updated_at: new Date().toISOString() }); }
+      }
+    }
+    // заметки для коллег (2.31): весь список целиком; показывать некому — пустой (сервер и так ничего не хранит)
+    if (snap.notesOn) {
+      const want = accessMode(snap, 'notes').mode === 'none' ? [] : notesPayload();
+      const m = mark(want);
+      if (m !== last.notes) {
+        const r = await rpc('sync_loco_notes', { p_notes: want });
+        if (r?.ok) last.notes = m;
+      }
+    }
     writeSync(last);
   } finally { syncing = false; }
+}
+
+// ---------------------------------------------------------------- заметки о локомотивах для коллег (2.31)
+
+// Мои заметки, у которых включено «Показать коллегам»: что уходит на сервер. Только серия, номер, текст до 300 знаков
+// и месяц (без дня и времени, без поездки). Свежие — первыми, не больше 200.
+export const NOTE_SHARE_MAX = 300;
+export function notesPayload(notes = S.notes, off = tzOffset()) {
+  return notes.filter((n) => n && n.shared === true && normNum(n.number) && cleanText(n.text, NOTE_SHARE_MAX))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 200)
+    .map((n) => ({ k: String(n.id).slice(0, 40), t: cleanText(n.type, 20), n: normNum(n.number).slice(0, 12), b: cleanText(n.text, NOTE_SHARE_MAX),
+      m: new Date((Number.isFinite(n.createdAt) ? n.createdAt : Date.now()) + off).toISOString().slice(0, 7) }));
+}
+
+// Заметки коллег — ещё и в телефоне (localStorage), чтобы были видны без связи, в кабине. Вышел из аккаунта — стираются.
+const NOTES_KEY = 'cabina-col-notes';
+function saveNotesCache(sub, snap) {
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify({ sub, at: Date.now(), list: snap.locoNotes, votes: snap.votes })); } catch {}
+}
+function notesCache() {
+  try {
+    const x = JSON.parse(localStorage.getItem(NOTES_KEY) || 'null');
+    if (x && x.sub === C.sub && Array.isArray(x.list)) {
+      // из хранилища — тоже непроверенное: пересобираем теми же правилами
+      const names = new Map(); for (const n of x.list) if (n && UUID.test(String(n.from))) names.set(String(n.from).toLowerCase(), txt(n.name, 60) || 'Коллега');
+      const cols = [...names].map(([id, name]) => ({ id, card: { name } }));
+      return buildNotes(C.sub, cols, x.list.map((n) => ({ id: n?.id, user_id: n?.from, loco_type: n?.type, loco_num: n?.number, body: n?.text, month: n?.month, useful: n?.useful })),
+        (Array.isArray(x.votes) ? x.votes : []).map((id) => ({ note_id: id })));
+    }
+  } catch {}
+  return null;
+}
+const notesNow = () => (C.snap?.notesOn ? C.snap : (mine() && notesCache()));
+
+// Заметки коллег о локомотиве (ищем в телефоне — сервер не узнаёт, на каком локомотиве я)
+export function colNotesFor(type, number) {
+  if (!normNum(number)) return [];
+  const src = notesNow();
+  if (!src) return [];
+  const k = locoKey(type, number);
+  return src.locoNotes.filter((n) => locoKey(n.type, n.number) === k);
+}
+export const colNotesAll = () => notesNow()?.locoNotes || [];
+export const colNoteVoted = (id) => !!notesNow()?.votes?.includes(id);
+// Включён ли раздел заметок для коллег (аккаунт есть, сервер с шагом 11)
+export const colNotesOn = () => !!(legalReady() && mine() && (C.snap ? C.snap.notesOn : true));
+export const notesAudience = () => (C.snap ? accessText(C.snap, 'notes') : '');
+export const notesAccessMode = () => (C.snap ? accessMode(C.snap, 'notes').mode : 'none');
+export const notesUseful = (noteId) => C.snap?.myNotes?.[noteId] || 0;
+
+// «Полезно» (true) или снять отметку (false). Возвращает true, если сервер принял.
+export async function rateColNote(id, useful) {
+  if (!mine()) { needAccount(); return false; }
+  if (!(await ensureConsent())) return false;
+  const r = await rpc('rate_loco_note', { p_id: id, p_useful: !!useful });
+  if (!r?.ok) {
+    toast(/cabina: not found/.test(String(r?.data?.message)) ? 'Эту заметку коллега больше не показывает.' : colError(r), { error: true, ms: 5000 });
+    return false;
+  }
+  const snap = C.snap;
+  if (snap) {
+    snap.votes = useful ? [...new Set([...snap.votes, id])] : snap.votes.filter((x) => x !== id);
+    const n = snap.locoNotes.find((x) => x.id === id);
+    if (n && Number.isInteger(r.data)) n.useful = r.data;
+    saveNotesCache(C.sub, snap);
+  }
+  return true;
+}
+
+// Сколько всего «полезно» у моих заметок — для награды «Полезный совет» (запоминается в телефоне, только растёт)
+async function noteUsefulCount(n) {
+  const before = awardSnapshot();
+  if (await noteCount('useful', n, dateKeyOf(nowLocal()))) {
+    const news = awardNews(before);
+    if (news) { let tries = 0; const show = () => { if (!layerCount()) celebrate(news); else if (++tries < 40) setTimeout(show, 1000); }; setTimeout(show, 600); }
+  }
+}
+
+// Включить «Показать коллегам»: нужен аккаунт, согласие и выбор, кто видит. true — можно делиться.
+export async function prepareNoteShare() {
+  if (!mine()) { needAccount(); return false; }
+  const snap = await snapOrSay();
+  if (!snap) return false;
+  if (!snap.notesOn) { toast('Заметки для коллег на сервере ещё не включены. Попробуйте позже.', { ms: 5000 }); return false; }
+  if (!snap.colleagues.length) { toast('Пока у вас нет коллег: добавьте их в Профиле → «Мои коллеги».', { ms: 5000 }); return false; }
+  if (!(await ensureConsent())) return false;
+  if (accessMode(snap, 'notes').mode !== 'none') return true;
+  // окно закрыли без «Сохранить» или выбрали «Никто» — делиться не начинаем
+  return new Promise((resolve) => {
+    let ok = false;
+    openAccess('notes', { onDone: (mode) => { ok = mode !== 'none'; }, onClosed: () => resolve(ok) });
+  });
 }
 
 // ---------------------------------------------------------------- окна
@@ -533,7 +721,8 @@ function colAccessRows(id) {
   const row = (item, title, sub, on, off = false) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
     <button class="switch" role="switch" data-item="${item}" aria-checked="${on}" aria-label="${title}" ${off ? 'disabled' : ''}></button></div>`;
   return row('status', 'Мой статус', 'В пути, на отдыхе, между поездками', st)
-    + row('place', 'Где я', st ? 'Станции и дом отдыха' : 'Сначала включите статус', st && sees(C.snap, 'place', id), !st);
+    + row('place', 'Где я', st ? 'Станции и дом отдыха' : 'Сначала включите статус', st && sees(C.snap, 'place', id), !st)
+    + (C.snap.hoursOn ? row('hours', 'Мои часы', 'Отработано за месяц, без нормы и заработка', sees(C.snap, 'hours', id)) : '');
 }
 
 // «Попросить показать статус» (2.28): отметка в телефоне, кого и когда просили, — чтобы не звать чаще раза в 7 дней
@@ -599,6 +788,7 @@ export function openColleague(id, { ask = false } = {}) {
       ${cardSub(c.card) ? `<div class="profile-sub">${esc(cardSub(c.card))}</div>` : ''}
       ${line ? `${pill(line, 'pr-status')}<div class="hint">${esc(updatedText(c.status.at))}</div>` : `<div class="hint">Статус не показан: коллега его не включил или давно не открывал CABINA.</div><div id="col-ask-box">${askHtml(c.id)}</div>`}
     </section>
+    ${hoursBox(c)}
     <div class="group-title">Что видит ${esc(c.card.name)}</div>
     <div class="panel" id="col-acc">${colAccessRows(c.id)}</div>
     <div class="notice ok">${I.shield}<div>Номер поезда и локомотива, точное время явки и причину отвлечения CABINA коллегам не показывает.</div></div>`,
@@ -632,6 +822,17 @@ export function openColleague(id, { ask = false } = {}) {
 
 // ---------------------------------------------------------------- разметка
 
+// Мои часы так, как их увидит коллега: «112 ч в ноябре»
+const myHoursLine = () => { const h = hoursPayload(); return hoursLines(cleanHours({ month: h.p_month, cur_min: h.p_cur }))[0]; };
+// Часы коллеги в его окне (2.31): только если он сам мне их показывает
+function hoursBox(c) {
+  const ls = hoursLines(c.hours);
+  if (!ls.length) return '';
+  return `<div class="panel col-hours-box" id="col-hours"><div class="row"><span class="ico" style="--c:var(--ok)">${I.clock}</span>
+    <div class="grow"><div class="t2">Отработано</div><div class="t1">${esc(ls[0])}</div>${ls[1] ? `<div class="t2">${esc(ls[1])}</div>` : ''}</div></div></div>
+    <div class="hint col-hours-upd">${esc(updatedText(c.hours.at))}</div>`;
+}
+
 const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 function cardAvatar(card, size = 44) {
   if (card.avatar) return avatarSvg(card.avatar, { size, cls: 'ava-svg' });
@@ -655,7 +856,8 @@ function colleagueRow(c) {
   const line = colleagueLine(c.status);
   return `<button class="row col-row" data-act="col-open" ${idAttr(c.id)}>${avaBox(c.card)}
     <div class="grow"><div class="t1">${esc(c.card.name)}</div>
-      ${line ? `<div class="t2">${pill(line)}</div><div class="col-upd">${esc(updatedText(c.status.at))}</div>` : '<div class="t2">Статус не показан</div>'}</div>${small(I.right, 18)}</button>`;
+      ${line ? `<div class="t2">${pill(line)}</div><div class="col-upd">${esc(updatedText(c.status.at))}</div>` : '<div class="t2">Статус не показан</div>'}
+      ${c.hours ? `<div class="col-upd col-hrs">${small(I.clock, 14)} ${esc(hoursLines(c.hours)[0])}</div>` : ''}</div>${small(I.right, 18)}</button>`;
 }
 function offerRow(o) {
   return `<div class="col-offer">
@@ -767,7 +969,7 @@ export function colleaguesAccountHtml() {
   const linked = snap && (snap.card || snap.colleagues.length + snap.incoming.length + snap.outgoing.length > 0);
   return `<div class="group" id="acc-col"><div class="group-title">Коллеги</div>
     <div class="panel"><button class="row" data-act="go" data-page="privacy"><span class="ico" style="--c:var(--ok)">${I.lock}</span>
-      <div class="grow"><div class="t1">Приватность</div><div class="t2">Кто из коллег что видит: статус, где вы, депо, персонаж, поиск</div></div>${small(I.right, 18)}</button></div>
+      <div class="grow"><div class="t1">Приватность</div><div class="t2">Кто из коллег что видит: статус, где вы, часы, депо, персонаж, поиск</div></div>${small(I.right, 18)}</button></div>
     ${linked ? '<button class="link-btn col-leave" data-act="col-leave">Выйти из «Коллег»</button>' : ''}
   </div>`;
 }
@@ -796,7 +998,7 @@ export function renderPrivacy() {
   const cardRow = (k, title, sub, on) => `<div class="row"><div class="grow"><div class="t1">${title}</div><div class="t2">${sub}</div></div>
     <button class="switch" role="switch" data-act="pr-priv" data-k="${k}" aria-checked="${on}" aria-label="${title}"></button></div>`;
   return `${head}
-    <p class="hint">Что видят коллеги, решаете вы. По умолчанию — ничего. Номер поезда и локомотива, точное время явки, заработок, причину отвлечения и телефон коллеги не видят никогда.</p>
+    <p class="hint">Что видят коллеги, решаете вы. По умолчанию — ничего. Номер поезда и локомотива, точное время явки, заработок, норму, причину отвлечения и телефон коллеги не видят никогда.</p>
     ${snap && !snap.consent.main ? `<div class="notice ok">${I.shield}<div><b>Новая редакция согласия.</b> Чтобы показывать что-то коллегам, прочитайте и примите её.</div></div>
       <button class="btn btn-primary" data-act="col-consent">Прочитать и принять</button>` : ''}
     <div class="group"><div class="group-title">Статус для коллег</div>
@@ -810,6 +1012,15 @@ export function renderPrivacy() {
         : accessMode(snap, 'status', pv).mode !== 'none' ? '<div class="hint">Пока нечего показать: добавьте поездку.</div>' : ''}
       ${snap && accessMode(snap, 'status', pv).mode !== 'none' ? '<div class="hint">CABINA не работает в фоне: статус обновляется, когда приложение открыто.</div>' : ''}
     </div>
+    ${snap?.hoursOn ? `<div class="group" id="pv-hours"><div class="group-title">Часы для коллег</div>
+      <div class="panel">${accessRow('hours', I.clock, '--ok', snap)}</div>
+      ${accessMode(snap, 'hours').mode !== 'none' ? `<div class="hint pv-preview">Так вас видят: <b>${esc(myHoursLine())}</b> и итог прошлого месяца.</div>`
+        : '<div class="hint">Сколько часов вы отработали за месяц. Только два числа — без нормы, отвлечений и заработка.</div>'}
+    </div>` : ''}
+    ${!snap || snap.notesOn ? `<div class="group"><div class="group-title">Заметки о локомотивах</div>
+      <div class="panel" id="pv-notes">${accessRow('notes', I.note, '--warn', snap)}</div>
+      <div class="hint">Коллеги видят только заметки с отметкой «Показать коллегам» — её ставят в самой заметке.</div>
+    </div>` : ''}
     <div class="group"><div class="group-title">Поиск и карточка</div>
       <div class="panel" id="pv-card">
         ${cardRow('find', 'Меня можно найти', findSub, pv.find)}
@@ -893,15 +1104,27 @@ export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
     if (r.some((a) => a.to === 'all')) return 'все коллеги';
     return `${r.length} ${plural(r.length, 'выбранный коллега', 'выбранных коллеги', 'выбранных коллег')}`;
   };
-  const shown = [['status', 'Статус видят'], ['place', 'Где вы, видят']].filter(([k]) => whom(k)).map(([k, label]) => fact(label, whom(k))).join('');
-  const col = card || st || links.length || rules.length ? `${card ? `<div class="row col-row">${avaBox(card)}<div class="grow"><div class="t1">${esc(card.name)}</div>
+  const shown = [['status', 'Статус видят'], ['place', 'Где вы, видят'], ['hours', 'Часы видят'], ['notes', 'Заметки видят']].filter(([k]) => whom(k)).map(([k, label]) => fact(label, whom(k))).join('');
+  const hrs = d.colleagues_hours && typeof d.colleagues_hours === 'object' ? cleanHours(d.colleagues_hours) : null;
+  const hrsRow = hrs ? fact('Часы для коллег', hoursLines(hrs).join(', '), [updatedText(hrs.at, nowAbs, off), momentText(d.colleagues_hours.expires_at, off) && `сотрутся сами ${momentText(d.colleagues_hours.expires_at, off)}`].filter(Boolean).join(' · ')) : '';
+  const col = card || st || hrs || links.length || rules.length ? `${card ? `<div class="row col-row">${avaBox(card)}<div class="grow"><div class="t1">${esc(card.name)}</div>
         <div class="t2">${esc(cardSub(card) || 'Должность и депо коллеги не видят')}</div></div></div>
       ${fact('В поиске', card.searchable ? 'Да' : 'Нет', card.searchable ? 'вас можно найти по имени' : 'найти вас нельзя, предложить можете только вы')}` : ''}
       ${line ? `<div class="row"><div class="grow"><div class="t2">Статус для коллег</div><div class="t1">${pill(line)}</div>
         <div class="t2">${esc([updatedText(st.at, nowAbs, off), gone && `сотрётся сам ${gone}`].filter(Boolean).join(' · '))}</div></div></div>` : fact('Статус для коллег', 'Не хранится')}
+      ${hrsRow}
       ${shown}
       ${nums || fact('Коллеги', 'Пока нет')}`
     : '<div class="row"><div class="grow t2">Вы не включали «Коллеги» — о коллегах на сервере ничего нет.</div></div>';
+
+  // заметки для коллег (2.31): локомотив, текст, месяц, сколько «полезно»
+  const lnRows = arr(d.loco_notes).filter((x) => x && typeof x === 'object' && typeof x.body === 'string').map((x) => {
+    const m = MONTH_RE.exec(typeof x.month === 'string' ? x.month : '');
+    const useful = Number.isInteger(x.useful) && x.useful > 0 ? x.useful : 0;
+    return `<div class="row"><div class="grow"><div class="t2">${esc([txt(x.loco_type, 20), txt(x.loco_num, 12) && `№${txt(x.loco_num, 12)}`].filter(Boolean).join(' '))}</div>
+      <div class="t1 my-val">${esc(cleanText(x.body, 300))}</div><div class="t2">${esc([m ? `${MONTHS[+m[2] - 1].toLowerCase()} ${m[1]}` : '', useful ? `полезно: ${useful}` : ''].filter(Boolean).join(' · '))}</div></div></div>`;
+  }).join('');
+  const lnVotes = Number.isInteger(d.loco_notes_marked_useful) && d.loco_notes_marked_useful > 0 ? d.loco_notes_marked_useful : 0;
 
   // группы (2.22): название, роль, сколько участников, показываю ли статус
   const grs = arr(d.groups).filter((g) => g && typeof g === 'object').map((g) => {
@@ -920,7 +1143,8 @@ export function myDataHtml(d, nowAbs = Date.now(), off = tzOffset()) {
     ${grs || ginvRows ? `<div class="group-title">Группы</div><div class="panel" id="my-groups">${grs}${ginvRows}</div>` : ''}
     ${invRows ? `<div class="group-title">Приглашения</div><div class="panel">${invRows}</div>` : ''}
     ${ideas ? `<div class="group-title">Ваши идеи</div><div class="panel">${ideas}</div>` : ''}
-    <div class="notice ok">${I.shield}<div><b>Не на сервере:</b> поездки, заработок, отвлечения, документы, заметки и телефонная книжка — они только в вашем телефоне.</div></div>
+    ${lnRows || lnVotes ? `<div class="group-title">Заметки для коллег</div><div class="panel" id="my-notes">${lnRows}${lnVotes ? fact('Вы отметили «Полезно»', `${lnVotes} ${plural(lnVotes, 'заметку', 'заметки', 'заметок')} коллег`) : ''}</div>` : ''}
+    <div class="notice ok">${I.shield}<div><b>Не на сервере:</b> поездки, заработок, отвлечения, норма часов, документы, заметки (кроме тех, что вы показали коллегам) и телефонная книжка — они только в вашем телефоне.</div></div>
     <div class="hint">Ещё 30 дней сервер хранит журнал входов (IP-адрес, браузер, время) — для защиты от взлома. Его можно запросить на ${esc(OPERATOR.email)}.</div>`;
 }
 
@@ -1113,6 +1337,8 @@ async function setAccess(item, mode, ids = []) {
   const r = await rpc('set_access', { p_item: item, p_all: mode === 'all', p_ids: mode === 'some' ? ids : null });
   if (!r?.ok) { toast(colError(r), { error: true, ms: 5000 }); return false; }
   snap.access[item] = { all: mode === 'all', ids: mode === 'some' ? ids : [] };
+  // правило заметок поменялось — сервер мог их стереть: отправим список заново
+  if (item === 'notes') { const last = readSync(C.sub); last.notes = ''; writeSync(last); }
   if (item === 'status') {
     const on = mode !== 'none' || groupShare(snap, 'status'); // группе показываю — статус продолжает уходить
     if (!on) {
@@ -1120,6 +1346,10 @@ async function setAccess(item, mode, ids = []) {
       const last = readSync(C.sub); last.status = ''; last.statusAt = 0; writeSync(last); snap.myStatus = null;
     }
     if (privacyOf().status !== on) await saveProfile({ privacy: { ...privacyOf(), status: on } });
+  }
+  if (item === 'hours' && mode === 'none') {
+    // сервер стёр часы сам
+    const last = readSync(C.sub); last.hours = ''; last.hoursAt = 0; writeSync(last); snap.myHours = null;
   }
   scheduleSync(0);
   hooks.rerender();
@@ -1141,15 +1371,18 @@ async function setAccessFor(item, id, on) {
 const ACCESS_ITEMS = {
   status: { title: 'Кто видит мой статус', what: 'Мой статус', sub: '«В пути», «На отдыхе», «Между поездками» — без станций, точного времени явки и номера поезда.' },
   place: { title: 'Кто видит, где я', what: 'Где я', sub: 'Станции в пути и дом отдыха — в статусе. Только тем, кто видит и сам статус.' },
+  hours: { title: 'Кто видит мои часы', what: 'Мои часы', sub: 'Сколько часов вы отработали в этом месяце и в прошлом. Норму, переработку, отвлечения и заработок коллеги не видят. Группам часы не показываются.' },
+  notes: { title: 'Кто видит мои заметки', what: 'Заметки о локомотивах', sub: 'Только заметки, у которых вы включили «Показать коллегам»: серия и номер локомотива, текст и месяц. Группы их не видят.' },
 };
 
 // Выбор «кому видно» для статуса или «где я»: никому, всем коллегам или выбранным
-async function openAccess(item) {
-  if (!own(ACCESS_ITEMS, item)) return;
-  if (!mine()) { needAccount(); return; }
+export async function openAccess(item, { onDone, onClosed } = {}) {
+  if (!own(ACCESS_ITEMS, item)) { onClosed?.(); return; }
+  if (!mine()) { needAccount(); onClosed?.(); return; }
   const snap = await snapOrSay();
-  if (!snap) return;
-  if (item === 'place' && accessMode(snap, 'status').mode === 'none') { toast('Сначала выберите, кто видит ваш статус', { ms: 4000 }); return; }
+  if (!snap) { onClosed?.(); return; }
+  if (item === 'hours' && !snap.hoursOn) { toast(HOURS_OFF, { ms: 5000 }); onClosed?.(); return; }
+  if (item === 'place' && accessMode(snap, 'status').mode === 'none') { toast('Сначала выберите, кто видит ваш статус', { ms: 4000 }); onClosed?.(); return; }
   const cur = accessMode(snap, item);
   const pool = item === 'place' ? snap.colleagues.filter((c) => sees(snap, 'status', c.id)) : snap.colleagues;
   const picked = new Set(cur.mode === 'some' ? cur.ids.filter((id) => pool.some((c) => c.id === id)) : []);
@@ -1168,7 +1401,7 @@ async function openAccess(item) {
       ${pool.map((c) => `<button type="button" class="pick-row" role="checkbox" aria-checked="${picked.has(c.id)}" ${idAttr(c.id)}><span class="box">${I.check}</span>${avaBox(c.card)}<span class="t1">${esc(c.card.name)}</span></button>`).join('')}
     </div>
     <div id="acc-err" class="acc-err" role="alert" aria-live="assertive"></div>`,
-  foot: '<button class="btn btn-primary" data-act="access-save">Сохранить</button>' }));
+  foot: '<button class="btn btn-primary" data-act="access-save">Сохранить</button>' }), { onClose: () => onClosed?.() });
   el.addEventListener('click', async (e) => {
     const m = e.target.closest('.radio-row[data-mode]');
     if (m && !m.disabled) {
@@ -1193,7 +1426,7 @@ async function openAccess(item) {
     }
     C.busy = true;
     try {
-      if (await setAccess(item, mode, [...picked])) { closeLayer(el); toast('Сохранено'); }
+      if (await setAccess(item, mode, [...picked])) { onDone?.(mode); closeLayer(el); toast('Сохранено'); }
     } finally { C.busy = false; }
   });
 }
