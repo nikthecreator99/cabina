@@ -129,14 +129,14 @@ test('засчитанные приглашения: число запомина
   assert.match(await page.locator('.inv-tier[data-n="1"]').getAttribute('class'), /got/);
   assert.match(await text(page, '.inv-tier[data-n="1"]'), /Открыто/);
   assert.match(await text(page, '.inv-tier[data-n="1"]'), /Напарник[\s\S]*Фон «Прожектор»/);
-  assert.match(await text(page, '.inv-tier[data-n="3"]'), /Сменщик · 3 приглашения[\s\S]*Кожанка машиниста[\s\S]*ещё 2 приглашения/);
+  assert.match(await text(page, '.inv-tier[data-n="3"]'), /Сменщик · 3 приглашения[\s\S]*Ушанка[\s\S]*ещё 2 приглашения/);
   assert.match(await text(page, '.inv-tier[data-n="5"]'), /ещё 4 приглашения/);
   // награда «Наставник», бронза
   await page.locator('[data-act=back]').click();
   await page.locator('#pr-awards .aw-strip').click();
   await page.waitForSelector('.aw-grid');
   assert.doesNotMatch(await page.locator('.aw[data-id=mentor]').getAttribute('class'), /locked/);
-  // фон за 1 — уже открыт (без значка), кожанка за 3 — значок «За 3»; ушанка за 5 — сохранить нельзя, примерить можно
+  // фон за 1 — уже открыт (без значка), ушанка за 3 — значок «За 3»; кожанка за 5 (с 2.32.1) — сохранить нельзя, примерить можно
   await page.locator('[data-act=back]').click();
   await page.locator('[data-act=av-open]').first().click();
   await page.waitForSelector('.screen[data-page=avatar]');
@@ -145,19 +145,16 @@ test('засчитанные приглашения: число запомина
   assert.doesNotMatch(await page.locator('.av-tile[data-k=bg][data-v=beam]').innerText(), /За \d/);
   await page.locator('[data-act=av-group][data-g=wear]').click();
   await page.locator('.av-tile[data-k=outfit][data-v=leather]').waitFor();
-  assert.match(await page.locator('.av-tile[data-k=outfit][data-v=leather]').innerText(), /За 3[\s\S]*Кожанка/);
-  await page.locator('[data-act=av-group][data-g=acc]').click();
-  const t = page.locator('.av-tile[data-k=hat][data-v=ushanka]');
-  await t.waitFor();
-  assert.match(await t.innerText(), /За 5[\s\S]*Ушанка/);
+  assert.match(await page.locator('.av-tile[data-k=outfit][data-v=leather]').innerText(), /За 5[\s\S]*Кожанка/);
+  const t = page.locator('.av-tile[data-k=outfit][data-v=leather]');
   assert.match(await t.getAttribute('aria-label'), /за 5 приглашений/);
   await t.click();
-  await page.locator('.av-try', { hasText: 'Ушанка (за 5)' }).waitFor();
+  await page.locator('.av-try', { hasText: 'Кожанка машиниста (за 5)' }).waitFor();
   await page.locator('[data-act=av-save]').click();
   const d = top(page);
-  assert.match(await d.innerText(), /Пока только примерка[\s\S]*Ушанка — за 5 приглашений[\s\S]*Сейчас засчитано: 1/);
+  assert.match(await d.innerText(), /Пока только примерка[\s\S]*Кожанка машиниста — за 5 приглашений[\s\S]*Сейчас засчитано: 1/);
   await d.getByRole('button', { name: 'Снять и сохранить' }).click();
-  await page.waitForFunction(async () => { const p = (await import('./js/store.js')).S.profile; return p.avatar && p.avatar.hat === null; });
+  await page.waitForFunction(async () => { const p = (await import('./js/store.js')).S.profile; return p.avatar && p.avatar.outfit === 'vestO'; });
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });

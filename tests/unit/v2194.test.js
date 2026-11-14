@@ -13,7 +13,7 @@ test('«Свой человек»: особая награда в группе �
   assert.deepEqual(a.goals, [1]);
   assert.equal(a.repeat, undefined, 'не повторяется — без «×N»');
   assert.ok(AWARD_GROUPS.some(([g, t]) => g === a.g && t === 'Особые'));
-  assert.equal(MEDALS_TOTAL, 40);
+  assert.equal(MEDALS_TOTAL, 41); // с 2.32.1 — «Своя бригада»
   assert.match(awardArt('account', 64, 1), /<svg/);
 });
 

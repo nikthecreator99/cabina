@@ -32,10 +32,14 @@ export async function refreshPremium() {
 
 // ---- Вещи за приглашения (2.20): сколько приглашённых засчитано — число из «Пригласить коллег», в телефоне и только растёт
 export const invitedCount = () => countOf('invited').n;
+// 2.32.1 (Никита): администратор может надеть любую вещь, в том числе за приглашения. Как и Премиум — удобство
+// для разработчика по роли с сервера (код открытый), а не защита: настоящих приглашений это не прибавляет
+const ADMIN_ALL = 1000;
+const rewardsOpen = () => (premiumOk() ? ADMIN_ALL : invitedCount());
 // Что можно сохранить и показать коллегам: Премиум (пока — только администратор) и открытые вещи за приглашения (их — только за приглашения)
-export const avatarRights = () => ({ premium: premiumOk(), invited: invitedCount() });
-// Вещи за приглашения Премиум не открывает (2.21): только засчитанные приглашения
-const rewardLocked = (r) => !!r && !(invitedCount() >= r.n);
+export const avatarRights = () => ({ premium: premiumOk(), invited: rewardsOpen() });
+// Вещи за приглашения Премиум не открывает (2.21): только засчитанные приглашения; администратор (2.32.1) — любые
+const rewardLocked = (r) => !!r && !(rewardsOpen() >= r.n);
 const rwName = (n) => `за ${n} ${plural(n, 'приглашение', 'приглашения', 'приглашений')}`;
 
 const E = { a: null, base: '', hist: [], group: 'face', drag: false, prem: false, chars: false };
@@ -48,7 +52,7 @@ export const hasAvatar = (p = S.profile) => !!p.avatar && typeof p.avatar === 'o
 function start() {
   E.prem = premiumOk();
   // первый раз — спокойный персонаж по умолчанию, дальше человек меняет сам или жмёт «Случайный»
-  E.a = A.normalizeAvatar(hasAvatar() ? S.profile.avatar : {}, { premium: E.prem, invited: invitedCount() });
+  E.a = A.normalizeAvatar(hasAvatar() ? S.profile.avatar : {}, { premium: E.prem, invited: rewardsOpen() });
   E.base = JSON.stringify(E.a);
   E.hist = []; E.group = 'face'; E.drag = false; E.chars = false;
 }
@@ -120,7 +124,7 @@ function range(k, label) {
 
 // Что сейчас только примеряется: премиум-детали и неоткрытые вещи за приглашения
 function tryParts() {
-  return [...(E.prem ? [] : A.premiumParts(E.a)), ...A.lockedRewards(E.a, invitedCount()).map((r) => `${r.name} (за ${r.n})`)];
+  return [...(E.prem ? [] : A.premiumParts(E.a)), ...A.lockedRewards(E.a, rewardsOpen()).map((r) => `${r.name} (за ${r.n})`)];
 }
 function stageHtml() {
   const parts = tryParts();
@@ -258,7 +262,7 @@ function rewardNote(r) {
 }
 function sections() {
   const list = baseSections();
-  const locks = A.lockedRewards(E.a, invitedCount());
+  const locks = A.lockedRewards(E.a, rewardsOpen());
   for (const r of locks) {
     const i = list.findIndex((x) => x.id === r.k);
     if (i >= 0 && !list.some((x) => x.id === `rw-${r.k}`)) list.splice(i + 1, 0, { id: `rw-${r.k}`, html: () => rewardNote(r) });
@@ -374,7 +378,7 @@ export function avatarChange(e) {
 
 async function save(ctx) {
   const prem = premiumOk();
-  const invited = invitedCount();
+  const invited = rewardsOpen();
   const parts = A.premiumParts(E.a);
   const locks = A.lockedRewards(E.a, invited);
   if (parts.length && !prem) {

@@ -26,20 +26,20 @@ function withItems(fn) {
   try { return fn(); } finally { for (const [list, x] of add) list.splice(list.indexOf(x), 1); }
 }
 
-test('вещи за приглашения: 1 — фон «Прожектор», 3 — кожанка, 5 — ушанка, 10 — китель и фуражка (решения Никиты 01.11)', () => {
+test('вещи за приглашения: 1 — фон «Прожектор», 3 — ушанка, 5 — кожанка (с 2.32.1), 10 — китель и фуражка (решения Никиты 01.11)', () => {
   assert.deepEqual(A.REWARD_TIERS.map((t) => t.n), [1, 3, 5, 10]);
   assert.deepEqual(A.REWARD_TIERS.map((t) => t.title), ['Напарник', 'Сменщик', 'Бригада', 'Машинист-инструктор']);
-  assert.deepEqual(A.REWARDS.map((r) => [r.k, r.id, r.n]), [['bg', 'beam', 1], ['outfit', 'leather', 3], ['hat', 'ushanka', 5], ['outfit', 'kitel', 10], ['hat', 'retro', 10]]);
+  assert.deepEqual(A.REWARDS.map((r) => [r.k, r.id, r.n]), [['bg', 'beam', 1], ['hat', 'ushanka', 3], ['outfit', 'leather', 5], ['outfit', 'kitel', 10], ['hat', 'retro', 10]]);
   for (const r of A.REWARDS) assert.ok(A.rewardReady(r), `${r.id} нарисована`);
   for (const r of A.REWARDS) assert.ok(A.REWARD_TIERS.some((t) => t.n === r.n), r.id);
 });
 
 test('неоткрытая вещь снимается при сохранении и для коллег; открытая остаётся без Премиума; Премиум (разработчик) — всё', () => withItems(() => {
   const a = { hat: 'ushanka', outfit: 'kitel', bg: 'sky' };
-  assert.deepEqual(A.lockedRewards(A.normalizeAvatar(a, { premium: true }), 4).map((r) => r.id), ['ushanka', 'kitel']);
-  let o = A.normalizeAvatar(a, { invited: 4 });
+  assert.deepEqual(A.lockedRewards(A.normalizeAvatar(a, { premium: true }), 2).map((r) => r.id), ['ushanka', 'kitel']);
+  let o = A.normalizeAvatar(a, { invited: 2 });
   assert.equal(o.hat, null); assert.equal(o.outfit, 'vestO'); assert.equal(o.bg, 'sky');
-  o = A.normalizeAvatar(a, { invited: 5 });
+  o = A.normalizeAvatar(a, { invited: 3 });
   assert.equal(o.hat, 'ushanka'); assert.equal(o.outfit, 'vestO');
   o = A.normalizeAvatar({ ...a, hat: 'retro' }, { invited: 10 });
   assert.equal(o.hat, 'retro'); assert.equal(o.outfit, 'kitel');
@@ -63,7 +63,9 @@ test('фон и кожанка: без приглашений снимаются
   assert.equal(o.bg, 'mist'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, undefined, 'шарфа больше нет');
   o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather', scarf: 'light' }, { invited: 1 });
   assert.equal(o.bg, 'beam'); assert.equal(o.outfit, 'vestO'); assert.equal(o.scarf, undefined);
-  o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather' }, { invited: 3 });
+  o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather' }, { invited: 4 });
+  assert.equal(o.outfit, 'vestO', 'кожанка — за 5');
+  o = A.normalizeAvatar({ bg: 'beam', outfit: 'leather' }, { invited: 5 });
   assert.equal(o.bg, 'beam'); assert.equal(o.outfit, 'leather');
   const rnd = A.rng(7);
   for (let i = 0; i < 300; i++) { const x = A.randomAvatar(rnd); assert.notEqual(x.bg, 'beam'); assert.notEqual(x.outfit, 'leather'); }

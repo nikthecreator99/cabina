@@ -22,7 +22,7 @@ test('рисунки наград: файл есть для каждой сту�
   }
   const files = readdirSync(new URL('icons/awards/', root)).map((f) => `icons/awards/${f}`);
   assert.deepEqual(files.filter((f) => !used.has(f)), [], 'лишние картинки в icons/awards/');
-  assert.equal(used.size, 23);
+  assert.equal(used.size, 24); // с 2.32.1 — group.webp (временный рисунок)
 });
 
 test('медаль: кольцо и цвет ступени рисуем сами, внутри — картинка ступени', () => {

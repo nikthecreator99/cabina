@@ -233,6 +233,15 @@ export async function adminStats() {
   return r?.ok ? { ok: true, data: r.data } : { ok: false, error: errorText(r) };
 }
 
+// Статистика роста за период (2.32.2, только администратор): числа за период и за прошлый, без почты и id.
+// notReady — на сервере ещё нет шага 14: тогда показываем прежнюю статистику.
+export async function adminGrowth(args) {
+  const r = await rpc('admin_growth', args);
+  if (r?.ok && r.data && typeof r.data === 'object') return { ok: true, data: r.data };
+  const notReady = !!r && (r.status === 404 || /^(PGRST20\d|42883)$/.test(String(r.data?.code || '')));
+  return { ok: false, notReady, error: errorText(r) };
+}
+
 // Новое приглашение (только администратор): сервер возвращает код один раз, у себя хранит лишь его хеш
 export async function createInvite() {
   const r = await rpc('admin_create_invite');
