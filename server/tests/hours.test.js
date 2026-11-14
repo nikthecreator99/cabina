@@ -22,7 +22,7 @@ const lit = (s) => (s == null ? 'null' : `'${String(s).replace(/'/g, "''")}'`);
 const count = (sql, who) => Number(q(sql, who)[0]);
 
 let n = 0;
-function account({ name = 'Иван', consent = 'privacy-5' } = {}) {
+function account({ name = 'Иван', consent = 'privacy-6' } = {}) {
   const code = `HRS${++n}`.padEnd(10, 'X');
   q(`insert into private.invites (code_hash) values (private.hash_code('${code}'))`);
   const r = db.sql(`insert into auth.users (email, raw_user_meta_data)
@@ -142,7 +142,7 @@ test('удалил из коллег — часы ему не видны и не
   assert.equal(stored(e), 0);
 });
 
-test('проверка чисел и месяца; без согласия privacy-5 — нельзя', () => {
+test('проверка чисел и месяца; без согласия privacy-6 — нельзя', () => {
   const a = account({ name: 'Никита' });
   const b = account({ name: 'Анна' });
   colleagues(a, b);

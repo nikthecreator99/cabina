@@ -28,7 +28,7 @@ const adminCode = () => {
   q(`insert into private.invites (code_hash) values (private.hash_code('${code}'))`);
   return code;
 };
-const signup = (code, consent = 'privacy-5') => db.sql(`insert into auth.users (email, raw_user_meta_data)
+const signup = (code, consent = 'privacy-6') => db.sql(`insert into auth.users (email, raw_user_meta_data)
   values ('i${++n}@example.test', '{"consent":"${consent}","invite":"${code}","platform":"web","version":"2.20.0"}'::jsonb) returning id`, 'auth');
 function account({ confirmed = true, code = adminCode() } = {}) {
   const r = signup(code);
@@ -42,13 +42,13 @@ const mine = (who) => json('select public.my_invites()', who);
 // «Заходил в CABINA в d разных дней»: как будто touch вызывался в разные дни
 const activeDays = (who, d) => q(`update public.profiles set active_days = ${d} where id = '${who}'`);
 
-test('новая редакция согласия privacy-5: со старой регистрация не проходит, приглашения и идеи не работают', () => {
+test('новая редакция согласия privacy-6: со старой регистрация не проходит, приглашения и идеи не работают', () => {
   assert.match(signup(adminCode(), 'privacy-3').err, /consent required/);
   const me = account();
   q(`update public.consents set document = 'privacy-3' where user_id = '${me}'`);
   fails('select public.create_invite()', me, /consent required/);
   fails(`select public.send_idea('Добавьте тёмную тему для PDF')`, me, /consent required/);
-  q(`select public.give_consent('privacy-5')`, me);
+  q(`select public.give_consent('privacy-6')`, me);
   assert.match(invite(me).code, /^[0-9A-F]{10}$/);
 });
 

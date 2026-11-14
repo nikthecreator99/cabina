@@ -28,7 +28,7 @@ const adminCode = () => {
   return code;
 };
 const signup = (code) => db.sql(`insert into auth.users (email, raw_user_meta_data)
-  values ('g${++n}@example.test', '{"consent":"privacy-5","invite":"${code}","platform":"web","version":"2.32.2"}'::jsonb) returning id`, 'auth');
+  values ('g${++n}@example.test', '{"consent":"privacy-6","invite":"${code}","platform":"web","version":"2.32.2"}'::jsonb) returning id`, 'auth');
 function account({ code = adminCode() } = {}) {
   const r = signup(code);
   assert.ok(r.ok, r.err);

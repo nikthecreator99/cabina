@@ -29,7 +29,7 @@ function account() {
   const code = `COLL${++n}`.padEnd(10, 'X');
   q(`insert into private.invites (code_hash) values (private.hash_code('${code}'))`);
   const r = db.sql(`insert into auth.users (email, raw_user_meta_data)
-    values ('c${n}@example.test', '{"consent":"privacy-5","invite":"${code}","platform":"web","version":"2.15.0"}'::jsonb) returning id`, 'auth');
+    values ('c${n}@example.test', '{"consent":"privacy-6","invite":"${code}","platform":"web","version":"2.15.0"}'::jsonb) returning id`, 'auth');
   assert.ok(r.ok, r.err);
   return r.rows[0];
 }
@@ -67,10 +67,10 @@ test('без согласия новой редакции «Коллеги» н�
   fails(`select public.find_colleagues('Анна')`, me, /consent required/);
   fails(`select public.set_status('trip', null, null, null, null, null)`, me, /consent required/);
   fails(`select public.give_consent('privacy-1')`, me, /consent required/);
-  fails(`select public.give_consent('privacy-5')`, 'anon', /permission denied/);
-  q(`select public.give_consent('privacy-5')`, me);
-  q(`select public.give_consent('privacy-5')`, me);
-  assert.deepEqual(q(`select document from public.consents where user_id = '${me}' order by given_at`), ['privacy-1', 'privacy-5'], 'одна запись на редакцию');
+  fails(`select public.give_consent('privacy-6')`, 'anon', /permission denied/);
+  q(`select public.give_consent('privacy-6')`, me);
+  q(`select public.give_consent('privacy-6')`, me);
+  assert.deepEqual(q(`select document from public.consents where user_id = '${me}' order by given_at`), ['privacy-1', 'privacy-6'], 'одна запись на редакцию');
   card(me);
   assert.deepEqual(q(`select name from public.cards where user_id = '${me}'`), ['Иван']);
 });
@@ -80,7 +80,7 @@ test('быть в поиске — только с отдельным согла
   fails(`select public.save_card('Иван', null, null, null, true)`, me, /publish consent required/);
   q(`update public.consents set document = 'privacy-1' where user_id = '${me}'`);
   fails(`select public.give_consent('publish-2')`, me, /consent required/, 'сначала основное согласие');
-  q(`select public.give_consent('privacy-5')`, me);
+  q(`select public.give_consent('privacy-6')`, me);
   q(`select public.give_consent('publish-2')`, me);
   q(`select public.save_card('Иван', null, null, null, true)`, me);
   assert.deepEqual(q(`select searchable from public.cards where user_id = '${me}'`), ['t']);
@@ -90,7 +90,7 @@ test('быть в поиске — только с отдельным согла
   card(me, { find: true });
   assert.deepEqual(q(`select count(*) from public.consents where user_id = '${me}' and document = 'publish-2' and withdrawn_at is null`), ['1']);
   const data = json('select public.export_my_data()', me);
-  assert.deepEqual(data.consents.map((c) => [c.document, c.withdrawn_at === null]), [['privacy-1', true], ['privacy-5', true], ['publish-2', false], ['publish-2', true]]);
+  assert.deepEqual(data.consents.map((c) => [c.document, c.withdrawn_at === null]), [['privacy-1', true], ['privacy-6', true], ['publish-2', false], ['publish-2', true]]);
   q('select public.leave_colleagues()', me);
   assert.deepEqual(q(`select count(*) from public.consents where user_id = '${me}' and document = 'publish-2' and withdrawn_at is null`), ['0'], 'выход из «Коллег» тоже отзывает');
 });
@@ -457,7 +457,7 @@ test('правила «кому видно» видит только хозяи�
 test('без согласия разрешить показ нельзя, а убрать — можно', () => {
   const [a, b] = pair();
   share(a, 'status', [b]);
-  q(`update public.consents set withdrawn_at = now() where user_id = '${a}' and document = 'privacy-5'`);
+  q(`update public.consents set withdrawn_at = now() where user_id = '${a}' and document = 'privacy-6'`);
   fails(`select public.set_access('status', true, null)`, a, /consent required/);
   assert.equal(count(`select count(*) from public.access where user_id = '${a}'`), 1, 'отказ ничего не поменял');
   share(a, 'status', false);

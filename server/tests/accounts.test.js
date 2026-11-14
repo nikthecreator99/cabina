@@ -4,9 +4,9 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startDb } from './db.js';
 
-// Текущая редакция согласия (с шагом 5 «Приглашения и идеи» — privacy-3; с шагом 7 «Группы» — privacy-4; с шагами 11 «Часы» и 12 «Заметки о локомотивах» — privacy-5) и прошлая, которая для регистрации уже не подходит
-const CONSENT = 'privacy-5';
-const OLD = 'privacy-4';
+// Текущая редакция согласия (с шагом 5 «Приглашения и идеи» — privacy-3; с шагом 7 «Группы» — privacy-4; с шагами 11 «Часы» и 12 «Заметки о локомотивах» — privacy-5; с шагом 13 «Поиск групп» — privacy-6) и прошлая, которая для регистрации уже не подходит
+const CONSENT = 'privacy-6';
+const OLD = 'privacy-5';
 
 let db;
 before(async () => { db = await startDb(); });
