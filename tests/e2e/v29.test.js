@@ -68,6 +68,8 @@ async function mockServer(context, { role = 'user', offline = false } = {}) {
     if (/^\/rest\/v1\/(consents|links|cards|statuses|status_places|access)\?select=/.test(path) && bearer) return send(200, path.startsWith('/rest/v1/consents') ? [{ document: CONSENT_VERSION, withdrawn_at: null }] : []);
     if (path === '/rest/v1/rpc/export_my_data' && bearer) return send(200, { email: 'ivan@example.com', email_confirmed: true, created_on: '2026-10-19', last_seen: '2026-10-20', platform: 'web', app_version: '2.9.0', consents: [{ document: 'privacy-1', given_at: '2026-10-19T10:00:00+00:00' }] });
     if (path === '/rest/v1/rpc/delete_my_account' && bearer) return send(204);
+    // сервер без шага 14 (2.32.2): расширенной статистики нет — приложение показывает прежнее окно
+    if (path === '/rest/v1/rpc/admin_growth' && bearer) return send(404, { code: 'PGRST202', message: 'Could not find the function' });
     if (path === '/rest/v1/rpc/admin_stats' && bearer) {
       if (role !== 'admin') return send(400, { code: '42501', message: 'cabina: forbidden' });
       return send(200, { today: '2026-10-20', total: 2, confirmed: 2, active_1: 1, active_7: 2, active_30: 2, platforms: { web: 2 }, versions: { '2.9.0': 2 }, daily: [{ day: '2026-10-19', signup: 2, confirmed: 2, deleted: null }] });

@@ -201,26 +201,33 @@ export async function exportSlip(y, m) {
   let blob;
   try { blob = await slipPdfBlob(y, m); } catch { blob = null; }
   if (!blob) { toast('Не удалось собрать PDF. Попробуйте ещё раз.', { error: true }); return; }
-  const name = slipFileName(y, m);
+  await deliverPdf(blob, slipFileName(y, m), {
+    shareTitle: `Квиток CABINA: ${MONTHS[m - 1].toLowerCase()} ${y}`, savedText: 'Квиток сохранён в PDF',
+    readyTitle: 'Квиток готов', readyText: `PDF за ${MONTHS[m - 1].toLowerCase()} ${y} собран.`,
+  });
+}
+
+// Отдать готовый PDF: в телефоне — через «Поделиться», иначе — сохранить файлом (так же — статистика роста, 2.32.2)
+export async function deliverPdf(blob, name, { shareTitle, savedText, readyTitle, readyText }) {
   const file = new File([blob], name, { type: 'application/pdf' });
   const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   if (mobile && navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: `Квиток CABINA: ${MONTHS[m - 1].toLowerCase()} ${y}` }); return; }
+    try { await navigator.share({ files: [file], title: shareTitle }); return; }
     catch (e) {
       if (e?.name === 'AbortError') return;
       // браузер не дал открыть «Поделиться» после подготовки файла — откроем его по отдельному нажатию
-      if (e?.name === 'NotAllowedError') { readySheet(file, y, m); return; }
+      if (e?.name === 'NotAllowedError') { readySheet(file, { readyTitle, readyText, shareTitle }); return; }
     }
   }
   const res = await saveToDevice(blob, name);
-  if (res === 'saved') toast('Квиток сохранён в PDF');
+  if (res === 'saved') toast(savedText);
   else if (res === 'failed') toast('Не удалось сохранить файл', { error: true });
 }
 
-function readySheet(file, y, m) {
+function readySheet(file, { readyTitle, readyText, shareTitle }) {
   const el = openLayer(sheet({
-    title: 'Квиток готов',
-    body: `<p class="hint">PDF за ${MONTHS[m - 1].toLowerCase()} ${y} собран. Нажмите, чтобы сохранить его в «Файлы» или отправить.</p>`,
+    title: readyTitle,
+    body: `<p class="hint">${readyText} Нажмите, чтобы сохранить его в «Файлы» или отправить.</p>`,
     foot: `<button class="btn btn-primary" data-act="slip-share">${I.share} Сохранить или отправить</button>`,
   }));
   el.addEventListener('click', async (e) => {
@@ -228,7 +235,7 @@ function readySheet(file, y, m) {
     if (!b) return;
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
     if (b.dataset.act === 'slip-share') {
-      try { await navigator.share({ files: [file], title: 'Квиток CABINA' }); closeLayer(el); } catch (err) { if (err?.name !== 'AbortError') toast('Не удалось открыть «Поделиться»', { error: true }); }
+      try { await navigator.share({ files: [file], title: shareTitle }); closeLayer(el); } catch (err) { if (err?.name !== 'AbortError') toast('Не удалось открыть «Поделиться»', { error: true }); }
     }
   });
 }

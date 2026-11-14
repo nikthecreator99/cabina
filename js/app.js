@@ -21,6 +21,7 @@ import { renderProfile, renderProfileEdit, profileClick, profileChange } from '.
 import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, refreshPremium, hasAvatar, avatarRights } from './avatar-edit.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
+import { renderGrowth, growthClick } from './growth.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
 import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
@@ -45,7 +46,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.32.1';
+export const VERSION = '2.32.2';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -584,7 +585,7 @@ function renderSetAbout() {
 // ---------------------------------------------------------------- рендер и навигация
 // Гость (2.26): награды, рекорды и персонаж — с аккаунтом; вместо экрана — что там будет и «Зарегистрироваться»
 const locked = (kind, fn) => () => (isGuest() ? guestLockHtml(kind) : fn());
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe, growth: renderGrowth };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // Уведомления (2.28): ответы на мои идеи и (у администратора) новые идеи подгружаем не чаще раза в 2 минуты, на «Профиле» — раз в 30 секунд;
@@ -828,6 +829,7 @@ app.addEventListener('click', async (e) => {
   if (await ideasClick(act, b)) return;
   if (nagClick(act, ctx)) return;
   if (statsClick(act, b, ctx)) return;
+  if (growthClick(act, b, ctx)) return;
   if (yearClick(act, b, ctx)) return;
   const sk = streakClick(act);
   if (sk === 'tab') { V.tab = 'learn'; V.pages = learnResume(); window.scrollTo(0, 0); render(); return; }

@@ -5,10 +5,12 @@
 // Группа «Коллеги» (Приватность, «Выйти из „Коллег“») приходит из colleagues.js через app.js — без круговых импортов.
 import { I, esc, small, pageHead, openLayer, sheet, toast, confirmDialog, saveToDevice, plural } from './ui.js';
 import { legalReady, consentHtml, policyHtml, APP_URL, SIGNUP_OPEN } from './legal.js';
-import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, createInvite, verifyCode, normCode,
+import { session, signUp, signIn, signOut, recover, resend, setPassword, exportMyData, deleteAccount, myRole, adminStats, adminGrowth, createInvite, verifyCode, normCode,
   emailOk, normInvite, PASS_MIN, linkErrorText, savedInvite, forgetInvite } from './auth.js';
 import { notePremium } from './avatar-edit.js';
 import { openAdminIdeas } from './ideas.js';
+import { growthEnter, growthArgs } from './growth.js';
+import { growthRange, cleanGrowth } from './growth-data.js';
 
 // mode: menu | signup | login | reset | sent | reset-sent | newpass. Пароль в состоянии не храним.
 // sent — ввести код из письма, чтобы подтвердить почту; reset-sent — код из письма и новый пароль.
@@ -88,7 +90,7 @@ function signedInHtml(s, colHtml) {
         <button class="row" data-act="acc-policy"><span class="ico" style="--c:var(--night)">${I.book}</span><div class="grow"><div class="t1">Политика обработки данных</div><div class="t2">Что хранится, где и сколько</div></div>${small(I.right, 18)}</button>
       </div></div>
     ${A.role === 'admin' ? `<div class="group"><div class="group-title">Администратор</div>
-      <div class="panel"><button class="row" data-act="acc-stats"><span class="ico" style="--c:var(--warn)">${I.chart}</span><div class="grow"><div class="t1">Статистика</div><div class="t2">Сколько аккаунтов и заходов — только числа</div></div>${small(I.right, 18)}</button>
+      <div class="panel"><button class="row" data-act="acc-stats"><span class="ico" style="--c:var(--warn)">${I.chart}</span><div class="grow"><div class="t1">Статистика</div><div class="t2">Рост, заходы и графики — только числа</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="acc-invite-new"><span class="ico" style="--c:var(--ok)">${I.plus}</span><div class="grow"><div class="t1">Создать приглашение</div><div class="t2">Код для одного человека, действует 14 дней</div></div>${small(I.right, 18)}</button>
         <button class="row" data-act="acc-ideas"><span class="ico" style="--c:var(--warn)">${I.idea}</span><div class="grow"><div class="t1">Идеи пользователей</div><div class="t2">Принять или «не подошла» — без имени автора</div></div>${small(I.right, 18)}</button></div></div>` : ''}
     <div class="acc-btns">
@@ -162,7 +164,7 @@ function openDoc(title, html) {
   openLayer(sheet({ title, body: html, tall: true, foot: '<button class="btn btn-primary" data-close>Понятно</button>' }));
 }
 
-function showStats(d) {
+function showStats(d, { old = false } = {}) {
   const n = (v) => Number(v) || 0;
   const list = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="row"><div class="grow t1">${esc({ web: 'Сайт', android: 'Android', ios: 'iOS', unknown: 'Неизвестно' }[k] || k)}</div><b class="num">${n(v)}</b></div>`).join('');
   const dayLine = (x) => [n(x.signup) && `+${n(x.signup)} рег.`, n(x.confirmed) && `${n(x.confirmed)} подтв.`, n(x.deleted) && `−${n(x.deleted)} удал.`].filter(Boolean).join(' · ');
@@ -175,6 +177,7 @@ function showStats(d) {
     ${list(d.platforms) ? `<div class="group-title">Устройства</div><div class="panel">${list(d.platforms)}</div>` : ''}
     ${list(d.versions) ? `<div class="group-title">Версии приложения</div><div class="panel">${list(d.versions)}</div>` : ''}
     ${days ? `<div class="group-title">По дням</div><div class="panel">${days}</div>` : ''}
+    ${old ? '<div class="notice" id="acc-stats-old">' + I.info + '<div>Графики, сравнение периодов и PDF появятся после обновления сервера (шаг 14).</div></div>' : ''}
     <div class="hint">Только числа: почта и идентификаторы людей в статистику не попадают.</div>` }));
 }
 
@@ -255,8 +258,21 @@ export async function accountClick(act, b, ctx) {
       break;
     }
     case 'acc-stats': {
-      const r = await adminStats();
-      if (r.ok) showStats(r.data || {}); else toast(r.error, { error: true, ms: 5000 });
+      if (b.disabled) break;
+      b.disabled = true;
+      try {
+        // 2.32.2: расширенная статистика (графики, периоды, PDF); сервер без шага 14 — прежнее окно
+        const t = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
+        const g = await adminGrowth(growthArgs(growthRange('month', +t.slice(0, 4), +t.slice(5, 7), t)));
+        if (g.ok) {
+          growthEnter(cleanGrowth(g.data), ctx);
+          ctx.go('growth');
+          break;
+        }
+        if (!g.notReady) { toast(g.error, { error: true, ms: 5000 }); break; }
+        const r = await adminStats();
+        if (r.ok) showStats(r.data || {}, { old: true }); else toast(r.error, { error: true, ms: 5000 });
+      } finally { b.disabled = false; }
       break;
     }
     case 'acc-ideas': await openAdminIdeas(); break;
