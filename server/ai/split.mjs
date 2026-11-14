@@ -60,7 +60,9 @@ export function splitDoc(text, mode) {
     buf.push(line.trim());
   }
   flush();
-  return out.map((c) => ({ ref: c.ref.slice(0, 200), body: c.body.slice(0, 4000) }));
+  // Тот же текст дважды (повтор страницы при переводе PDF в текст) — один кусок
+  const seen = new Set();
+  return out.filter((c) => !seen.has(c.body) && seen.add(c.body)).map((c) => ({ ref: c.ref.slice(0, 200), body: c.body.slice(0, 4000) }));
 }
 
 // Строка для SQL: одинарные кавычки удваиваются (standard_conforming_strings включён по умолчанию)
