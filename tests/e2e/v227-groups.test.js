@@ -73,7 +73,7 @@ test('«Группы» (2.29): шестерёнка вместо «?», «Соз
   assert.match(await text(page, '#grp-list'), /Вы участник[\s\S]*Колонна № 3/);
   assert.doesNotMatch(await text(page, '#grp-list'), /Вы администратор/);
   await page.locator('#grp-q').fill('ыыы');
-  assert.match(await text(page, '#grp-none'), /Группы с таким названием нет/);
+  assert.match(await text(page, '#grp-none, #grp-find-none'), /Группы с таким названием нет/);
   await page.locator('.grp-search .search-x').click();
   assert.equal(await page.locator('#grp-list [data-act=grp-open]').count(), 2, 'очистили — снова все');
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'grp-q');

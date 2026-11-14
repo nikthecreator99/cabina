@@ -2385,3 +2385,8 @@ button.pr-status svg { color: var(--text-2); }
 @media (max-width: 360px) { .gr-tile b { font-size: 22px; } .gr-hero > div:first-child b { font-size: 34px; } }
 html[data-text="xl"] .gr-tiles { grid-template-columns: minmax(0, 1fr); }
 html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+
+/* 2.33.1: «Пригласить» справа от заголовка «Коллеги» */
+.page-head .inv-top { flex: none; width: auto; min-height: 44px; padding: 0 14px; gap: 6px; }
+.page-head .inv-top svg { color: var(--warn); }
+@media (max-width: 360px) { .page-head .inv-top { padding: 0 10px; } }

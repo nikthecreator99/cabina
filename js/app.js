@@ -41,12 +41,12 @@ import { checkDepotHash } from './depot.js';
 import { openTableExport, importTableFile } from './table.js';
 import { renderHelp, helpListHtml } from './help.js';
 import { groupsRowHtml, renderGroups, renderGroup, groupsClick, groupsInput, groupsReset, groupFromHash, joinByCode } from './groups.js';
-import { initInvites, renderInvites, invitesClick, loadInvites, inviteRowHtml, signupNagHtml, nagClick } from './invites.js';
+import { initInvites, renderInvites, invitesClick, loadInvites, signupNagHtml, nagClick } from './invites.js';
 import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml, checkAdminIdeas } from './ideas.js';
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.33.0';
+export const VERSION = '2.33.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -629,7 +629,7 @@ function render({ still = false } = {}) {
   else if (V.tab === 'home') renderHome();
   else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
   else if (V.tab === 'learn') app.innerHTML = `<div class="screen lr-hub">${renderLearn()}</div>`; // «Обучение» — своя вкладка (2.23.0)
-  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml() + inviteRowHtml()), bellHtml())}</div>`;
+  else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml()), bellHtml())}</div>`;
   pokeNotices(!p && V.tab === 'profile');
   learnAfter(p, V.tab, still);
   renderTabbar();

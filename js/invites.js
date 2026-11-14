@@ -232,14 +232,6 @@ export async function invitesClick(act, b) {
   return true;
 }
 
-// Строка «Пригласить коллег» в профиле (группа «Коллеги»), когда есть вход
-export function inviteRowHtml() {
-  if (!legalReady() || !session()) return '';
-  // 2.21.2 (Никита): без подписи под строкой
-  return `<button class="row" data-act="go" data-page="invites" id="inv-entry"><span class="ico" style="--c:var(--warn)">${I.gift}</span>
-    <div class="grow"><div class="t1">Пригласить коллег</div></div>${small(I.right, 18)}</button>`;
-}
-
 // ---------------------------------------------------------------- плашки для тех, кто без аккаунта
 // Только в этом телефоне (localStorage): когда показали, «Не сейчас» (30 дней), «Больше не показывать».
 // Показываем, когда человек уже пользуется приложением (от 5 законченных поездок), не чаще раза в неделю,

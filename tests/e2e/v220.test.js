@@ -53,8 +53,10 @@ test('«Пригласить коллег»: строка в профиле, с�
   const { context, page, errors } = await openApp(env);
   const srv = await ready(context, page, OLD);
   await tab(page, 'profile');
+  assert.equal(await page.locator('#inv-entry').count(), 0, '2.33.1: в профиле кнопки нет');
+  await page.locator('#col-entry').click();
   await page.locator('#inv-entry').waitFor();
-  assert.equal((await text(page, '#inv-entry')).trim(), 'Пригласить коллег', '2.21.2: без подписи');
+  assert.equal((await text(page, '#inv-entry')).trim(), 'Пригласить', '2.33.1: справа от заголовка «Коллеги»');
   await page.locator('#inv-entry').click();
   await page.waitForSelector('.screen[data-page=invites] #inv-new:not([disabled])');
   const scr = await text(page, '.screen');
@@ -122,7 +124,8 @@ test('засчитанные приглашения: число запомина
   await page.waitForFunction(async () => (await import('./js/store.js')).S.profile.invited?.n === 1);
   assert.deepEqual((await profileOf(page)).invited, { n: 1, days: ['2026-10-20'] });
   await tab(page, 'profile');
-  assert.equal((await text(page, '#inv-entry')).trim(), 'Пригласить коллег');
+  await page.locator('#col-entry').click();
+  assert.equal((await text(page, '#inv-entry')).trim(), 'Пригласить');
   await page.locator('#inv-entry').click();
   await page.waitForSelector('#inv-tiers');
   assert.match(await text(page, '#inv-sum'), /Засчитано[\s\S]*1[\s\S]*Ещё не засчитаны[\s\S]*1/);
@@ -132,6 +135,7 @@ test('засчитанные приглашения: число запомина
   assert.match(await text(page, '.inv-tier[data-n="3"]'), /Сменщик · 3 приглашения[\s\S]*Ушанка[\s\S]*ещё 2 приглашения/);
   assert.match(await text(page, '.inv-tier[data-n="5"]'), /ещё 4 приглашения/);
   // награда «Наставник», бронза
+  await page.locator('[data-act=back]').click();
   await page.locator('[data-act=back]').click();
   await page.locator('#pr-awards .aw-strip').click();
   await page.waitForSelector('.aw-grid');
@@ -291,6 +295,8 @@ test('320 px и светлая тема: «Пригласить коллег», 
   for (const theme of ['dark', 'light']) {
     await page.evaluate(async (t) => { const s = await import('./js/store.js'); await s.saveSettings({ theme: t }); document.documentElement.setAttribute('data-theme', t); }, theme);
     await tab(page, 'profile');
+    await page.locator('#col-entry').click();
+    assert.ok(await fits(page), `«Коллеги» с кнопкой «Пригласить», ${theme}`);
     await page.locator('#inv-entry').click();
     await page.locator('#inv-open').waitFor();
     assert.ok(await fits(page), `приглашения, ${theme}`);

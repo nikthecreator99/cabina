@@ -160,17 +160,16 @@ export function renderGroups() {
       <button class="btn btn-plain" data-act="grp-code-enter" id="grp-join">${small(I.qr, 20)} Вступить по коду</button>
     </div>`}
     ${full ? `<div class="hint">Групп уже ${GROUPS_MAX} — больше нельзя. Выйдите из ненужной, чтобы вступить в новую.</div>` : ''}
-    ${snap.searchOn ? `<div class="panel grp-find-panel"><button class="row" data-act="grp-find" id="grp-find"><span class="ico" style="--c:var(--info, var(--ok))">${I.search}</span>
-      <div class="grow"><div class="t1">Найти группу</div><div class="t2">По названию — бригаду, колонну, депо</div></div>${small(I.right, 18)}</button></div>` : ''}
     ${snap.myRequests.length ? `<div class="grp-sec-title"><h2>Ваши заявки</h2><span class="grp-count">${snap.myRequests.length}</span></div><div class="panel col-offers" id="grp-myreq">${snap.myRequests.map(myRequestRow).join('')}</div>` : ''}
     ${snap.groupInvites.length ? `<div class="grp-sec-title"><h2>Приглашают в группу</h2><span class="grp-count">${snap.groupInvites.length}</span></div><div class="panel col-offers" id="grp-invites">${snap.groupInvites.map(inviteRow).join('')}</div>` : ''}
-    ${snap.groups.length ? `<div class="search grp-search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="grp-q" placeholder="Поиск среди ваших групп" autocomplete="off" enterkeyhint="search" value="${esc(q)}" aria-label="Поиск среди ваших групп">${q ? `<button class="search-x" data-act="grp-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>
-      <div id="grp-list">${groupsListHtml(snap)}</div>`
+    ${snap.groups.length || snap.searchOn ? `<div class="search grp-search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="grp-q" placeholder="Найти группу" autocomplete="off" enterkeyhint="search" maxlength="${GROUP_NAME_MAX}" value="${esc(q)}" aria-label="Найти группу">${q ? `<button class="search-x" data-act="grp-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>` : ''}
+    ${snap.groups.length ? `<div id="grp-list">${groupsListHtml(snap)}</div>`
       : `<div class="hint grp-empty">Вы пока не в группе. Создайте свою${snap.searchOn ? ', найдите по названию' : ''} или вступите по коду, который даст администратор группы.</div>`}
+    <div id="grp-found">${foundHtml(snap)}</div>
   </div>`;
 }
 
-// Поиск среди своих групп: по названию, без учёта регистра, «ё» и знаков («тд64» найдёт «ТД-64»)
+// Поиск (2.33.1): одна строка «Найти группу» — свои группы сразу, остальные (открытые и показанные в поиске) — с сервера. Название, без учёта регистра, «ё» и знаков («тд64» найдёт «ТД-64»)
 const foldName = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, '');
 export const groupMatch = (g, q) => {
   const words = String(q || '').toLowerCase().replace(/ё/g, 'е').split(/\s+/).map(foldName).filter(Boolean);
@@ -179,7 +178,7 @@ export const groupMatch = (g, q) => {
 };
 function groupsListHtml(snap) {
   const list = snap.groups.filter((g) => groupMatch(g, G.q));
-  if (!list.length) return `<div class="hint grp-empty" id="grp-none">Группы с таким названием нет.</div>`;
+  if (!list.length) return G.q && snap.searchOn && searchable(G.q) ? '' : `<div class="hint grp-empty" id="grp-none">Группы с таким названием нет.</div>`;
   return `${section('Вы администратор', list.filter((g) => g.admin), 'grp-admin')}${section('Вы участник', list.filter((g) => !g.admin), 'grp-mem')}`;
 }
 // Ввод в строке поиска (вызывает app.js): перерисовываем только список, чтобы не терять фокус
@@ -189,12 +188,51 @@ export function groupsInput(t) {
   const snap = colSnap();
   const box = document.getElementById('grp-list');
   if (box && snap) box.innerHTML = groupsListHtml(snap);
+  scheduleFind();
   const x = t.parentElement.querySelector('.search-x');
   if (G.q && !x) t.parentElement.insertAdjacentHTML('beforeend', `<button class="search-x" data-act="grp-q-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>`);
   else if (!G.q && x) x.remove();
   return true;
 }
-export function groupsReset() { G.q = ''; }
+export function groupsReset() { G.q = ''; G.found = null; clearTimeout(findTimer); }
+
+// Остальные группы — с сервера (rpc find_groups: только открытые и показанные в поиске, без состава). От 3 знаков, с паузой,
+// чтобы не тратить дневной лимит поиска на каждую букву; повторный запрос с тем же текстом не уходит
+const searchable = (q) => cleanText(q, 60).replace(/[^0-9a-zа-яё]/gi, '').length >= 3;
+let findTimer = 0;
+function foundHtml(snap) {
+  if (!snap?.searchOn || !G.found || !searchable(G.q)) return '';
+  const f = G.found;
+  if (f.err) return `<div class="hint grp-empty" id="grp-find-err">${esc(f.err)}</div>`;
+  if (!f.list) return '<div class="hint grp-empty" id="grp-find-wait">Ищем…</div>';
+  const mine = new Set(snap.groups.map((g) => g.id));
+  const list = f.list.filter((x) => !mine.has(x.id));
+  if (!list.length) return snap.groups.some((g) => groupMatch(g, G.q)) ? '' : '<div class="hint grp-empty" id="grp-find-none">Группы с таким названием нет. Возможно, администратор не показывает её в поиске — попросите у него код.</div>';
+  return `<div class="grp-sec-title"><h2>Найдены в поиске</h2></div><div class="panel" id="grp-find-list">${list.map(findRow).join('')}</div>
+    <p class="hint grp-find-how">Видно только название и картинку — кто в группе, не видно.</p>`;
+}
+function paintFound() {
+  const box = document.getElementById('grp-found');
+  const snap = colSnap();
+  if (box && snap) box.innerHTML = foundHtml(snap);
+}
+function scheduleFind() {
+  clearTimeout(findTimer);
+  const snap = colSnap();
+  if (!snap?.searchOn || !searchable(G.q)) { G.found = null; paintFound(); return; }
+  const q = cleanText(G.q, 60);
+  if (G.found && G.found.q === q && !G.found.err) { paintFound(); return; }
+  G.found = { q, list: null }; paintFound();
+  findTimer = setTimeout(() => doFind(q), 700);
+}
+async function doFind(q) {
+  if (!document.getElementById('grp-q') || cleanText(G.q, 60) !== q) return;
+  if (!(await ready())) { G.found = null; paintFound(); return; }
+  const r = await rpc('find_groups', { p_q: q });
+  if (cleanText(G.q, 60) !== q) return; // пока ждали, человек уже печатает другое
+  G.found = r?.ok ? { q, list: cleanFound(r.data) } : { q, err: groupError(r) };
+  paintFound();
+}
 
 // ---------------------------------------------------------------- экран одной группы
 
@@ -606,7 +644,6 @@ async function setSearch(id, what) {
 
 // ---------------------------------------------------------------- поиск групп (2.33)
 
-const F = { q: '', list: null };
 const MODE = { member: 'Вы в группе', pending: 'Заявка отправлена', declined: 'Заявку отклонили' };
 function findRow(x) {
   const btn = x.me === 'member' ? `<button class="btn btn-plain btn-sm" data-act="grp-find-open" data-id="${esc(x.id)}">Открыть группу</button>`
@@ -617,56 +654,10 @@ function findRow(x) {
       <div class="t2">${x.open ? 'Открытая — вступить сразу' : 'Закрытая — вступить по заявке'}</div></div></div>
     <div class="col-btns">${btn}</div></div>`;
 }
-const findResHtml = () => (F.list === null ? '' : F.list.length ? `<div class="panel" id="grp-find-list">${F.list.map(findRow).join('')}</div>`
-  : '<div class="hint grp-empty" id="grp-find-none">Ничего не нашлось. Возможно, администратор не показывает группу в поиске — попросите у него код.</div>');
 // Ответ сервера — непроверенный: только uuid, название через cleanText, картинка через normPic, состояния из списка
 export const cleanFound = (data) => (Array.isArray(data) ? data : []).filter((x) => x && typeof x === 'object' && UUID.test(String(x.id))).slice(0, 10)
   .map((x) => ({ id: String(x.id).toLowerCase(), name: cleanText(typeof x.name === 'string' ? x.name : '', GROUP_NAME_MAX) || 'Группа', pic: normPic(x.pic),
     open: x.open === true, me: ['member', 'pending', 'declined'].includes(x.me) ? x.me : null }));
-
-async function openFind() {
-  if (!(await ready())) return;
-  F.list = null;
-  const el = openLayer(sheet({ title: 'Найти группу', tall: true, body: `<div class="search grp-search"><span aria-hidden="true">${small(I.search, 18)}</span>
-      <input type="search" class="input" id="grp-find-q" placeholder="Название группы" autocomplete="off" enterkeyhint="search" maxlength="${GROUP_NAME_MAX}" value="${esc(F.q)}" aria-label="Название группы"></div>
-    <p class="hint grp-find-how">Находятся группы, которые администратор показал в поиске. Видно только название и картинку — кто в группе, не видно.</p>
-    <div id="grp-find-err" class="acc-err" role="alert" aria-live="assertive"></div>
-    <div id="grp-find-res"></div>`,
-  foot: '<button class="btn btn-primary" data-act="grp-find-go" id="grp-find-go">Найти</button>' }), { onClose: () => colRerender() });
-  const input = el.querySelector('#grp-find-q');
-  const box = el.querySelector('#grp-find-res');
-  const err = (t) => { el.querySelector('#grp-find-err').innerHTML = t ? `<div class="error-box">${I.alert}<span>${esc(t)}</span></div>` : ''; };
-  const go = async () => {
-    if (G.busy) return;
-    F.q = input.value;
-    if (cleanText(F.q, 60).replace(/[^0-9a-zа-яё]/gi, '').length < 3) { err('Введите хотя бы 3 буквы или цифры.'); input.focus(); return; }
-    err('');
-    G.busy = true;
-    try {
-      const r = await rpc('find_groups', { p_q: cleanText(F.q, 60) });
-      if (!r?.ok) { err(groupError(r)); return; }
-      F.list = cleanFound(r.data);
-      box.innerHTML = findResHtml();
-    } finally { G.busy = false; }
-  };
-  el.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-act]');
-    if (!b) return;
-    if (b.dataset.act === 'grp-find-go') { go(); return; }
-    const x = F.list?.find((v) => v.id === b.dataset.id);
-    if (!x) return;
-    if (b.dataset.act === 'grp-find-open') { closeLayer(el); await reload(); openGroupPage(x.id); return; }
-    if (b.dataset.act !== 'grp-find-join' || G.busy) return;
-    G.busy = true;
-    try {
-      const res = await requestGroup(x);
-      if (res === 'joined' || res === 'member') { closeLayer(el); openGroupPage(x.id); return; }
-      if (res === 'sent') { x.me = 'pending'; box.innerHTML = findResHtml(); }
-    } finally { G.busy = false; }
-  });
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
-  setTimeout(() => input.focus(), 60);
-}
 
 // Вступить в найденную группу: открытая — сразу, закрытая — заявка. Сначала говорим, кто что увидит.
 async function requestGroup(x) {
@@ -753,7 +744,6 @@ function openGear() {
   const el = openLayer(sheet({ title: 'Настройки групп', tall: true, body: `<div id="grp-gear-body">
     <div class="panel">
       <button class="row" data-act="grp-new" id="gear-new"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--ok)">${I.plus}</span><div class="grow"><div class="t1">Создать группу</div></div>${small(I.right, 18)}</button>
-      ${snap?.searchOn ? `<button class="row" data-act="grp-find" id="gear-find"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--info, var(--ok))">${I.search}</span><div class="grow"><div class="t1">Найти группу</div></div>${small(I.right, 18)}</button>` : ''}
       <button class="row" data-act="grp-code-enter" id="gear-join"${full ? ' disabled' : ''}><span class="ico" style="--c:var(--info, var(--ok))">${small(I.qr, 20)}</span><div class="grow"><div class="t1">Вступить по коду</div></div>${small(I.right, 18)}</button>
       <button class="row" data-act="grp-help" id="gear-help"><span class="ico" style="--c:var(--muted)">${I.help}</span><div class="grow"><div class="t1">Как работают группы</div></div>${small(I.right, 18)}</button>
     </div>
@@ -771,7 +761,7 @@ function openGear() {
     if (act === 'grp-drop') { const k = b.dataset.k === 'place' ? 'place' : 'status'; G.open[k] = !G.open[k]; document.querySelector('#grp-gear-priv').innerHTML = gearPrivHtml(); return; }
     if (act === 'grp-share') { groupsClick(act, b); return; }
     if (act === 'grp-col-priv') { closeLayer(el); colGo('privacy'); return; }
-    if (act === 'grp-new' || act === 'grp-code-enter' || act === 'grp-help' || act === 'grp-find') { closeLayer(el); groupsClick(act, b); }
+    if (act === 'grp-new' || act === 'grp-code-enter' || act === 'grp-help') { closeLayer(el); groupsClick(act, b); }
   });
 }
 
@@ -786,7 +776,22 @@ export async function groupsClick(act, b) {
   if (act === 'grp-gear') { openGear(); return true; }
   if (act === 'grp-q-clear') { G.q = ''; colRerender(); document.getElementById('grp-q')?.focus(); return true; }
   if (act === 'grp-code-enter') { if (await ready()) enterCode(); return true; }
-  if (act === 'grp-find') { openFind(); return true; }
+  if (act === 'grp-find-open') {
+    const id = String(b.dataset.id || '').toLowerCase();
+    if (UUID.test(id)) { await reload(); openGroupPage(id); }
+    return true;
+  }
+  if (act === 'grp-find-join') {
+    const x = G.found?.list?.find((v) => v.id === String(b.dataset.id || '').toLowerCase());
+    if (!x || G.busy) return true;
+    G.busy = true;
+    try {
+      const res = await requestGroup(x);
+      if (res === 'joined' || res === 'member') { openGroupPage(x.id); return true; }
+      if (res === 'sent') { x.me = 'pending'; colRerender(); }
+    } finally { G.busy = false; }
+    return true;
+  }
   if (G.busy) return true;
   G.busy = true;
   try {
