@@ -927,7 +927,7 @@ function teamListHtml(snap) {
 }
 
 // Строка «Коллеги» на экране «Профиль»: открывает экран со списком. Без аккаунта её нет.
-// extra — ещё строки в той же группе («Пригласить коллег» из invites.js, через app.js — без круговых импортов)
+// extra — ещё строки в той же группе (например «Группы» из groups.js, через app.js — без круговых импортов)
 export function colleaguesHtml(extra = '') {
   if (!legalReady() || !mine()) return '';
   ensureFresh();
@@ -953,7 +953,9 @@ export function teamReset() { C.teamQ = ''; }
 // Экран «Коллеги»: поиск среди своих (в самом верху), предложения, список по статусам, «Ждут ответа».
 // Найти нового коллегу — строкой «Найти коллегу» в профиле (здесь кнопка только пока коллег нет)
 export function renderTeam() {
-  const head = pageHead('Коллеги', { back: true });
+  // 2.33.1 (Никита): «Пригласить» — справа от заголовка (раньше отдельная строка в Профиле)
+  const inviteBtn = legalReady() && mine() ? `<button class="btn btn-plain btn-sm inv-top" data-act="go" data-page="invites" id="inv-entry">${small(I.gift, 18)}<span>Пригласить</span></button>` : '';
+  const head = pageHead('Коллеги', { back: true, right: inviteBtn });
   if (!legalReady() || !mine()) {
     return `${head}<div class="notice ok">${I.shield}<div><b>Нужен аккаунт CABINA.</b> Коллеги работают через аккаунт: так предложения и статус доходят только до тех, кого вы добавили.</div></div>
       <button class="btn btn-primary" data-act="go" data-page="account">Настройки аккаунта</button>`;
