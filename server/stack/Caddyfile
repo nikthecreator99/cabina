@@ -45,7 +45,7 @@ www.cabina-app.ru {
 	redir https://cabina-app.ru{uri} permanent
 }
 
-# Сервер аккаунтов: наружу только /auth/v1/* и /rest/v1/*, остальное — 404.
+# Сервер аккаунтов: наружу только /auth/v1/*, /rest/v1/* и /ai/v1/* (CABINA AI), остальное — 404.
 api.cabina-app.ru {
 	import secure
 	header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
@@ -75,6 +75,15 @@ api.cabina-app.ru {
 	}
 	handle_path /rest/v1/* {
 		reverse_proxy rest:3000 {
+			import nocors
+		}
+	}
+	# CABINA AI (шаг 15): вопрос → сервер помощника. Ключ входа человека он проверяет через PostgREST.
+	handle_path /ai/v1/* {
+		request_body {
+			max_size 8KB
+		}
+		reverse_proxy ai:8787 {
 			import nocors
 		}
 	}

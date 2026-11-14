@@ -22,6 +22,7 @@ import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, re
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderGrowth, growthClick } from './growth.js';
+import { initAi, renderAi, aiClick, aiInput, aiKey, aiEnter, aiCardHtml } from './ai.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
 import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
@@ -400,7 +401,9 @@ function renderExtra() {
       ideas: legalReady() ? ideasRowHtml('extra-ideas').replace('<button class="row"', '<button class="row" data-key="ideas"') : '',
     };
     // один общий список; порядок меняется удержанием пальца (2.21) и хранится в настройках
+    // CABINA AI (2.34, решение Никиты 14.11.2026) — в самом верху, крупной плашкой, в перестановке не участвует
     html = `<div class="page-head"><h1>Ещё</h1></div>
+      ${aiCardHtml()}
       <div class="panel extra-list" id="extra-list">${extraOrder().map((k) => rows[k]).join('')}</div>
       <p class="hint extra-tip">Порядок можно поменять: удержите строку пальцем и двигайте вверх или вниз.</p>`;
   }
@@ -585,7 +588,7 @@ function renderSetAbout() {
 // ---------------------------------------------------------------- рендер и навигация
 // Гость (2.26): награды, рекорды и персонаж — с аккаунтом; вместо экрана — что там будет и «Зарегистрироваться»
 const locked = (kind, fn) => () => (isGuest() ? guestLockHtml(kind) : fn());
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe, growth: renderGrowth };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe, growth: renderGrowth, ai: renderAi };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // Уведомления (2.28): ответы на мои идеи и (у администратора) новые идеи подгружаем не чаще раза в 2 минуты, на «Профиле» — раз в 30 секунд;
@@ -679,6 +682,7 @@ function go(name) {
   if (name === 'help') { V.helpQ = ''; V.helpOpen = new Set(); }
   if (name === 'invites') loadInvites({ force: true });
   if (name === 'ideas') loadIdeas({ force: true });
+  if (name === 'ai') aiEnter();
   if (name === 'notices') { loadColleagues({ force: true }); if (premiumOk()) checkAdminIdeas({ force: true }); noticesEnter(); }
   V.pages.push(name);
   // наверх — до отрисовки (2.24.5): новый экран может сам прокрутиться к нужному месту (дорога курса — к своему уроку),
@@ -737,6 +741,7 @@ export { scheduleTours };
 onChange(() => rerender());
 initInvites({ rerender });
 initIdeas({ rerender });
+initAi({ rerender });
 initNotices({ rerender, isAdmin: premiumOk });
 initLearn({ rerender, go });
 initColleagues({ rerender, go, back, active: () => (V.tab === 'profile' && !V.pages.length) || ['team', 'colleagues', 'privacy', 'account', 'groups', 'group'].includes(page()) });
@@ -830,6 +835,7 @@ app.addEventListener('click', async (e) => {
   if (nagClick(act, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   if (growthClick(act, b, ctx)) return;
+  if (aiClick(act, b)) return;
   if (yearClick(act, b, ctx)) return;
   const sk = streakClick(act);
   if (sk === 'tab') { V.tab = 'learn'; V.pages = learnResume(); window.scrollTo(0, 0); render(); return; }
@@ -945,6 +951,7 @@ app.addEventListener('submit', (e) => { if (e.target.id === 'col-form') colleagu
 
 // карточка итогов — тоже кнопка (клавиатура)
 app.addEventListener('keydown', (e) => {
+  if (aiKey(e)) return;
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.hero[data-act=stats]')) { e.preventDefault(); go('stats'); }
 });
 
@@ -954,6 +961,7 @@ app.addEventListener('input', (e) => {
   if (groupsInput(e.target)) return;
   if (fixInput(e.target)) return;
   if (ideasInput(e.target)) return;
+  if (aiInput(e.target)) return;
   if (e.target.id === 'help-q') {
     V.helpQ = e.target.value;
     app.querySelector('#help-list').innerHTML = helpListHtml(V.helpQ, V.helpOpen, helpCtx());
