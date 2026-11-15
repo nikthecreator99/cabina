@@ -6,6 +6,7 @@
 #
 # Наружу открыт только Caddy (80 и 443). У базы, входа и PostgREST портов наружу нет совсем: Docker открывает
 # порты в обход ufw, поэтому их просто не публикуем. Секреты — только в /opt/cabina/.env (chmod 600, в git не попадает).
+# У базы три пароля: главный (POSTGRES_PASSWORD), входа (AUTH_DB_PASSWORD) и PostgREST (AUTHENTICATOR_PASSWORD).
 # Журналы контейнеров — не больше 2 файлов по 5 МБ на каждый, потом стираются сами.
 
 x-logs: &logs
@@ -60,7 +61,9 @@ services:
       GOTRUE_API_PORT: 9999
       API_EXTERNAL_URL: https://api.cabina-app.ru
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      # у входа и PostgREST — свои пароли (с 15.11.2026, аудит): утечка одного не открывает другой и главный пароль базы.
+      # Ставит их в базу db-passwords.sh; нет пароля в .env — docker compose остановится с понятной ошибкой.
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${AUTH_DB_PASSWORD:?нет AUTH_DB_PASSWORD в .env — запустите db-passwords.sh}@db:5432/postgres
       GOTRUE_SITE_URL: https://cabina-app.ru/
       GOTRUE_URI_ALLOW_LIST: ""
       GOTRUE_DISABLE_SIGNUP: "false"
@@ -119,7 +122,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_URI: postgres://authenticator:${AUTHENTICATOR_PASSWORD:?нет AUTHENTICATOR_PASSWORD в .env — запустите db-passwords.sh}@db:5432/postgres
       PGRST_DB_SCHEMAS: public
       PGRST_DB_EXTRA_SEARCH_PATH: public
       PGRST_DB_MAX_ROWS: 1000
