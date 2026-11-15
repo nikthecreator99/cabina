@@ -68,12 +68,20 @@ api.cabina-app.ru {
 		respond 204
 	}
 
+	# Размер запроса ограничен (аудит 14.11.2026): иначе человек с аккаунтом мог бы слать огромные запросы и нагружать
+	# сервер. Больше — ответ 413. Самый большой настоящий запрос — 200 заметок о локомотивах (около 150 КБ), поэтому 256 КБ.
 	handle_path /auth/v1/* {
+		request_body {
+			max_size 16KB
+		}
 		reverse_proxy auth:9999 {
 			import nocors
 		}
 	}
 	handle_path /rest/v1/* {
+		request_body {
+			max_size 256KB
+		}
 		reverse_proxy rest:3000 {
 			import nocors
 		}
