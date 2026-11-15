@@ -103,6 +103,12 @@ export function start(port = PORT) {
       } catch { console.error('ai: crash'); send(res, 500, { error: 'crash' }); }
     });
   });
+  // медленный или зависший клиент не держит соединение: заголовки — 10 с, весь запрос — 20 с, простой — 30 с
+  srv.headersTimeout = 10_000;
+  srv.requestTimeout = 20_000;
+  srv.keepAliveTimeout = 5_000;
+  srv.setTimeout(30_000, (sock) => sock.destroy());
+  srv.maxHeadersCount = 50;
   srv.listen(port);
   return srv;
 }
