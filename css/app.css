@@ -2386,6 +2386,11 @@ button.pr-status svg { color: var(--text-2); }
 html[data-text="xl"] .gr-tiles { grid-template-columns: minmax(0, 1fr); }
 html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
 
+/* 2.33.1: «Пригласить» справа от заголовка «Коллеги» */
+.page-head .inv-top { flex: none; width: auto; min-height: 44px; padding: 0 14px; gap: 6px; }
+.page-head .inv-top svg { color: var(--warn); }
+@media (max-width: 360px) { .page-head .inv-top { padding: 0 10px; } }
+
 /* CABINA AI (2.34, макет согласован с Никитой 14.11.2026): плашка вверху «Ещё» — тёмная «афиша», как карточка курса,
    локомотив из значка CABINA оранжевым (icons/ai-loco.webp); экран вопросов — страница 'ai' */
 .ai-card { position: relative; isolation: isolate; display: block; width: 100%; margin: 0 0 16px; padding: 18px 16px 16px; text-align: left;

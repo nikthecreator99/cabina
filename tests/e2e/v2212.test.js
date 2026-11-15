@@ -161,13 +161,13 @@ test('главная без «появления»: карточка стати�
   await context.close();
 });
 
-test('профиль: «Найти», «Пригласить коллег» без подписи, без «Приватности профиля»; приглашения — кнопка сверху; «Мои данные» в «Документах»', async () => {
+test('профиль: «Найти», «Пригласить» внутри «Коллег», без «Приватности профиля»; приглашения — кнопка сверху; «Мои данные» в «Документах»', async () => {
   const { context, page, errors } = await openApp(env);
   await ready(context, page, NEW);
   await tab(page, 'profile');
   await page.locator('#col-entry').waitFor();
   assert.equal((await text(page, '#col-find')).trim(), 'Найти');
-  assert.equal(await page.locator('#inv-entry .t2').count(), 0);
+  assert.equal(await page.locator('#inv-entry').count(), 0, 'в профиле кнопки приглашения нет');
   assert.equal(await page.locator('#pr-privacy').count(), 0);
   for (const theme of ['dark', 'light']) {
     await seed(page, { settings: { theme } });
@@ -175,6 +175,7 @@ test('профиль: «Найти», «Пригласить коллег» бе
     assert.ok(await fits(page), `профиль на 320 px, ${theme}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#col-entry').click();
   await page.locator('#inv-entry').click();
   await page.locator('#inv-new:not([disabled])').waitFor();
   const btn = await page.locator('#inv-new').boundingBox();
@@ -182,6 +183,7 @@ test('профиль: «Найти», «Пригласить коллег» бе
   assert.ok(btn.y < (await page.locator('#inv-sum').boundingBox()).y, 'кнопка выше счётчиков');
   assert.equal(await page.locator('.screen .notice').count(), 0, 'длинной плашки нет');
   // Настройки аккаунта: «Мои данные на сервере» — в группе «Документы»
+  await page.locator('.screen [data-act=back]').click();
   await page.locator('.screen [data-act=back]').click();
   await page.locator('[data-act=go][data-page=settings]').click();
   await page.locator('[data-act=go][data-page=account]').first().click();

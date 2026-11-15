@@ -39,11 +39,9 @@ async function openGroups(page) {
   await page.locator('#grp-list').waitFor();
 }
 async function find(page, q) {
-  await page.locator('#grp-find').click();
-  const s = top(page);
-  await s.locator('#grp-find-q').fill(q);
-  await s.locator('#grp-find-go').click();
-  return s;
+  // 2.33.1: отдельной кнопки нет — поиск по всем группам внутри строки «Найти группу»
+  await page.locator('#grp-q').fill(q);
+  return page;
 }
 
 test('поиск: только видимые в поиске, только название и картинка; открытая — сразу, закрытая — заявка', async () => {
@@ -52,10 +50,11 @@ test('поиск: только видимые в поиске, только на
   await openGroups(page);
   // короткий запрос на сервер не уходит
   let s = await find(page, 'со');
-  await s.locator('#grp-find-err').getByText('хотя бы 3').waitFor();
+  assert.equal(await page.locator('#grp-q').getAttribute('placeholder'), 'Найти группу');
+  assert.equal(await page.locator('#grp-find').count(), 0, 'отдельной кнопки «Найти группу» нет');
+  await page.waitForTimeout(1000);
   assert.equal(srv.calls('find_groups').length, 0);
-  await s.locator('#grp-find-q').fill('сосновка');
-  await s.locator('#grp-find-go').click();
+  await s.locator('#grp-q').fill('сосновка');
   await s.locator('#grp-find-list').waitFor();
   const res = await text(page, '#grp-find-list');
   assert.match(res, /Колонна Сосновка[\s\S]*Открытая — вступить сразу[\s\S]*Бригада Сосновка[\s\S]*по заявке/);
@@ -137,7 +136,7 @@ test('новая группа — с переключателем «Показы
   const srv = await ready(context, page, NEW, (db) => { db.cards[ME] = { user_id: ME, name: 'Иван Тестов', role: 'driver', depot: null, avatar: null, searchable: false }; });
   await tab(page, 'profile');
   await page.locator('#grp-entry').click();
-  await page.locator('#grp-find').waitFor();
+  await page.locator('#grp-q').waitFor();
   await page.locator('#grp-gear').click();
   await top(page).locator('#gear-new').click();
   const s = top(page);
@@ -155,7 +154,9 @@ test('новая группа — с переключателем «Показы
   const b = await openApp(env);
   await ready(b.context, b.page, NEW, (db) => { WORLD(db); db.searchOff = true; });
   await openGroups(b.page);
-  assert.equal(await b.page.locator('#grp-find').count(), 0);
+  await b.page.locator('#grp-q').fill('сосновка');
+  await b.page.waitForTimeout(1000);
+  assert.equal(await b.page.locator('#grp-find-list').count(), 0, 'старый сервер: чужих групп не ищем');
   await b.page.locator('#grp-gear').click();
   assert.equal(await top(b.page).locator('#gear-find').count(), 0);
   assert.deepEqual(realErrors([...errors, ...b.errors]), []);
@@ -177,7 +178,7 @@ test('320 px, очень крупный текст, обе темы: поиск 
     const row = await s.locator('.grp-find-row').first().boundingBox();
     assert.ok(row.x >= 0 && row.x + row.width <= 320, 'строка результата в экране');
     await shot(page, `find-320-${theme}`);
-    await closeTop(page); await waitNoLayers(page);
+    await page.locator('[data-act=grp-q-clear]').click();
     await page.locator('[data-act=grp-open]', { hasText: 'ТД-64' }).click();
     await page.locator('#grp-reqs').waitFor();
     assert.ok(await fits(page), `заявки помещаются (${theme})`);
