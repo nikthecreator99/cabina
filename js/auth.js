@@ -50,7 +50,7 @@ function store(s) {
   } catch {}
 }
 // выход: вход забываем, а заметки коллег (2.31, это чужие данные) стираем из телефона
-export const forget = () => { store(null); try { localStorage.removeItem('cabina-col-notes'); } catch {} };
+export const forget = () => { store(null); try { localStorage.removeItem('cabina-col-notes'); localStorage.removeItem('cabina-ai-history'); } catch {} };
 
 // Ответ сервера о входе → то, что храним в телефоне
 export function fromAuth(d, now = Date.now()) {
@@ -132,6 +132,8 @@ async function withToken(path, opts = {}) {
 export const rpc = (name, args = {}) => withToken(`/rest/v1/rpc/${name}`, { body: args });
 // Чтение своих строк из таблиц (что видно — решают правила базы, RLS): 'links?select=id,state'
 export const restGet = (path) => withToken(`/rest/v1/${path}`, { method: 'GET' });
+// CABINA AI (2.34): вопрос серверу помощника. Ответ нейросети ждём дольше обычного.
+export const askAi = (q) => withToken('/ai/v1/ask', { body: { q }, timeout: 45000 });
 
 // ---------------------------------------------------------------- действия
 

@@ -130,6 +130,28 @@ services:
       PGRST_OPENAPI_MODE: disabled            # не показываем наружу список таблиц и функций
       PGRST_LOG_LEVEL: error
 
+  # CABINA AI (шаг 15): справочный помощник. Код — server/ai из репозитория, на сервере — /opt/cabina/ai.
+  # Без сторонних библиотек, только чтение файлов; наружу портов нет — к нему ходит только Caddy (/ai/v1/*).
+  # Ключ Яндекса — YC_API_KEY и YC_FOLDER_ID в /opt/cabina/.env; пока их нет, помощник отвечает «выключен».
+  ai:
+    container_name: cabina-ai
+    image: node:22.20.0-alpine
+    restart: unless-stopped
+    <<: *logs
+    depends_on:
+      - rest
+    user: node
+    read_only: true
+    working_dir: /app
+    command: ["node", "server.mjs"]
+    volumes:
+      - ./ai:/app:ro
+    environment:
+      AI_REST_URL: http://rest:3000
+      AI_MODEL: ${AI_MODEL:-yandexgpt/latest}
+      YC_API_KEY: ${YC_API_KEY:-}
+      YC_FOLDER_ID: ${YC_FOLDER_ID:-}
+
   caddy:
     container_name: cabina-caddy
     image: caddy:2.10.2
@@ -138,6 +160,7 @@ services:
     depends_on:
       - auth
       - rest
+      - ai
     ports:
       - "80:80"
       - "443:443"
