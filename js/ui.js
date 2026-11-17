@@ -213,7 +213,6 @@ export function closeLayer(el) {
   removeTop();
 }
 
-export const topLayer = () => stack[stack.length - 1]?.el;
 export const layerCount = () => stack.length;
 
 export function sheet({ title, body, foot = '', tall = false, headRight = '', back = false }) {

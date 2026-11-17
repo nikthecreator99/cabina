@@ -2,7 +2,7 @@
 // Экран «Профиль» — просмотр и «Коллеги»; изменить персонажа, имя, должность и депо — «Редактировать профиль».
 // «Приватность» с 2.16 — в Настройках аккаунта (colleagues.js): там же и кому из коллег что видно.
 // С 2.12 вместо фото — нарисованный персонаж (avatar.js). Старое фото показывается, пока человек не создал персонажа.
-import { I, esc, small, pageHead, toast, confirmDialog, infoDialog, whenShort, dayMonth } from './ui.js';
+import { I, esc, small, pageHead, toast, confirmDialog, whenShort, dayMonth } from './ui.js';
 import { S, saveProfile, nowLocal, tripNow, statsOf, routeOf, legAt, legEnds, legRoute } from './store.js';
 import { dateKeyOf, parseLocal, hasLegs } from './calc.js';
 import { ROLES, OVERREST_MAX } from './pay.js';

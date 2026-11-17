@@ -108,16 +108,27 @@ export function statsOf(t) {
 }
 
 // ---- Время «сейчас» в выбранном часовом поясе ----
+// Вызывается очень часто (на каждую поездку в списках), а создать Intl.DateTimeFormat — дорого: форматтер держим
+// один на часовой пояс, а ответ — до смены минуты (точность расчётов — минута, смещения поясов — целые минуты).
+let nowFmt = null;
+let nowMemo = null;
 export function nowLocal() {
   const tz = S.settings.tz === 'auto' ? undefined : S.settings.tz;
+  const ms = Date.now();
+  const minute = Math.floor(ms / 60000);
+  if (nowMemo && nowMemo.minute === minute && nowMemo.tz === tz) return nowMemo.v;
+  let v;
   try {
-    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+    if (!nowFmt || nowFmt.tz !== tz) nowFmt = { tz, f: new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) };
+    const parts = nowFmt.f.formatToParts(new Date(ms));
     const g = (t) => +parts.find((p) => p.type === t).value;
-    return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour') % 24, g('minute'));
+    v = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour') % 24, g('minute'));
   } catch {
-    const d = new Date();
+    const d = new Date(ms);
     return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes());
   }
+  nowMemo = { minute, tz, v };
+  return v;
 }
 
 // ---- Маршруты и локомотивы ----
@@ -125,7 +136,6 @@ export function nowLocal() {
 // от окончания сдачи до окончания работы (walkMin). Только для справки: на часы и заработок не влияет.
 // handMin (сдача после прибытия) убрано в 2.11.1 по просьбе Никиты и больше не показывается.
 // У поездки со сменой локомотива приёмка и отправление — по маршруту первого локомотива, окончание работы — по последнему.
-export const TIME_NORMS = ['acceptMin', 'departMin', 'walkMin'];
 export function timeNorms(trip) {
   if (!trip) return null;
   const route = (x) => (x?.routeId && S.routes.find((r) => r.id === x.routeId)) || null;

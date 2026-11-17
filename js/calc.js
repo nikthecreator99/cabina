@@ -148,10 +148,6 @@ function restDayIn(s, e) {
   return total;
 }
 
-function monthStart(ms) {
-  const d = new Date(ms);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-}
 function nextMonthStart(ms) {
   const d = new Date(ms);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);

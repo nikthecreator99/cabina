@@ -51,7 +51,6 @@ export function mergeCalendarData(json) {
 }
 
 // Рабочая неделя для нормы: 6 — шестидневка (как на листке в депо), 5 — пятидневка
-export const NORM_WEEKS = [6, 5];
 let week = 5;
 export const normWeekOf = (v) => (Number(v) === 5 ? 5 : 6);
 export function setNormWeek(v) { week = normWeekOf(v); }

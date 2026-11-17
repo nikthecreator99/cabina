@@ -21,7 +21,7 @@
 //  • режим «по среднему»: все рабочие часы × средний заработок за час, без отдельных доплат и надбавок;
 //  • тестовый режим «оплата по сменам» (2.18) — см. shiftSplit.
 // Все суммы — в рублях, время на входе — в минутах.
-import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal, hasLegs, legsOf } from './calc.js';
+import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, hasLegs, legsOf } from './calc.js';
 import { dayInfo } from './calendar.js';
 
 export const ROLES = { assistant: 'Помощник машиниста', driver: 'Машинист' };
@@ -368,7 +368,6 @@ export function fmtH(hours) {
   const v = Math.round(hours * 100) / 100;
   return `${String(v).replace('.', ',')} ч`;
 }
-export const parseDateKey = (k) => parseLocal(`${k}T00:00`);
 
 // ---- Отпускные ориентировочно (2.21.9, просьба Никиты; ст. 139 и 120 ТК РФ) ----
 // Расчётный период — 12 календарных месяцев до месяца начала отпуска. Средний за день = заработок за период /
