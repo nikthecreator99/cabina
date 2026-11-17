@@ -14,7 +14,7 @@
 | `/opt/cabina/db/data/` | — | сама база (в резервную копию — через `pg_dump`, см. ниже) |
 | `/opt/cabina/mail/` | `server/mail/` | письма с кодом и значок для них |
 | `/opt/cabina/www/` | `cabina-site.sh` | сайт: `releases/<коммит>` и ссылка `current` |
-| `/opt/cabina/.env` | `make-env.sh` | секреты (chmod 600) |
+| `/opt/cabina/.env` | `make-env.sh`, `db-passwords.sh` | секреты (chmod 600): главный пароль базы, свои пароли входа и PostgREST, секрет токенов |
 | `/opt/cabina/repo/` | `git clone` | открытый репозиторий, из него копируются файлы выше |
 
 Наружу открыты только 22 (SSH по ключу), 80 и 443. Порт базы не публикуется вовсе. Studio, хранилище файлов,
@@ -35,7 +35,8 @@ realtime, функции, аналитика и пулер Supabase не ста�
      && mkdir -p db mail www && cp repo/server/stack/db/*.sql db/ && cp repo/server/mail/* mail/
    ```
 3. Секреты: `sh repo/server/stack/make-env.sh` — печатает публичный `ANON_KEY` для `js/auth.js`.
-4. База и вход: `docker compose up -d db auth rest`, через минуту `docker compose ps` — `healthy`.
+4. База и вход: `docker compose up -d db`, через минуту — свои пароли входа и PostgREST `sh repo/server/stack/db-passwords.sh`,
+   затем `docker compose up -d auth rest`; ещё через минуту `docker compose ps` — `healthy`.
 5. Миграции по порядку (`0001`…`0005`):
    `docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction < repo/server/migrations/0001_accounts.sql`
 6. Сайт: пользователь `cabina-site` и выкладка раз в 2 минуты:
@@ -68,3 +69,18 @@ realtime, функции, аналитика и пулер Supabase не ста�
 своего профиля и `export_my_data`, отказ `anon`, удаление аккаунта, ночная копия `cabina-backup.sh`.
 
 Менять файлы на сервере: сначала копия `.bak`, потом правка, потом `docker compose up -d` и проверка.
+
+## Обновление 15.11.2026 (после проверки безопасности 14.11)
+
+Один раз на сервере, от root — `upgrade-2026-11.sh` (что делает и как откатывает — в начале файла):
+
+```sh
+git -C /opt/cabina/repo fetch -q origin main && git -C /opt/cabina/repo checkout -q FETCH_HEAD \
+  && bash /opt/cabina/repo/server/stack/upgrade-2026-11.sh
+```
+
+- Caddy: размер запроса ко входу — до 16 КБ, к базе (PostgREST) — до 256 КБ, больше — ответ 413. Самый большой
+  настоящий запрос приложения — 200 заметок о локомотивах (около 150 КБ). Новый большой запрос — учесть этот предел.
+- У входа (`supabase_auth_admin`) и PostgREST (`authenticator`) свои пароли (`AUTH_DB_PASSWORD`, `AUTHENTICATOR_PASSWORD`
+  в `.env`), главный пароль базы им больше не подходит. **После этого обновления не копировать на сервер
+  `docker-compose.yml` старее 15.11.2026**: в нём вход и PostgREST подключаются с главным паролем и не запустятся.

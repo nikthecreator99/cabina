@@ -15,6 +15,9 @@ b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
 POSTGRES_PASSWORD=$(openssl rand -hex 32)
 JWT_SECRET=$(openssl rand -hex 32)
+# свои пароли у входа (GoTrue) и PostgREST; в базу их ставит db-passwords.sh после первого запуска базы
+AUTH_DB_PASSWORD=$(openssl rand -hex 32)
+AUTHENTICATOR_PASSWORD=$(openssl rand -hex 32)
 now=$(date +%s)
 exp=$((now + 10 * 365 * 24 * 3600))     # 10 лет: ключ меняется только новым выпуском приложения
 
@@ -26,6 +29,8 @@ ANON_KEY="$head.$body.$sig"
 cat > "$ENV" <<EOF
 # CABINA, секреты сервера. Создано $(date -u +%Y-%m-%dT%H:%MZ) скриптом make-env.sh. Никому не показывать.
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+AUTH_DB_PASSWORD=$AUTH_DB_PASSWORD
+AUTHENTICATOR_PASSWORD=$AUTHENTICATOR_PASSWORD
 JWT_SECRET=$JWT_SECRET
 ANON_KEY=$ANON_KEY
 # почта для кодов — задаётся скриптом set-mail.sh
