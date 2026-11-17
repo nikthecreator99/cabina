@@ -1,6 +1,6 @@
 // Service worker CABINA: приложение работает без интернета после первого открытия.
 // Пользовательские данные (IndexedDB) service worker не трогает.
-const VERSION = 'cabina-v2.34.0';
+const VERSION = 'cabina-v2.34.1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/boot.js', 'js/app.js', 'js/ui.js', 'js/store.js', 'js/db.js', 'js/calc.js', 'js/checks.js', 'js/remind.js', 'js/depot.js', 'js/table.js', 'js/calendar.js', 'js/forms.js', 'js/docs.js', 'js/backup.js', 'js/sun.js', 'js/tour.js', 'js/tours.js',
@@ -14,8 +14,9 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  // cache: 'reload' — берём свежие файлы с сервера, а не из HTTP-кэша браузера
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))));
+  // cache: 'no-cache' — про каждый файл спрашиваем сервер, но если файл не менялся (сервер отвечает «тот же»),
+  // заново его не скачиваем: берём уже скачанный. Старое без спроса у сервера не берётся никогда.
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'no-cache' })))));
 });
 
 self.addEventListener('activate', (e) => {

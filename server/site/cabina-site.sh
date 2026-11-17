@@ -33,7 +33,9 @@ mkdir -p releases
 tmp="releases/$rev.tmp"
 rm -rf "$tmp"
 mkdir "$tmp"
-for f in $FILES; do cp -R "$SRC/$f" "$tmp/"; done
+# время изменения файлов сохраняем (а владельца — нет): сервер по нему отвечает телефону «файл тот же»,
+# и при обновлении приложение скачивает только то, что изменилось в этой версии (см. install в sw.js)
+for f in $FILES; do cp -R --preserve=timestamps "$SRC/$f" "$tmp/"; done
 # версия целая (страница и service worker на месте) и без ссылок на чужие файлы — иначе не выкладываем
 if [ ! -s "$tmp/index.html" ] || ! grep -q "cabina-v" "$tmp/sw.js" || [ -n "$(find "$tmp" -type l)" ]; then
   rm -rf "$tmp"

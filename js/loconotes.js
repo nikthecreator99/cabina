@@ -4,7 +4,7 @@
 // сервер не знает, на каком локомотиве кто едет. Под заметкой коллеги — «Полезно» (автору — награда «Полезный совет»,
 // много раз) и «Не помогло» (ничего не происходит, помнится только в этом телефоне).
 // Всё, что пришло с сервера, уже проверено в colleagues.js (buildNotes), а на экран — только через esc().
-import { I, esc, openLayer, closeLayer, sheet, MONTHS } from './ui.js';
+import { I, esc, openLayer, sheet, MONTHS } from './ui.js';
 import { nowLocal, notesFor, locoLabel } from './store.js';
 import { colNotesFor, colNotesAll, colNoteVoted, rateColNote, colNotesOn, notesAudience, notesAccessMode, prepareNoteShare, notesUseful, NOTE_SHARE_MAX } from './colleagues.js';
 

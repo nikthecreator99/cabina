@@ -10,7 +10,6 @@ import { S, saveProfile, saveSettings, nowLocal } from './store.js';
 import { fmtLocal } from './calc.js';
 import { ROLES, NDFL, fmtRub, paySet } from './pay.js';
 
-export const LOYALTY_STEPS = [3, 5, 10, 15];
 export const salariesFor = (years) => (years === 3 ? 2 : years === 5 ? 3 : years === 10 ? 4 : years >= 15 && years % 5 === 0 ? 5 : 0);
 const REMIND_DAYS = 90; // напоминание на главной — за 90 дней до права и до конца месяца выплаты
 

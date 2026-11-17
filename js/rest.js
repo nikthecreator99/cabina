@@ -25,7 +25,6 @@ export function houseMinRest(name) {
   const h = name ? S.settings.houses?.[stationKey(name)] : null;
   return h && Number.isFinite(h.minRest) ? h.minRest : S.settings.minRest;
 }
-export const minRestFor = (trip) => houseMinRest(houseOf(trip));
 
 // Дома отдыха для меню ☰: станции прибытия маршрутов и поездок с отдыхом в пункте оборота,
 // а также станции, для которых уже задан свой минимум. Сначала те, где отдыхали чаще.

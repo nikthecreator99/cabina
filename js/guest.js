@@ -6,7 +6,6 @@
 // «Мы за вами не следим» — правда: геолокации в приложении нет, поездки, номер поезда и точное время явки на сервер
 // не уходят никогда (auth.js, colleagues.js), статус коллегам — только тем, кому человек сам его откроет.
 import { I, esc, small, pageHead, plural } from './ui.js';
-import { S } from './store.js';
 import { computeAwards, AWARDS, MEDALS_TOTAL } from './awards.js';
 import { hasAvatar } from './avatar-edit.js';
 import { SIGNUP_OPEN } from './legal.js';

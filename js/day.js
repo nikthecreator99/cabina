@@ -3,7 +3,7 @@
 // Пустой день — можно поставить отвлечение или отметку «Выходной» (только отметка: на норму и заработок не влияет).
 import { I, esc, small, sheet, openLayer, closeLayer, toast, hm, dayMonth, WD } from './ui.js';
 import { S, statsOf, routeOf, locoLabel, myPay, overRestByTrip, setDayOff, isPending, legRoute } from './store.js';
-import { fmtDur, parseLocal, dateKeyOf, DAY, MIN, legsOf, LEG_NAMES } from './calc.js';
+import { fmtDur, parseLocal, dateKeyOf, DAY, legsOf, LEG_NAMES } from './calc.js';
 import { tripPay, hasRate, fmtRub } from './pay.js';
 import { dayOffIntervals } from './rest.js';
 import { TRIP_KINDS, ABS_TYPES, openTripForm, openAbsenceForm } from './forms.js';

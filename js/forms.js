@@ -1,9 +1,9 @@
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
 import { I, esc, openLayer, closeLayer, sheet, confirmDialog, infoDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe, plural, small } from './ui.js';
 import {
-  S, statsOf, nowLocal, routeText, routeOf, knownTypes, notesFor, locoKey, locoLabel, normNum, isLive, isPending, myPay, onChange, offChange,
+  S, statsOf, nowLocal, routeText, routeOf, knownTypes, notesFor, locoKey, normNum, isLive, isPending, myPay, onChange, offChange,
   saveTrip, deleteTrip, saveAbsence, deleteAbsence, saveRoute, deleteRoute, saveNote, deleteNote, timeNorms, legEnds, stationsOf, locosOf, usesRoute,
-  legRoute, segOf, isWhole, stationsList, sectionText, saveSection, legKm, STATIONS_MAX,
+  segOf, isWhole, stationsList, sectionText, saveSection, legKm, STATIONS_MAX,
 } from './store.js';
 import {
   tripStats, validateTrip, parseLocal, fmtLocal, fmtDur, fmtHours, turnaroundRest,
