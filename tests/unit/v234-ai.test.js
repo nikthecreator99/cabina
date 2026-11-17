@@ -2,7 +2,7 @@
 // и весь путь вопроса с подменным Яндексом и подменной базой. Тексты — выдуманные.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanQuestion, maskPersonal, buildPrompt, parseAnswer, sourcesOf, NO_ANSWER, SYSTEM } from '../../server/ai/core.mjs';
+import { cleanQuestion, maskPersonal, buildPrompt, parseAnswer, sourcesOf, NO_ANSWER, SYSTEM, parseWeb, webRequest, WEB_SITES } from '../../server/ai/core.mjs';
 import { splitDoc, parts, sqlText } from '../../server/ai/split.mjs';
 import { ask } from '../../server/ai/server.mjs';
 
@@ -128,4 +128,64 @@ test('нет доступа, лимит, плохой вопрос, нет кл�
   f = fake({ found: [] });
   assert.equal((await ask(TOKEN, 'Какая погода завтра?', f.deps)).body.answer, null);
   assert.equal(f.calls.filter((c) => c.path === 'completion').length, 0); // ничего не нашли — нейросеть не спрашиваем
+});
+
+// ---------------------------------------------------------------- поиск в интернете (15.11.2026)
+
+const webData = (text, anns = []) => ({ output: [
+  { type: 'web_search_call', status: 'completed' },
+  { type: 'message', role: 'assistant', content: [{ type: 'output_text', text, annotations: anns }] },
+] });
+
+test('запрос в интернет: 5 официальных сайтов или весь интернет, Россия, ответ не сохраняется', () => {
+  const off = webRequest('Сколько дней отпуска?', 'official', 'gpt://f/yandexgpt/latest');
+  assert.equal(off.store, false);
+  assert.equal(off.tools[0].type, 'web_search');
+  assert.deepEqual(off.tools[0].filters.allowed_domains, WEB_SITES);
+  assert.equal(WEB_SITES.length, 5);
+  assert.equal(off.tools[0].user_location.region, '225');
+  assert.match(off.instructions, new RegExp(NO_ANSWER));
+  const all = webRequest('Сколько дней отпуска?', 'all', 'm');
+  assert.equal(all.tools[0].filters, undefined);
+});
+
+test('ответ из интернета: ссылки только https, без повторов, не больше 5; «нет ответа» и пусто — null', () => {
+  const anns = [
+    { type: 'url_citation', url: 'https://www.consultant.ru/document/x/', title: 'ТК РФ Статья 115' },
+    { type: 'url_citation', url: 'https://www.consultant.ru/document/x/', title: 'повтор' },
+    { type: 'url_citation', url: 'javascript:alert(1)', title: 'плохая' },
+    { type: 'url_citation', url: 'http://plain.example/', title: 'без https' },
+    { type: 'url_citation', url: 'https://user:pw@evil.example/', title: 'с паролем' },
+    ...[1, 2, 3, 4, 5].map((i) => ({ type: 'url_citation', url: `https://s${i}.example/`, title: '' })),
+  ];
+  const r = parseWeb(webData('Отпуск — **28** календарных дней ([ТК](https://x.example/tk)). Подробнее https://y.example/z', anns));
+  assert.equal(r.answer, 'Отпуск — 28 календарных дней (ТК). Подробнее');
+  assert.equal(r.links.length, 5);
+  assert.deepEqual(r.links[0], { url: 'https://www.consultant.ru/document/x/', title: 'ТК РФ Статья 115', host: 'consultant.ru' });
+  assert.equal(r.links[1].title, 's1.example'); // нет названия — адрес сайта
+  assert.ok(r.links.every((l) => l.url.startsWith('https://') && !l.url.includes('@')));
+  assert.equal(parseWeb(webData(NO_ANSWER)), null);
+  assert.equal(parseWeb({}), null);
+  assert.equal(parseWeb(null), null);
+});
+
+test('вопрос в интернет: тот же вопрос без персональных данных, лимит считается, документы не ищем', async () => {
+  const f = fake();
+  const sent = [];
+  f.deps.web = async (body) => { sent.push(body); return { ok: true, status: 200, data: webData('Отпуск 28 дней.', [{ type: 'url_citation', url: 'https://www.garant.ru/a/', title: 'Гарант' }]) }; };
+  const r = await ask(TOKEN, 'Сколько дней отпуска? телефон +7 912 345-67-89', f.deps, 'official');
+  assert.deepEqual(r, { status: 200, body: { answer: 'Отпуск 28 дней.', web: 'official', links: [{ url: 'https://www.garant.ru/a/', title: 'Гарант', host: 'garant.ru' }], left: 7 } });
+  assert.deepEqual(f.calls.map((c) => c.fn || c.path), ['ai_begin']); // ни эмбеддинга, ни поиска по документам
+  assert.doesNotMatch(JSON.stringify(sent), /912|aaa\.bbb/);
+  assert.deepEqual(sent[0].tools[0].filters.allowed_domains, WEB_SITES);
+  f.deps.web = async () => ({ ok: true, status: 200, data: webData(NO_ANSWER) });
+  assert.deepEqual((await ask(TOKEN, 'Сколько дней отпуска?', f.deps, 'all')).body, { answer: null, web: 'all', links: [], left: 7 });
+  f.deps.web = async () => ({ ok: false, status: 500, data: null });
+  assert.deepEqual(await ask(TOKEN, 'Сколько дней отпуска?', f.deps, 'all'), { status: 502, body: { error: 'yandex' } });
+  assert.deepEqual(await ask(TOKEN, 'Сколько дней отпуска?', f.deps, 'evil'), { status: 400, body: { error: 'bad_mode' } });
+  const lim = fake({ begin: { ok: false, status: 400, data: { message: 'cabina: limit' } } });
+  let called = false;
+  lim.deps.web = async () => { called = true; return {}; };
+  assert.equal((await ask(TOKEN, 'Сколько дней отпуска?', lim.deps, 'all')).status, 429);
+  assert.equal(called, false);
 });

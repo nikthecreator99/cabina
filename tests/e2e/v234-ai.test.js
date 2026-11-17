@@ -43,7 +43,7 @@ async function mockServer(context, { role = 'admin', ai = () => [200, ANSWER] } 
     if (path === '/rest/v1/profiles?select=role' && bearer) return send(200, [{ role }]);
     if (/^\/rest\/v1\/consents\?select=/.test(path) && bearer) return send(200, [{ document: CONSENT_VERSION, withdrawn_at: null }]);
     if (/^\/rest\/v1\/\w+\?select=/.test(path) && bearer) return send(200, []);
-    if (path === '/ai/v1/ask' && bearer) { const [s, b] = ai(body); return send(s, b); }
+    if (path === '/ai/v1/ask' && bearer) { const [s, b] = await ai(body); return send(s, b); }
     if (path.startsWith('/rest/v1/rpc/') && bearer) return send(200, null);
     return send(401, { code: '42501', message: 'permission denied' });
   });
@@ -150,13 +150,19 @@ test('«ответа нет», ответ без источников, лими�
     [503, { error: 'busy' }],
     [500, {}],
   ];
-  const { context, page, errors } = await openAs({ ai: () => replies[n++] });
+  const web = [];
+  const { context, page, errors } = await openAs({ ai: (b) => {
+    if (b.web) { web.push(b.web); return [200, { answer: null, web: b.web, links: [], left: 5 }]; }
+    return replies[n++];
+  } });
   await page.locator('#extra-ai').click();
   const ask = async (q) => { await page.locator('#ai-q').fill(q); await page.locator('#ai-send').click(); await page.waitForFunction(() => !document.querySelector('#ai-send[disabled]')); };
   await ask('Какая погода завтра?');
-  assert.match(await page.locator('#ai-ans').innerText(), /В загруженных документах ответа на этот вопрос нет/);
+  assert.match(await page.locator('#ai-ans').innerText(), /Ни в документах CABINA, ни на официальных сайтах, ни в интернете/);
+  assert.deepEqual(web, ['official', 'all'], 'нет в документах — сам ищет на сайтах, потом во всём интернете');
   await ask('Сколько платят за ночь?');
-  assert.match(await page.locator('#ai-ans').innerText(), /ответа на этот вопрос нет/, 'ответ без источника не показываем');
+  assert.match(await page.locator('#ai-ans').innerText(), /надёжного ответа не нашлось/, 'ответ без источника не показываем');
+  assert.equal(web.length, 4);
   await ask('Ещё один вопрос');
   assert.match(await page.locator('#ai-err').innerText(), /вопросы закончились/);
   await ask('Ещё один вопрос');
@@ -168,9 +174,82 @@ test('«ответа нет», ответ без источников, лими�
   await context.close();
 });
 
+test('поиск по ступеням: документы → официальные сайты → интернет, видно, где ищет; ответ из интернета с пометкой и ссылками', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { context, page, errors, log } = await openAs({ ai: async (b) => {
+    if (!b.web) return [200, { answer: null, sources: [], left: 8 }];
+    if (b.web === 'official') { await gate; return [200, { answer: 'Ничего', web: 'official', links: [], left: 7 }]; } // без ссылок — не показываем
+    return [200, { answer: 'По данным сайта, отпуск 28 дней.\nПроверьте <b>сами</b>.', web: 'all', left: 6, links: [
+      { url: 'https://www.consultant.ru/document/x/', title: 'ТК РФ, статья 115' },
+      { url: 'javascript:alert(1)', title: 'плохая' },
+      { url: 'https://forum.example/t/1', title: '' },
+    ] }];
+  } });
+  await page.locator('#extra-ai').click();
+  await page.locator('#ai-q').fill('Сколько дней отпуска у машиниста?');
+  await page.locator('#ai-send').click();
+  await page.locator('#ai-steps li[data-step=official].now').waitFor();
+  const steps = await page.locator('#ai-steps').innerText();
+  assert.match(steps, /Документы CABINA: не нашлось[\s\S]*Официальные сайты: ищу…[\s\S]*Весь интернет/);
+  assert.equal(await page.locator('#ai-send').innerText(), 'Ищу на официальных сайтах…');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/ai-stupeni.png` });
+  release();
+  await page.locator('#ai-ans.ai-web-all').waitFor();
+  assert.equal(await page.locator('#ai-steps').count(), 0, 'после ответа ступеней нет');
+  const t = await page.locator('#ai-ans').innerText();
+  assert.match(t, /Найдено в интернете, не в документах CABINA/);
+  assert.match(t, /Проверьте <b>сами<\/b>/, 'текст ответа — без разметки');
+  assert.equal(await page.locator('#ai-ans .ai-link').count(), 2, 'javascript: — не ссылка');
+  assert.equal(await page.locator('#ai-ans .ai-link').first().getAttribute('href'), 'https://www.consultant.ru/document/x/');
+  assert.equal(await page.locator('#ai-ans .ai-link').first().getAttribute('rel'), 'noopener noreferrer nofollow');
+  assert.match(await page.locator('#ai-ans .ai-link').nth(1).innerText(), /forum\.example/);
+  assert.equal(await page.locator('#ai-left').innerText(), 'Сегодня осталось вопросов: 6');
+  assert.deepEqual(asks(log).map((r) => r.body.web || 'docs'), ['docs', 'official', 'all']);
+  assert.ok(asks(log).every((r) => r.body.q === 'Сколько дней отпуска у машиниста?'));
+  // история помнит, откуда ответ
+  await page.reload();
+  await page.locator('.tab[data-tab=extra]').click();
+  await page.locator('#extra-ai').click();
+  await page.locator('#ai-hist summary').first().click();
+  assert.match(await page.locator('#ai-hist .ai-web-all').innerText(), /Найдено в интернете/);
+  // официальные сайты нашли — дальше не идём, пометка жёлтая
+  log.length = 0;
+  await page.evaluate(() => localStorage.removeItem('cabina-ai-history'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('нашлось на официальных сайтах — в интернет не идём; ошибка поиска не прячет «нет в документах»', async () => {
+  let mode = 'ok';
+  const { context, page, errors, log } = await openAs({ ai: (b) => {
+    if (!b.web) return [200, { answer: null, sources: [], left: 8 }];
+    if (mode === 'fail') return [502, { error: 'yandex' }];
+    return [200, { answer: 'Отпуск 28 дней.', web: b.web, left: 7, links: [{ url: 'https://www.garant.ru/a/', title: 'Гарант' }] }];
+  } });
+  await page.locator('#extra-ai').click();
+  await page.locator('#ai-q').fill('Сколько дней отпуска?');
+  await page.locator('#ai-send').click();
+  await page.locator('#ai-ans.ai-web-official').waitFor();
+  assert.match(await page.locator('#ai-ans .ai-web-note').innerText(), /Найдено на официальных сайтах/);
+  assert.deepEqual(asks(log).map((r) => r.body.web || 'docs'), ['docs', 'official']);
+  mode = 'fail';
+  await page.locator('#ai-q').fill('Ещё вопрос про отпуск');
+  await page.locator('#ai-send').click();
+  await page.locator('#ai-err').waitFor();
+  assert.match(await page.locator('#ai-err').innerText(), /Поиск в интернете не получился/);
+  assert.match(await page.locator('#ai-ans').innerText(), /В загруженных документах ответа на этот вопрос нет/);
+  assert.deepEqual(errors.filter((e) => !/Failed to load resource/.test(e)), []);
+  await context.close();
+});
+
 for (const theme of ['dark', 'light']) {
   test(`320 px, очень крупный текст, ${theme === 'dark' ? 'тёмная' : 'светлая'} тема — ничего не вылезает`, async () => {
-    const { context, page, errors } = await openAs({ theme, text: 'xl' });
+    const { context, page, errors } = await openAs({ theme, text: 'xl', ai: (b) => (/которого нет/.test(b.q)
+      ? (b.web === 'all' ? [200, { answer: 'Длинный ответ из интернета про очень-очень-длинные-слова-без-пробелов-которые-могут-вылезти.', web: 'all', left: 3,
+        links: [{ url: 'https://www.consultant.ru/document/cons_doc_LAW_34683/very/long/path/that/never/ends/', title: 'Очень длинное название страницы с документом и редакцией от 25.05.2026' }] }]
+        : [200, { answer: null, web: b.web, sources: [], links: [], left: 4 }])
+      : [200, ANSWER]) });
     await page.setViewportSize({ width: 320, height: 700 });
     await page.locator('#extra-ai').waitFor();
     assert.ok(await noOverflow(page), 'плашка');
@@ -183,6 +262,11 @@ for (const theme of ['dark', 'light']) {
     await page.locator('#ai-ans .ai-a').waitFor();
     await page.locator('#ai-ans .ai-src summary').first().click();
     assert.ok(await noOverflow(page), 'экран ответа');
+    await page.locator('#ai-q').fill('Вопрос, которого нет в документах');
+    await page.locator('#ai-send').click();
+    await page.locator('#ai-ans.ai-web-all').waitFor();
+    assert.ok(await noOverflow(page), 'ответ из интернета');
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/ai-internet-${theme}.png`, fullPage: true });
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/ai-ekran-${theme}.png`, fullPage: true });
     assert.deepEqual(errors, []);
     await context.close();

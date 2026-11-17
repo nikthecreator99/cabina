@@ -5,6 +5,10 @@
 // Где: «Ещё», в самом верху, крупная плашка (aiCardHtml); экран вопросов — страница 'ai'.
 // Кто видит: этап 2 — только администратор (premiumOk). Перед открытием всем (этап 4) — уведомление в Роскомнадзор,
 // новая редакция согласия, и только потом показывать плашку всем с аккаунтом.
+// Поиск по ступеням (решение Никиты 15.11.2026, без кнопок): сначала наши документы; нет ответа — 5 официальных сайтов
+// (законы, Минтранс, РЖД); нет и там — весь интернет. Человек видит, на какой ступени поиск (`STEPS`). Ответ из интернета —
+// отдельно, с пометкой (жёлтой / красной) и ссылками на страницы; без ссылок не показываем. Каждая ступень — запрос
+// к серверу и вопрос из дневного лимита (деньги тратятся на каждой).
 // Данные: на сервер уходит только текст вопроса (сервер вырезает телефоны, почту, длинные номера; Яндекс запрос не
 // сохраняет). История вопросов — только в этом телефоне (localStorage, не в резервной копии), стирается при выходе.
 import { I, esc, pageHead, small, toast } from './ui.js';
@@ -22,6 +26,15 @@ const ERRORS = {
   auth: 'Вход устарел. Войдите в аккаунт заново.',
   bad_question: 'Напишите вопрос словами — от 3 до 500 знаков.',
   ai_off: 'Помощник ещё не подключён на сервере.',
+};
+export const STEPS = [
+  { k: 'docs', t: 'Документы CABINA' }, { k: 'official', t: 'Официальные сайты' }, { k: 'all', t: 'Весь интернет' },
+];
+export const WEB = {
+  official: { busy: 'Ищу на официальных сайтах…',
+    note: 'Не из документов CABINA. Найдено на официальных сайтах (законы, Минтранс, РЖД) — проверьте по ссылкам.' },
+  all: { busy: 'Ищу в интернете…',
+    note: 'Найдено в интернете, не в документах CABINA. Могут быть ошибки и старые редакции — не руководствуйтесь без проверки по ссылкам.' },
 };
 const LOGO = '<img class="ai-logo" src="icons/ai-loco.webp" alt="" width="56" height="56" decoding="sync">';
 
@@ -42,7 +55,22 @@ export function cleanHistory(v) {
     a: h?.a == null ? null : str(h.a, 3000),
     at: Number.isFinite(h?.at) ? h.at : 0,
     sources: cleanSources(h?.sources),
+    web: WEB[h?.web] ? h.web : '',
+    links: cleanLinks(h?.links),
   })).filter((h) => h.q);
+}
+export function cleanLinks(v) {
+  if (!Array.isArray(v)) return [];
+  const out = [];
+  for (const l of v.slice(0, 5)) {
+    let u;
+    try { u = new URL(String(l?.url || '')); } catch { continue; }
+    if (u.protocol !== 'https:' || u.username || u.password || u.href.length > 500) continue;
+    const host = u.hostname.replace(/^www\./, '');
+    const title = typeof l?.title === 'string' && l.title.trim() ? l.title.replace(/\s+/g, ' ').trim().slice(0, 150) : host;
+    out.push({ url: u.href, title, host });
+  }
+  return out;
 }
 export function cleanSources(v) {
   if (!Array.isArray(v)) return [];
@@ -72,13 +100,30 @@ function sourcesHtml(sources) {
   </details>`).join('')}</div>`;
 }
 
+function linksHtml(links) {
+  return `<ul class="ai-links">${links.map((l) => `<li><a class="ai-link" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer nofollow"><b>${esc(l.title)}</b><small>${esc(l.host)}</small></a></li>`).join('')}</ul>`;
+}
+
+// Где сейчас ищем: пройденные ступени — галочкой, текущая — крутится
+function stepsHtml() {
+  const at = STEPS.findIndex((x) => x.k === S.busy);
+  return `<ol class="ai-steps" id="ai-steps" aria-live="polite">${STEPS.map((x, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}" data-step="${x.k}">
+    <span class="ai-step-i" aria-hidden="true">${i < at ? '✓' : ''}</span><span>${i < at ? `${x.t}: не нашлось` : i === at ? `${x.t}: ищу…` : x.t}</span></li>`).join('')}</ol>`;
+}
+
 const NOTE = 'Справочная информация, не юридическая консультация. Ответ составлен нейросетью — сверяйтесь с действующим документом.';
 
 function resultHtml(r, cur = false) {
   if (!r) return '';
   const id = cur ? ' id="ai-ans"' : '';
   if (!r.a) return `<div class="ai-ans ai-none"${id}><div class="ai-q-echo">${esc(r.q)}</div>
-    <p>В загруженных документах ответа на этот вопрос нет. Попробуйте спросить иначе — или уточните у нарядчика или в профкоме.</p></div>`;
+    <p>${r.web === 'all' ? 'Ни в документах CABINA, ни на официальных сайтах, ни в интернете надёжного ответа не нашлось. Попробуйте спросить иначе — или уточните у нарядчика или в профкоме.'
+    : 'В загруженных документах ответа на этот вопрос нет. Попробуйте спросить иначе — или уточните у нарядчика или в профкоме.'}</p></div>`;
+  if (r.web) return `<div class="ai-ans ai-web ai-web-${r.web}"${id}><div class="ai-q-echo">${esc(r.q)}</div>
+    <div class="ai-web-note" role="note">${I.alert}<span>${esc(WEB[r.web].note)}</span></div>
+    <div class="ai-a">${esc(r.a).replace(/\n+/g, '<br>')}</div>
+    ${linksHtml(r.links)}
+    <p class="ai-note">${NOTE}</p></div>`;
   return `<div class="ai-ans"${id}><div class="ai-q-echo">${esc(r.q)}</div>
     <div class="ai-a">${answerHtml(r.a)}</div>
     ${sourcesHtml(r.sources)}
@@ -100,20 +145,21 @@ export function renderAi() {
   const all = history();
   const hist = S.cur && all[0]?.at === S.cur.at && all[0]?.q === S.cur.q ? all.slice(1) : all; // текущий ответ — уже на экране
   return `${pageHead('CABINA AI', { back: true })}
-    <div class="ai-intro">${LOGO}<p>Спросите о работе и отдыхе. Отвечаю только по документам и показываю пункт, откуда ответ.</p></div>
+    <div class="ai-intro">${LOGO}<p>Спросите о работе и отдыхе. Сначала ищу в документах CABINA и показываю пункт, нет там — на официальных сайтах, потом в интернете.</p></div>
     <div class="ai-form">
       <textarea id="ai-q" class="input ai-input" aria-label="Ваш вопрос" rows="3" maxlength="${AI_Q_MAX}" placeholder="Например: сколько можно работать без отдыха?" enterkeyhint="send"${S.busy ? ' disabled' : ''}>${esc(S.q)}</textarea>
       <p class="hint ai-warn">Не пишите имена, телефоны, номера поездов и служебную информацию.</p>
-      <button class="btn btn-primary" id="ai-send" data-act="ai-ask"${S.busy ? ' disabled aria-busy="true"' : ''}>${S.busy ? 'Ищу в документах…' : 'Спросить'}</button>
+      <button class="btn btn-primary" id="ai-send" data-act="ai-ask"${S.busy ? ' disabled aria-busy="true"' : ''}>${S.busy ? (WEB[S.busy]?.busy || 'Ищу в документах…') : 'Спросить'}</button>
       ${S.left != null ? `<p class="hint" id="ai-left">Сегодня осталось вопросов: ${S.left}</p>` : ''}
     </div>
     ${!S.cur && !S.busy ? `<div class="ai-chips ai-chips-page">${AI_EXAMPLES.map((x) => `<button class="ai-pchip" data-act="ai-chip" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : ''}
     ${S.err ? `<div class="notice" id="ai-err" role="alert">${I.alert}<div>${esc(S.err)}</div></div>` : ''}
+    ${S.busy ? stepsHtml() : ''}
     <div aria-live="polite">${resultHtml(S.cur, true)}</div>
     ${hist.length ? `<div class="group-title ai-hist-t">Раньше спрашивали</div>
       <div class="ai-hist" id="ai-hist">${hist.map((h) => `<details class="ai-h"><summary>${esc(h.q)}</summary>${resultHtml(h)}</details>`).join('')}</div>
       <button class="btn btn-ghost" data-act="ai-clear" id="ai-clear">Стереть историю</button>` : ''}
-    <p class="hint ai-docs">Документы: Трудовой кодекс РФ, приказ Минтранса № 339 о режиме работы и отдыха, коллективный договор ОАО «РЖД» 2026–2028, ПТЭ с Инструкцией по сигнализации и Инструкцией по движению поездов. Ответы только в справочных целях. Вопрос уходит на наш сервер и в Яндекс Облако (Россия) без вашего имени и почты и там не хранится. История — только в этом телефоне.</p>`;
+    <p class="hint ai-docs">Документы: Трудовой кодекс РФ, приказ Минтранса № 339 о режиме работы и отдыха, коллективный договор ОАО «РЖД» 2026–2028, ПТЭ с Инструкцией по сигнализации и Инструкцией по движению поездов. Если в них ответа нет, ищу через поиск Яндекса на сайтах Консультанта, Гаранта, портала законов, Минтранса и РЖД, потом во всём интернете — такой ответ с пометкой и ссылками. Ответы только в справочных целях. Вопрос уходит на наш сервер и в Яндекс Облако (Россия) без вашего имени и почты и там не хранится. История — только в этом телефоне.</p>`;
 }
 
 // ---------------------------------------------------------------- действия
@@ -122,17 +168,33 @@ async function ask() {
   const q = S.q.replace(/\s+/g, ' ').trim();
   if (S.busy) return;
   if (q.length < 3) { S.err = ERRORS.bad_question; rerender(); return; }
-  S.busy = true; S.err = ''; S.cur = null; rerender();
-  const r = await askAi(q);
+  S.err = ''; S.cur = null;
+  let item = null;
+  for (const { k } of STEPS) {
+    const web = k === 'docs' ? null : k;
+    S.busy = k; rerender();
+    const r = await askAi(q, web);
+    if (!r || !r.ok) {
+      const msg = !r ? 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.'
+        : ERRORS[r.data?.error] || 'Помощник сейчас не может ответить. Попробуйте позже.';
+      // документы уже ответили «нет» — показываем это и честно говорим, что дальше поиск не получился
+      S.err = item ? `Поиск в интернете не получился. ${msg}` : msg;
+      break;
+    }
+    const d = r.data || {};
+    if (Number.isInteger(d.left)) S.left = Math.max(0, d.left);
+    const a = typeof d.answer === 'string' && d.answer ? d.answer.slice(0, 3000) : null;
+    item = web ? { q, a, at: Date.now(), sources: [], web, links: cleanLinks(d.links) }
+      : { q, a, at: Date.now(), sources: cleanSources(d.sources), web: '', links: [] };
+    if (item.a && !(web ? item.links : item.sources).length) item.a = null; // ответ без источника не показываем
+    if (item.a) break;
+    if (S.left === 0) break; // вопросы на сегодня кончились — дальше не ищем
+  }
   S.busy = false;
-  if (!r) { S.err = 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.'; rerender(); return; }
-  if (!r.ok) { S.err = ERRORS[r.data?.error] || 'Помощник сейчас не может ответить. Попробуйте позже.'; rerender(); return; }
-  const d = r.data || {};
-  const item = { q, a: typeof d.answer === 'string' && d.answer ? d.answer.slice(0, 3000) : null, at: Date.now(), sources: cleanSources(d.sources) };
-  if (item.a && !item.sources.length) item.a = null; // ответ без источника не показываем
-  if (Number.isInteger(d.left)) S.left = Math.max(0, d.left);
-  S.cur = item; S.q = '';
-  saveHistory([item, ...history()]);
+  if (item) {
+    S.cur = item; S.q = '';
+    saveHistory([item, ...history()]);
+  }
   rerender();
 }
 

@@ -133,7 +133,7 @@ export const rpc = (name, args = {}) => withToken(`/rest/v1/rpc/${name}`, { body
 // Чтение своих строк из таблиц (что видно — решают правила базы, RLS): 'links?select=id,state'
 export const restGet = (path) => withToken(`/rest/v1/${path}`, { method: 'GET' });
 // CABINA AI (2.34): вопрос серверу помощника. Ответ нейросети ждём дольше обычного.
-export const askAi = (q) => withToken('/ai/v1/ask', { body: { q }, timeout: 45000 });
+export const askAi = (q, web = null) => withToken('/ai/v1/ask', { body: web ? { q, web } : { q }, timeout: web ? 75000 : 45000 });
 
 // ---------------------------------------------------------------- действия
 
