@@ -47,7 +47,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.34.0';
+export const VERSION = '2.34.2';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -67,12 +67,10 @@ function applyTheme() {
 
 // ---------------------------------------------------------------- небо
 // Сцены неба по положению солнца: рассвет, день, закат; ночь — исходная сцена темы.
-// 2.32.1 (Никита): без опор и проводов контактной сети — просто небо. Солнце — не в картинке, а кружком в шапке
-// слева от лупы (homeSun): так оно видно на любой ширине экрана, а не прячется за карточкой месяца. glow — зарево под ним.
 const SCENES = {
-  sunrise: { vars: { '--sky-1': '#22305a', '--sky-2': '#7a5b8f', '--sky-3': '#f2956b', '--sky-4': '#ffd99a', '--silhouette': '#0e1424', '--star': 'rgba(255,255,255,.28)', '--rail': '#ffd08a' }, glow: [300, 176], core: '#fff6d8', mid: '#ffc46e', glowR: 190, clouds: 0.35, dip: [262, 338] },
-  day: { vars: { '--sky-1': '#2a66cf', '--sky-2': '#4f8fe3', '--sky-3': '#8fc0f0', '--sky-4': '#d4eafc', '--silhouette': '#15304a', '--star': 'transparent', '--rail': '#ffffff' }, glow: [300, 96], core: '#fffdf2', mid: '#fff1a8', glowR: 130, clouds: 0.8 },
-  sunset: { vars: { '--sky-1': '#1a1436', '--sky-2': '#5c1f48', '--sky-3': '#d9482c', '--sky-4': '#ffab45', '--silhouette': '#08060e', '--star': 'rgba(255,255,255,.35)', '--rail': '#ffb070' }, glow: [300, 178], core: '#ffe1a0', mid: '#ff7a2e', glowR: 170, clouds: 0.25 },
+  sunrise: { vars: { '--sky-1': '#22305a', '--sky-2': '#7a5b8f', '--sky-3': '#f2956b', '--sky-4': '#ffd99a', '--silhouette': '#0e1424', '--star': 'rgba(255,255,255,.28)', '--rail': '#ffd08a' }, glow: [300, 176], glowR: 190, clouds: 0.35, dip: [262, 338] },
+  day: { vars: { '--sky-1': '#2a66cf', '--sky-2': '#4f8fe3', '--sky-3': '#8fc0f0', '--sky-4': '#d4eafc', '--silhouette': '#15304a', '--star': 'transparent', '--rail': '#ffffff' }, glow: [300, 96], glowR: 130, clouds: 0.8 },
+  sunset: { vars: { '--sky-1': '#1a1436', '--sky-2': '#5c1f48', '--sky-3': '#d9482c', '--sky-4': '#ffab45', '--silhouette': '#08060e', '--star': 'rgba(255,255,255,.35)', '--rail': '#ffb070' }, glow: [300, 178], glowR: 170, clouds: 0.25 },
   night: { vars: null, glow: null, glowR: 150, clouds: 0 },
 };
 export const sceneVars = (phase) => (SCENES[phase]?.vars ? Object.entries(SCENES[phase].vars).map(([k, v]) => `${k}:${v}`).join(';') : '');
@@ -112,8 +110,6 @@ function skySVG(phase = 'night') {
 }
 const SKY_CACHE = {};
 const skyFor = (phase) => SKY_CACHE[phase] || (SKY_CACHE[phase] = skySVG(phase));
-// солнце в шапке главной — слева от кнопки поиска; ночью его нет
-const homeSun = (phase) => (SCENES[phase]?.glow ? `<span class="home-sun" data-phase="${phase}" style="--sun-core:${SCENES[phase].core};--sun-mid:${SCENES[phase].mid}" aria-hidden="true"></span>` : '');
 
 // ---------------------------------------------------------------- главная
 function ring(pct) {
@@ -275,7 +271,7 @@ function renderHome() {
           <button data-act="next" aria-label="Следующий месяц">${small(I.right, 18)}</button>
         </div>
         <button class="round-btn" data-act="go" data-page="search" aria-label="Поиск по поездкам">${I.search}</button>
-        ${homeSun(phase)}
+
       </div>
       <section class="glass hero" data-act="stats" role="button" tabindex="0" aria-label="Итоги месяца — открыть статистику">
         <div class="hero-top">${normHead}<span class="hero-link">Статистика ›</span></div>

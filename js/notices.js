@@ -65,7 +65,7 @@ export function renderNotices() {
   }
   if (ideas.length) parts.push(`<div class="group-title">Ответы на ваши идеи</div><div class="panel" id="ntc-ideas">${ideas.map(ideaRow).join('')}</div>`);
   if (isAdmin()) {
-    parts.push(`<div class="group-title">Для администратора</div><div class="panel"><button class="row" data-act="ntc-admin" id="ntc-admin"><span class="ico" style="--c:var(--warn)">${I.idea}</span>
+    parts.push(`<div class="group-title ntc-admin-title">Для администратора</div><div class="panel"><button class="row" data-act="ntc-admin" id="ntc-admin"><span class="ico" style="--c:var(--warn)">${I.idea}</span>
       <div class="grow"><div class="t1">Идеи пользователей</div><div class="t2">${adm ? `Новых: ${adm}` : 'Новых нет'}</div></div>${small(I.right, 18)}</button></div>`);
   }
   if (!asks.length && !ideas.length && !reqs.length) parts.unshift(`<div class="empty ntc-empty"><div class="em-ico">${I.bell}</div><b>Пока уведомлений нет</b><p>Здесь появятся просьбы коллегов показать статус и ответы на ваши идеи.</p></div>`);
