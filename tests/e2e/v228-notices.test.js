@@ -186,6 +186,13 @@ test('администратор: новые идеи в колокольчик�
   await page.locator('#pr-bell').click();
   await page.locator('#ntc-admin').waitFor();
   assert.match(await text(page, '#ntc-admin'), /Идеи пользователей[\s\S]*Новых: 2/);
+  const heading = page.getByText('Для администратора', { exact: true });
+  const spacing = await heading.evaluate((el) => {
+    const title = el.getBoundingClientRect();
+    return [title.top - el.previousElementSibling.getBoundingClientRect().bottom,
+      el.nextElementSibling.getBoundingClientRect().top - title.bottom];
+  });
+  assert.ok(spacing[0] >= 16 && spacing[1] >= 8, 'заголовок отделён от соседних карточек');
   await shot(page, 'notices-admin-dark-390');
   await page.locator('#ntc-admin').click();
   await page.locator('#adm-ideas').waitFor();

@@ -1,5 +1,5 @@
 // Браузерные проверки CABINA 2.32.1: напарник вверху формы, ожидание следования — в карточке следования пассажиром,
-// небо главной без опор и проводов с солнцем слева от лупы, награда «Своя бригада». Данные выдуманные.
+// небо главной без опор и проводов без солнечного диска, награда «Своя бригада». Данные выдуманные.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startEnv, openApp, seed, text, waitNoLayers } from './helpers.js';
@@ -79,22 +79,17 @@ test('ожидание следования: отдельной кнопки н�
   await context.close();
 });
 
-test('небо главной: без опор и проводов; днём солнце слева от лупы и видно, ночью солнца нет', async () => {
-  for (const [now, sun] of [['2026-10-20T12:00:00+03:00', true], ['2026-10-20T17:00:00+03:00', true], ['2026-10-20T23:00:00+03:00', false]]) {
+test('небо главной: во всех фазах без солнечного диска и опор, кнопка поиска доступна', async () => {
+  for (const now of ['2026-10-20T07:00:00+03:00', '2026-10-20T12:00:00+03:00', '2026-10-20T17:00:00+03:00', '2026-10-20T23:00:00+03:00']) {
     const { context, page, errors } = await openApp(env, { now });
     assert.equal(await page.locator('.sky svg line').count(), 0, 'опор нет');
-    assert.equal(await page.locator('.home-sun').count(), sun ? 1 : 0, now);
+    assert.equal(await page.locator('.home-sun').count(), 0, now);
     for (const theme of ['dark', 'light']) {
       await setTheme(page, theme);
       for (const w of [320, 360, 390, 430]) {
         await page.setViewportSize({ width: w, height: 800 });
         assert.equal(await fits(page), true);
-        if (!sun) continue;
-        const s = await page.locator('.home-sun').boundingBox();
-        const q = await page.locator('.home-head [data-page=search]').boundingBox();
-        const m = await page.locator('.home-head .month-switch').boundingBox();
-        const cx = s.x + s.width / 2;
-        assert.ok(cx < q.x && cx > m.x + m.width, `${w}: центр солнца между месяцем и лупой`);
+        assert.ok(await page.locator('.home-head [data-page=search]').isVisible());
       }
     }
     assert.deepEqual(errors, []);
