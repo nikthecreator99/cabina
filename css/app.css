@@ -2446,3 +2446,9 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .ai-h .ai-ans { margin: 0 8px 8px; border: 0; padding: 8px; background: transparent; }
 .ai-h .ai-q-echo { display: none; }
 .ai-docs { margin-top: 18px; }
+
+.ai-spinner { display: inline-block; width: 1em; height: 1em; margin-inline-end: 8px; border: 2px solid currentColor; border-inline-end-color: transparent; border-radius: 50%; animation: ai-search-spin .8s linear infinite; }
+@keyframes ai-search-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .ai-spinner { animation: none; } }
+.ai-ans > .ai-srcs > div.ai-src { padding: 12px; overflow-wrap: anywhere; }
+.ai-ans > .ai-srcs > div.ai-src small { display: block; }

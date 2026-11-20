@@ -125,3 +125,16 @@ test('документ удаляется вместе со своими кус�
   // источник — только https
   fails(`insert into private.ai_docs (id, title, edition, source) values ('bad', 'Плохой', 'ред. 1', 'http://example.test')`, undefined, /check/);
 });
+
+test('поиск пункта не расходует веб-лимит; превышение откатывает оба счётчика', () => {
+  fails("select * from public.ai_document_matches('отпуск')", user, /forbidden/);
+  fails('select public.ai_web_reserve()', 'anon', /permission denied/);
+  fails('select public.ai_web_reserve()', user, /forbidden/);
+  assert.equal(q("select ref from public.ai_document_matches('отпуск')", admin)[0], 'статья 115');
+  assert.equal(q('select count(*) from private.ai_web_month')[0], '0');
+  q("update private.config set value='1' where key='ai_web_per_month'");
+  assert.equal(q('select public.ai_web_reserve()', admin)[0], '0');
+  fails('select public.ai_web_reserve()', admin, /month limit/);
+  assert.equal(q('select web_calls from private.ai_daily where day=private.today()')[0], '1');
+  fails('select * from private.ai_web_month', user, /permission denied/);
+});
