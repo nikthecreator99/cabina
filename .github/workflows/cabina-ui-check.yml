@@ -1,0 +1,19 @@
+name: CABINA UI release checks
+on:
+  push:
+    branches: [codex/check-home-notices]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm test
+      - run: node --test --test-concurrency=1 tests/e2e/v2321.test.js tests/e2e/v228-notices.test.js
+      - run: npm run test:e2e
