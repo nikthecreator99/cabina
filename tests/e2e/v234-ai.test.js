@@ -25,7 +25,7 @@ const ANSWER = {
   left: 9,
 };
 
-async function mockServer(context, { role = 'admin', ai = () => [200, ANSWER] } = {}) {
+async function mockServer(context, { role = 'admin', ai = () => [200, { ...ANSWER, stage: 'documents' }] } = {}) {
   const log = [];
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'apikey, authorization, content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
   await context.route('https://api.cabina-app.ru/**', async (route) => {
@@ -43,7 +43,7 @@ async function mockServer(context, { role = 'admin', ai = () => [200, ANSWER] } 
     if (path === '/rest/v1/profiles?select=role' && bearer) return send(200, [{ role }]);
     if (/^\/rest\/v1\/consents\?select=/.test(path) && bearer) return send(200, [{ document: CONSENT_VERSION, withdrawn_at: null }]);
     if (/^\/rest\/v1\/\w+\?select=/.test(path) && bearer) return send(200, []);
-    if (path === '/ai/v1/ask' && bearer) { const [s, b] = ai(body); return send(s, b); }
+    if (path === '/ai/v1/find' && bearer) { const [s, b] = ai(body); return send(s, b); }
     if (path.startsWith('/rest/v1/rpc/') && bearer) return send(200, null);
     return send(401, { code: '42501', message: 'permission denied' });
   });
@@ -76,7 +76,7 @@ async function openAs(opts = {}) {
   await app.page.locator('.tab[data-tab=extra]').click();
   return { ...app, log };
 }
-const asks = (log) => log.filter((r) => r.path === '/ai/v1/ask');
+const asks = (log) => log.filter((r) => r.path === '/ai/v1/find');
 const noOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
 test('без входа и не администратору — плашки нет, экран закрыт', async () => {
@@ -99,7 +99,7 @@ test('администратор: плашка вверху «Ещё», вопр
   });
   assert.ok(order, 'плашка выше списка');
   const ct = await card.innerText();
-  assert.match(ct, /CABINA AI[\s\S]*Спросите по документам[\s\S]*Нейросеть/);
+  assert.match(ct, /CABINA AI[\s\S]*Спросите по документам[\s\S]*Найдите пункт/);
   assert.doesNotMatch(ct, /ПТЭ/);
   assert.ok(await page.locator('#extra-ai .ai-logo').evaluate((i) => i.complete && i.naturalWidth > 0), 'значок загрузился');
   await card.click();
@@ -111,16 +111,14 @@ test('администратор: плашка вверху «Ещё», вопр
   assert.equal(asks(log).length, 0);
   await page.locator('#ai-q').fill('Сколько дней отпуска?');
   await page.locator('#ai-send').click();
-  await page.locator('#ai-ans .ai-a').waitFor();
-  assert.deepEqual(asks(log)[0].body, { q: 'Сколько дней отпуска?' });
+  await page.locator('#ai-ans .ai-srcs').waitFor();
+  assert.deepEqual(asks(log)[0].body, { q: 'Сколько дней отпуска?', stage: 'documents' });
   assert.equal(asks(log)[0].auth, `Bearer ${ACCESS}`);
   assert.equal(await page.locator('#ai-err').count(), 0);
-  assert.equal(await page.locator('#ai-ans .ai-ref').count(), 2, 'ссылки [1] и [2] — кружки');
   assert.equal(await page.locator('#ai-ans .ai-src').count(), 2);
-  assert.match(await page.locator('#ai-ans').innerText(), /Справочная информация, не юридическая консультация/);
-  assert.match(await page.locator('#ai-left').innerText(), /9/);
+  assert.match(await page.locator('#ai-ans').innerText(), /Из документов CABINA/);
+  assert.equal(asks(log).length, 1, 'при совпадении в документе веб-поиск не вызывается');
   // источник раскрывается; плохая ссылка не выводится, html — текстом
-  await page.locator('#ai-ans .ai-src summary').nth(1).click();
   assert.match(await page.locator('#ai-ans .ai-quote').nth(1).innerText(), /<b>за<\/b>/);
   assert.equal(await page.locator('#ai-ans .ai-src').nth(1).locator('a').count(), 0, 'javascript: не ссылка');
   assert.equal(await page.locator('#ai-ans .ai-src').nth(0).locator('a[href="https://example.test/tk"][rel~=noopener]').count(), 1);
@@ -144,8 +142,8 @@ test('администратор: плашка вверху «Ещё», вопр
 test('«ответа нет», ответ без источников, лимит и нет связи — понятные тексты', async () => {
   let n = 0;
   const replies = [
-    [200, { answer: null, sources: [], left: 5 }],
-    [200, { answer: 'Выдуманный ответ [1].', sources: [] }],
+    [200, { stage: 'documents', sources: [], webEnabled: false }],
+    [200, { stage: 'documents', answer: 'Выдуманный ответ [1].', sources: [], webEnabled: false }],
     [429, { error: 'limit' }],
     [503, { error: 'busy' }],
     [500, {}],
@@ -154,9 +152,9 @@ test('«ответа нет», ответ без источников, лими�
   await page.locator('#extra-ai').click();
   const ask = async (q) => { await page.locator('#ai-q').fill(q); await page.locator('#ai-send').click(); await page.waitForFunction(() => !document.querySelector('#ai-send[disabled]')); };
   await ask('Какая погода завтра?');
-  assert.match(await page.locator('#ai-ans').innerText(), /В загруженных документах ответа на этот вопрос нет/);
+  assert.match(await page.locator('#ai-ans').innerText(), /В добавленных документах совпадений не найдено/);
   await ask('Сколько платят за ночь?');
-  assert.match(await page.locator('#ai-ans').innerText(), /ответа на этот вопрос нет/, 'ответ без источника не показываем');
+  assert.match(await page.locator('#ai-ans').innerText(), /совпадений не найдено/, 'ответ без источника не показываем');
   await ask('Ещё один вопрос');
   assert.match(await page.locator('#ai-err').innerText(), /вопросы закончились/);
   await ask('Ещё один вопрос');
@@ -180,8 +178,7 @@ for (const theme of ['dark', 'light']) {
     await page.locator('#extra-ai').click();
     await page.locator('#ai-q').fill('Сколько дней отпуска?');
     await page.locator('#ai-send').click();
-    await page.locator('#ai-ans .ai-a').waitFor();
-    await page.locator('#ai-ans .ai-src summary').first().click();
+    await page.locator('#ai-ans .ai-srcs').waitFor();
     assert.ok(await noOverflow(page), 'экран ответа');
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/ai-ekran-${theme}.png`, fullPage: true });
     assert.deepEqual(errors, []);
@@ -194,9 +191,24 @@ test('выход из аккаунта стирает историю вопро�
   await page.locator('#extra-ai').click();
   await page.locator('#ai-q').fill('Сколько дней отпуска?');
   await page.locator('#ai-send').click();
-  await page.locator('#ai-ans .ai-a').waitFor();
+  await page.locator('#ai-ans .ai-srcs').waitFor();
   assert.ok(await page.evaluate(() => localStorage.getItem('cabina-ai-history')));
   await page.evaluate(async () => { const a = await import('./js/auth.js'); await a.signOut?.(); });
   assert.equal(await page.evaluate(() => localStorage.getItem('cabina-ai-history')), null);
+  await context.close();
+});
+
+test('при пустой выдаче проверяет источники по очереди и сообщает, откуда взят результат', async () => {
+  const stages = [];
+  const { context, page } = await openAs({ai: ({stage}) => {
+    stages.push(stage);
+    return [200, { stage, webEnabled: true, sources: stage === 'internet' ? ANSWER.sources.slice(0, 1) : [] }];
+  }});
+  await page.locator('#extra-ai').click();
+  await page.locator('#ai-q').fill('Как оформить отпуск?');
+  await page.locator('#ai-send').click();
+  await page.locator('#ai-ans .ai-src').waitFor();
+  assert.deepEqual(stages, ['documents', 'trusted', 'internet']);
+  assert.match(await page.locator('#ai-ans').innerText(), /Из интернета/);
   await context.close();
 });

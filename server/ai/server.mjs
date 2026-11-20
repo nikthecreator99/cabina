@@ -10,6 +10,7 @@
 // x-data-logging-enabled: false — Яндекс такие запросы не сохраняет. Ключ Яндекса — только в /opt/cabina/.env.
 // В журнал не пишем ни вопросы, ни ответы, ни адреса: только код ошибки.
 import { createServer } from 'node:http';
+import { findStage } from './search.mjs';
 import { cleanQuestion, maskPersonal, SYSTEM, buildPrompt, parseAnswer, sourcesOf } from './core.mjs';
 
 const env = process.env;
@@ -35,6 +36,10 @@ async function post(url, body, headers, timeout = 30000) {
 const yc = (path, body) => post(`${YC}/${path}`, body, {
   Authorization: `Api-Key ${KEY}`, 'x-folder-id': FOLDER, 'x-data-logging-enabled': 'false',
 });
+const web = (queryText) => post('https://searchapi.api.cloud.yandex.net/v2/web/search', {
+  folderId: FOLDER, query: {searchType: 'SEARCH_TYPE_RU', queryText, fixTypoMode: 'FIX_TYPO_MODE_ON'},
+  groupSpec: {groupMode: 'GROUP_MODE_FLAT', groupsOnPage: '5', docsInGroup: '1'}, maxPassages: '2', responseFormat: 'FORMAT_XML',
+}, {Authorization: `Api-Key ${env.YC_SEARCH_KEY}`}, 15000);
 const rest = (fn, body, token) => post(`${REST}/rpc/${fn}`, body, { Authorization: `Bearer ${token}` }, 10000);
 
 // Ответ ошибкой: код для приложения (оно само знает, что сказать человеку)
@@ -88,16 +93,18 @@ function send(res, status, body) {
 export function start(port = PORT) {
   const srv = createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true });
-    if (req.method !== 'POST' || req.url !== '/ask') return send(res, 404, { error: 'not_found' });
+    if (req.method !== 'POST' || !['/ask', '/find'].includes(req.url)) return send(res, 404, { error: 'not_found' });
     let size = 0;
     const parts = [];
     req.on('data', (d) => { size += d.length; if (size > 8192) { req.destroy(); } else parts.push(d); });
     req.on('end', async () => {
-      let q = null;
-      try { q = JSON.parse(Buffer.concat(parts).toString('utf8'))?.q; } catch {}
+      let input;
+      try { input = JSON.parse(Buffer.concat(parts).toString('utf8')); } catch {}
       const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       try {
-        const r = await ask(token, q);
+        const r = req.url === '/find'
+          ? await findStage(token, input?.q, input?.stage, { rest, web, webEnabled: !!(env.YC_SEARCH_KEY && FOLDER) })
+          : await ask(token, input?.q);
         if (r.status >= 500) console.error(`ai: ${r.body.error}`); // без вопроса и без адреса
         send(res, r.status, r.body);
       } catch { console.error('ai: crash'); send(res, 500, { error: 'crash' }); }

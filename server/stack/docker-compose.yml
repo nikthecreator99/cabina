@@ -151,6 +151,7 @@ services:
       - ./ai:/app:ro
     environment:
       AI_REST_URL: http://rest:3000
+      YC_SEARCH_KEY: ${YC_SEARCH_KEY:-}
       AI_MODEL: ${AI_MODEL:-yandexgpt/latest}
       YC_API_KEY: ${YC_API_KEY:-}
       YC_FOLDER_ID: ${YC_FOLDER_ID:-}
