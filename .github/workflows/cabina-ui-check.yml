@@ -1,19 +1,45 @@
-name: CABINA UI release checks
+name: CABINA release tests
 on:
   push:
     branches: [codex/check-home-notices]
 permissions:
   contents: read
 jobs:
-  tests:
+  ui:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     container:
       image: mcr.microsoft.com/playwright:v1.56.1-noble
       options: --ipc=host
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 344c462386c74a2d2b4886cfcee86857619ec67b
+      - run: npm ci
+      - run: node --test --test-concurrency=1 --test-shard=${{ matrix.shard }}/10 tests/e2e/*.test.js
+  ai:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 051117bbad9c2668a60767f4666391f490aec3bb
       - run: npm ci
       - run: npm test
-      - run: node --test --test-concurrency=1 tests/e2e/v2321.test.js tests/e2e/v228-notices.test.js
-      - run: npm run test:e2e
+      - run: node --test tests/e2e/v234-ai.test.js
+  database:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 051117bbad9c2668a60767f4666391f490aec3bb
+      - run: sudo apt-get update -qq && sudo apt-get install -y postgresql-16-pgvector
+      - run: node --test server/tests/ai.test.js
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
