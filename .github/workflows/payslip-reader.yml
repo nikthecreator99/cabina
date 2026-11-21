@@ -1,0 +1,38 @@
+name: Prepare local payslip reader
+on:
+  push:
+    branches: [codex/payslip-dependencies]
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy pinned browser readers and recognition data
+        run: |
+          set -eu
+          dest="$PWD/js/vendor/payslip"
+          mkdir -p "$dest"
+          cd "$RUNNER_TEMP"
+          npm install --ignore-scripts --no-audit --no-fund pdfjs-dist@5.6.205 tesseract.js@7.0.0 tesseract.js-core@7.0.0
+          cp node_modules/pdfjs-dist/legacy/build/pdf.min.mjs "$dest/pdf.js"
+          cp node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs "$dest/pdf.worker.js"
+          cp node_modules/tesseract.js/dist/tesseract.esm.min.js "$dest/ocr.js"
+          cp node_modules/tesseract.js/dist/worker.min.js "$dest/worker.js"
+          cp node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js "$dest/"
+          cp node_modules/pdfjs-dist/LICENSE "$dest/LICENSE-pdfjs.txt"
+          cp node_modules/tesseract.js/LICENSE.md "$dest/LICENSE-tesseract.txt"
+          cp node_modules/tesseract.js-core/LICENSE "$dest/LICENSE-core.txt"
+          for lang in rus eng; do
+            curl -fsSL --retry 3 "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/$lang.traineddata" -o "$lang.traineddata"
+            if [ "$lang" = rus ]; then test "$(git hash-object "$lang.traineddata")" = b146cb2263acbc6383f8e92ea0ce759537687bb8; fi
+            gzip -n -c "$lang.traineddata" > "$dest/$lang.traineddata.gz"
+          done
+          curl -fsSL https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/LICENSE -o "$dest/LICENSE-models.txt"
+          cd "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add js/vendor/payslip
+          git commit -m 'Vendor pinned same-origin PDF and Russian OCR readers'
+          git push origin HEAD:codex/payslip-dependencies
