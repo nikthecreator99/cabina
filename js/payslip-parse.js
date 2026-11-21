@@ -1,10 +1,11 @@
 // ФТУ-69. В справках первое значение — за месяц, второе — с начала года.
 export const months = 'январь февраль март апрель май июнь июль август сентябрь октябрь ноябрь декабрь'.split(' ');
 const monthPattern = months.join('|');
-const monthStart = new RegExp('^('+monthPattern+')\\s','i');
+const rowPeriod = monthPattern + '|\\d{2,4}\\s+г\\.?';
+const monthStart = new RegExp('^('+rowPeriod+')\\s','i');
 const periodHeader = new RegExp('листок за ('+monthPattern+')\\s+(?:месяц\\s+)?(20\\d{2})','i');
-const secondColumn = new RegExp('\\s+(?=(?:'+monthPattern+')\\s)','i');
-const codes = /(?:^|\s)(\d{3}[A-ZА-ЯЁ0-9]?)(?=\s|$)/giu;
+const secondColumn = new RegExp('\\s+(?=(?:'+rowPeriod+')\\s)','i');
+const codes = /(?:^|\s)(\d{3}[A-ZА-ЯЁ0-9]?|[CEСЕ]073)(?=\s|$)/giu;
 const numbers = /[-−]?(?:\d{1,3}(?:[. ]\d{3})+|\d+),\d{2}(?!\d)/g;
 const money = s => Number(s.replace(/[. ]/g,'').replace(',','.').replace('−','-'));
 const amounts = s => Array.from(s.matchAll(numbers), m => money(m[0]));
@@ -26,10 +27,14 @@ function addEntry(part, section, sheet) {
   const rest = part.slice(match.index+match[0].length).split(/к (?:перечислению|выплате)|всего удержано/i)[0].trim();
   const vals = amounts(rest), hours = rest.match(/([-−]?\d+,\d{2})\s*\//);
   if (!vals.length || !/\d,\d{2}$/.test(rest)) { sheet.unread++; return; }
+  // Форма печатает дни справа от косой черты, часы слева. Отпускные
+  // и больничные используют дни, а в почасовых строках дальше бывает процент.
+  const dayField = rest.match(/^\s*\/\s*([-−]?\d+,\d{2})(?=\s)/);
   sheet.rows.push({
     code, month:month[1].toLowerCase(), name:part.slice(month[0].length,match.index).trim(),
     amount:vals.at(-1), hours:hours ? money(hours[1]) : null,
-    pct:vals.length > (hours ? 2 : 1) ? vals.at(-2) : null,
+    days:dayField ? money(dayField[1]) : null,
+    pct:!dayField && vals.length > (hours ? 2 : 1) ? vals.at(-2) : null,
     kind:section==='natural' ? 'natural' : /^[89]/.test(code) ? 'deductions' : 'earnings',
   });
 }
@@ -51,6 +56,8 @@ export function parsePayslip(text) {
   let section='earnings', lastRow=null;
   for (let line of text.split(/\r?\n/)) {
     line=line.replace(/\s+/g,' ').trim();
+    // Узкая колонка удержаний переносит мягкий знак месяца на следующую строку.
+    line=line.replace(/(^|\s)(январ|феврал|апрел|июн|июл|сентябр|октябр|ноябр|декабр)(?=\s)/gi,'$1$2ь');
     if (!line) continue;
     const period=line.match(periodHeader);
     if (period) {

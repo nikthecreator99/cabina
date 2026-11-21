@@ -7,9 +7,9 @@ import {readPayslip} from './payslip-reader.js';
 const title='Проверка расчетного листка';
 const labels={ok:['✓','Сошлось'],approx:['≈','Приблизительно'],diff:['!','Расхождение'],info:['i','Справочно'],unknown:['?','Недостаточно данных']};
 const groups={earnings:'Начислено',deductions:'Удержано и перечислено',natural:'Доходы в натуральной форме'};
-let job=null,status='',result='',failure='',expanded=true,ocrText='',editing=false;
+let job=null,status='',result='',failure='',generation=0,ocrText='',editing=false;
 export function clearPayslip() {
-  job?.abort(); job=null;status='';result='';failure='';expanded=true;ocrText='';editing=false;
+  job?.abort(); job=null;status='';result='';failure='';generation++;ocrText='';editing=false;
 }
 export function payslipCard() {
   return '<div class="panel ps-link"><button class="row" data-act="go" data-page="payslip"><span class="ico" style="--c:var(--ok)">'+I.file+'</span><div class="grow"><div class="t1">'+title+'</div><div class="t2">Начисления, удержания и сумма на руки</div></div>'+small(I.right,18)+'</button></div>';
@@ -19,6 +19,31 @@ function row(x,entry=false) {
   return '<li class="ps-row ps-'+x.status+'"><span class="ps-mark" aria-label="'+label+'">'+symbol+'</span><div><b>'+(entry?esc(x.code)+' · ':'')+esc(x.title)+'</b>'+
     (entry?' <strong>'+esc(rub(x.amount))+'</strong><small>'+esc(x.month)+'</small>':'')+'<p>'+esc(x.detail)+'</p></div></li>';
 }
+const sections=[
+  {key:'ok',label:'Сошлось',icon:'✓',statuses:['ok']},
+  {key:'approx',label:'Требует внимания',icon:'≈',statuses:['approx','unknown']},
+  {key:'diff',label:'Не сошлось',icon:'!',statuses:['diff']}
+];
+function list(title,rows,entries=false) {
+  return rows.length?'<h3>'+title+'</h3><ul>'+rows.map(x=>row(x,entries)).join('')+'</ul>':'';
+}
+function section(spec,checks,items) {
+  const matches=x=>spec.statuses.includes(x.status);
+  const audits=checks.filter(matches), lines=items.filter(matches);
+  const count=audits.length+lines.length;
+  let body=list('Проверки',audits);
+  for(const [kind,label] of Object.entries(groups)) body+=list(label,lines.filter(x=>x.kind===kind),true);
+  if(!count) body='<p class="ps-empty">'+({ok:'Пока нет подтверждённых совпадений.',approx:'Уточнений не требуется.',diff:'Расхождений по выполненным проверкам нет.'}[spec.key])+'</p>';
+  if(spec.key==='approx') {
+    const infoChecks=checks.filter(x=>x.status==='info'),infoRows=items.filter(x=>x.status==='info');
+    if(infoChecks.length || infoRows.length) {
+      body+='<details class="ps-info"><summary>Справочно <span>'+ (infoChecks.length+infoRows.length)+'</span></summary>'+
+        list('За месяц',infoChecks)+list('Строки листка',infoRows,true)+'</details>';
+    }
+  }
+  return '<details class="ps-group ps-'+spec.key+'" data-ps-group="'+spec.key+'"><summary><span class="ps-mark" aria-hidden="true">'+spec.icon+
+    '</span><b>'+spec.label+'</b><span class="ps-count">'+count+'</span><i aria-hidden="true"></i></summary><div class="ps-body">'+body+'</div></details>';
+}
 function report(sheet,ocr) {
   const raw=paySet(S.settings.pay,S.profile.role),profile={};
   for(const key of ['rk','sn','harm']) if(raw[key]!=null && raw[key]!=='' && Number.isFinite(+raw[key])) profile[key]=Number(raw[key]);
@@ -27,26 +52,30 @@ function report(sheet,ocr) {
     if(rate) profile.rate=rate;
   }
   const {checks,items}=auditPayslip(sheet,profile);
-  const counts=Object.keys(labels).map(k=>[labels[k][1],checks.filter(x=>x.status===k).length]).filter(([,n])=>n);
   const totals=[['Начислено',sheet.gross],['Удержано и перечислено',sheet.deducted],['На руки',Number.isFinite(sheet.bank)&&Number.isFinite(sheet.cash)?sheet.bank+sheet.cash:null]];
-  return '<section class="panel ps-panel"><h2>Листок'+(sheet.period?' за '+esc(sheet.period):'')+'</h2>'+
+  return '<section class="panel ps-panel ps-report" id="ps-details" data-report="'+generation+'"><h2>Листок'+(sheet.period?' за '+esc(sheet.period):'')+'</h2>'+
     (ocr?'<p class="ps-alert">Данные распознаны с изображения. Сверьте коды, часы и суммы с оригиналом.</p>':'')+
     '<dl class="ps-totals">'+totals.map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+rub(v)+'</dd></div>').join('')+'</dl>'+
-    '<h3>Проверки за месяц</h3><p>'+counts.map(([k,n])=>k+' · '+n).join(' / ')+'</p><ul>'+checks.map(x=>row(x)).join('')+'</ul></section>'+
-    '<details id="ps-details" class="panel ps-panel" open><summary>Разбор по строкам ('+items.length+')</summary>'+
-    Object.entries(groups).map(([k,label])=>{const list=items.filter(x=>x.kind===k);return list.length?'<h3>'+label+'</h3><ul>'+list.map(x=>row(x,true)).join('')+'</ul>':'';}).join('')+'</details>'+
-    '<p class="hint">Проверка охватывает суммы, которые удалось прочитать. Для сверки пропущенных выплат и фактически отработанных часов нужны табель и данные поездок.</p>';
+    sections.map(spec=>section(spec,checks.filter(x=>!x.code),items)).join('')+
+    '<button class="btn btn-ghost ps-clear" data-act="ps-clear">Очистить отчёт</button></section>';
 }
 export function renderPayslip() {
   const draft=document.querySelector('#ps-correction');
   if(editing && draft) ocrText=draft.value;
   const existing=document.querySelector('#ps-details');
-  if(existing) expanded=existing.open;
-  return pageHead(title,{back:true})+'<section class="panel ps-panel"><h2>Загрузите листок</h2><p>Выберите PDF формы ФТУ-69 или чёткие фотографии всех страниц одного месяца. Расчёт выполняется на этом устройстве.</p>'+
-    '<p class="ps-alert">'+small(I.shield,18)+' Перед загрузкой закройте ФИО, табельный номер и реквизиты. Оставьте видимыми месяц, тариф и таблицы.</p>'+
-    '<label class="btn btn-primary ps-upload">Выбрать PDF или фото<input aria-label="Выбрать PDF или фото" id="ps-files" type="file" accept="application/pdf,image/*" multiple></label>'+
+  const opened=existing?.dataset.report===String(generation)
+    ? [...existing.querySelectorAll('details[open]')].map(el=>el.dataset.psGroup || 'info') : [];
+  let shown=result;
+  for(const key of opened) {
+    const attr=key==='info'?'class="ps-info"':'data-ps-group="'+key+'"';
+    shown=shown.replace(attr+'>',attr+' open>');
+  }
+  const choose='<label class="btn '+(result?'btn-ghost':'btn-primary')+' ps-upload">'+(result?'Выбрать другой листок':'Выбрать PDF или фото')+'<input aria-label="Выбрать PDF или фото" id="ps-files" type="file" accept="application/pdf,image/*" multiple></label>';
+  return pageHead(title,{back:true})+shown+'<section class="panel ps-panel">'+
+    (result?'':'<h2>Загрузите листок</h2><p>PDF формы ФТУ-69 или фото всех страниц за месяц.</p>')+
+    '<p class="ps-private">'+small(I.shield,18)+' Файл обрабатывается на устройстве. Перед выбором закройте ФИО, табельный номер и реквизиты.</p>'+choose+
     '<div role="status" class="hint">'+esc(status||failure)+'</div></section>'+
-    (ocrText?'<section class="panel ps-panel">'+(editing?'<label for="ps-correction">Сверьте текст с оригиналом. В кодах строк распознавание может перепутать букву L и цифру 1.</label><textarea id="ps-correction" rows="9">'+esc(ocrText)+'</textarea><button class="btn btn-primary" data-act="ps-apply">Пересчитать</button>':'<button class="btn btn-ghost" data-act="ps-edit">Исправить распознавание</button>')+'</section>':'')+(expanded?result:result.replace('class="panel ps-panel" open','class="panel ps-panel"'));
+    (ocrText?'<section class="panel ps-panel">'+(editing?'<label for="ps-correction">Сверьте текст с оригиналом. В кодах строк распознавание может перепутать букву L и цифру 1.</label><textarea id="ps-correction" rows="9" spellcheck="false" autocorrect="off" autocomplete="off">'+esc(ocrText)+'</textarea><button class="btn btn-primary" data-act="ps-apply">Пересчитать</button>':'<button class="btn btn-ghost" data-act="ps-edit">Исправить распознавание</button>')+'</section>':'');
 }
 export async function loadPayslip(files,refresh) {
   if(!files.length) return;
@@ -75,13 +104,14 @@ export async function loadPayslip(files,refresh) {
 }
 
 export function payslipAction(act,refresh) {
+  if(act==='ps-clear') {clearPayslip();refresh();return true;}
   if(act==='ps-edit') { editing=true;refresh();document.querySelector('#ps-correction')?.focus();return true; }
   if(act!=='ps-apply') return false;
   ocrText=document.querySelector('#ps-correction')?.value ?? ocrText;
   try {
     const sheet=parsePayslip(ocrText);
     if(!sheet.rows.length) throw Error('Проверьте строки с месяцем, кодом и суммой.');
-    result=report(sheet,true); editing=false;failure='';expanded=true;
+    generation++;result=report(sheet,true); editing=false;failure='';
   } catch(e) {failure=e.message;result='';}
   refresh();return true;
 }

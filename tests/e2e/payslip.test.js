@@ -36,10 +36,18 @@ test('приватная проверка PDF, фото и сканирован�
         await input.fill(text.replace(/004[1I|]/g,'004L'));
         await page.locator('[data-act=ps-apply]').click();
       }
-      const detail=await page.locator('#ps-details').innerText();
+      const groups=page.locator('#ps-details > details');
+      assert.equal(await groups.count(),3);
+      assert.equal(await page.locator('#ps-details > details[open]').count(),0);
+      await page.locator('[data-ps-group=ok] > summary').click();
+      const detail=await page.locator('[data-ps-group=ok]').innerText();
       assert.match(detail,/004L/);assert.match(detail,/2\s?000,00/);
       if(name!=='form.pdf') assert.match(await page.locator('.screen').innerText(),/распознаны с изображения/);
     }
+    await page.locator('[data-act=ps-clear]').click();
+    assert.equal(await page.locator('#ps-details, #ps-correction, [data-act=ps-edit]').count(),0);
+    await page.locator('#ps-files').setInputFiles({name:'again.pdf',mimeType:'application/pdf',buffer:pdf});
+    await page.waitForSelector('#ps-details');
     assert.deepEqual(outgoing,[]);
     await page.locator('.screen [data-act=back]').click();await page.locator('button[data-page=payslip]').click();
     assert.equal(await page.locator('#ps-details').count(),0);
