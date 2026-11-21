@@ -1,0 +1,23 @@
+name: Check iPhone PDF fix
+on:
+  push:
+    branches: [codex/test-iphone-pdf]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps webkit > /tmp/webkit-install.log
+      - run: npm test
+      - run: CHROMIUM_PATH=/usr/bin/google-chrome node --test tests/e2e/payslip.test.js
+      - name: Check PDF selection in WebKit with the service worker
+        run: |
+          node tests/serve.js > /tmp/static.log &
+          CAB_URL=http://127.0.0.1:8080 node .github/pdf-diagnostic.mjs
