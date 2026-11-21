@@ -7,9 +7,9 @@ import {readPayslip} from './payslip-reader.js';
 const title='Проверка расчетного листка';
 const labels={ok:['✓','Сошлось'],approx:['≈','Приблизительно'],diff:['!','Расхождение'],info:['i','Справочно'],unknown:['?','Недостаточно данных']};
 const groups={earnings:'Начислено',deductions:'Удержано и перечислено',natural:'Доходы в натуральной форме'};
-let job=null,status='',result='',failure='',expanded=true;
+let job=null,status='',result='',failure='',expanded=true,ocrText='',editing=false;
 export function clearPayslip() {
-  job?.abort(); job=null;status='';result='';failure='';expanded=true;
+  job?.abort(); job=null;status='';result='';failure='';expanded=true;ocrText='';editing=false;
 }
 export function payslipCard() {
   return '<div class="panel ps-link"><button class="row" data-act="go" data-page="payslip"><span class="ico" style="--c:var(--ok)">'+I.file+'</span><div class="grow"><div class="t1">'+title+'</div><div class="t2">Начисления, удержания и сумма на руки</div></div>'+small(I.right,18)+'</button></div>';
@@ -38,12 +38,15 @@ function report(sheet,ocr) {
     '<p class="hint">Проверка охватывает суммы, которые удалось прочитать. Для сверки пропущенных выплат и фактически отработанных часов нужны табель и данные поездок.</p>';
 }
 export function renderPayslip() {
+  const draft=document.querySelector('#ps-correction');
+  if(editing && draft) ocrText=draft.value;
   const existing=document.querySelector('#ps-details');
   if(existing) expanded=existing.open;
   return pageHead(title,{back:true})+'<section class="panel ps-panel"><h2>Загрузите листок</h2><p>Выберите PDF формы ФТУ-69 или чёткие фотографии всех страниц одного месяца. Расчёт выполняется на этом устройстве.</p>'+
     '<p class="ps-alert">'+small(I.shield,18)+' Перед загрузкой закройте ФИО, табельный номер и реквизиты. Оставьте видимыми месяц, тариф и таблицы.</p>'+
     '<label class="btn btn-primary ps-upload">Выбрать PDF или фото<input aria-label="Выбрать PDF или фото" id="ps-files" type="file" accept="application/pdf,image/*" multiple></label>'+
-    '<div role="status" class="hint">'+esc(status||failure)+'</div></section>'+(expanded?result:result.replace('class="panel ps-panel" open','class="panel ps-panel"'));
+    '<div role="status" class="hint">'+esc(status||failure)+'</div></section>'+
+    (ocrText?'<section class="panel ps-panel">'+(editing?'<label for="ps-correction">Сверьте текст с оригиналом. В кодах строк распознавание может перепутать букву L и цифру 1.</label><textarea id="ps-correction" rows="9">'+esc(ocrText)+'</textarea><button class="btn btn-primary" data-act="ps-apply">Пересчитать</button>':'<button class="btn btn-ghost" data-act="ps-edit">Исправить распознавание</button>')+'</section>':'')+(expanded?result:result.replace('class="panel ps-panel" open','class="panel ps-panel"'));
 }
 export async function loadPayslip(files,refresh) {
   if(!files.length) return;
@@ -53,6 +56,7 @@ export async function loadPayslip(files,refresh) {
     update('Открываем файл…');
     const {text,usedOCR}=await readPayslip(files,update,controller.signal);
     if(job!==controller) return;
+    if(usedOCR) ocrText=text;
     const sheet=parsePayslip(text);
     if(!sheet.rows.length) throw Error('Не удалось прочитать строки формы ФТУ-69. Попробуйте исходный PDF или более чёткое фото таблицы.');
     result=report(sheet,usedOCR);
@@ -60,4 +64,16 @@ export async function loadPayslip(files,refresh) {
     if(job===controller) failure=/^(Выберите|Не удалось прочитать)/.test(e.message)?e.message:
       e.name==='PasswordException'?'PDF защищён паролем. Выберите разблокированную копию.':'Не удалось открыть файл. Для первого запуска распознавания нужен интернет. Проверьте формат и попробуйте ещё раз.';
   } finally {if(job===controller){status='';job=null;refresh();}}
+}
+
+export function payslipAction(act,refresh) {
+  if(act==='ps-edit') { editing=true;refresh();document.querySelector('#ps-correction')?.focus();return true; }
+  if(act!=='ps-apply') return false;
+  ocrText=document.querySelector('#ps-correction')?.value ?? ocrText;
+  try {
+    const sheet=parsePayslip(ocrText);
+    if(!sheet.rows.length) throw Error('Проверьте строки с месяцем, кодом и суммой.');
+    result=report(sheet,true); editing=false;failure='';expanded=true;
+  } catch(e) {failure=e.message;result='';}
+  refresh();return true;
 }

@@ -2470,3 +2470,5 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .ps-ok .ps-mark { color: var(--ok); }
 .ps-approx .ps-mark { color: var(--warn); }
 .ps-diff .ps-mark { color: var(--accent); }
+
+#ps-correction { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; padding: 10px; color: var(--text); background: var(--field); border: 1px solid var(--line-2); border-radius: 8px; font: inherit; }

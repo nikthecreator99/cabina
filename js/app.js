@@ -22,7 +22,7 @@ import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, re
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderGrowth, growthClick } from './growth.js';
-import { payslipCard, renderPayslip, loadPayslip, clearPayslip } from './payslip.js';
+import { payslipCard, renderPayslip, loadPayslip, clearPayslip, payslipAction } from './payslip.js';
 import { initAi, renderAi, aiClick, aiInput, aiKey, aiEnter, aiCardHtml } from './ai.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
@@ -834,6 +834,7 @@ app.addEventListener('click', async (e) => {
   if (nagClick(act, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   if (growthClick(act, b, ctx)) return;
+  if (payslipAction(act, rerender)) return;
   if (aiClick(act, b)) return;
   if (yearClick(act, b, ctx)) return;
   const sk = streakClick(act);

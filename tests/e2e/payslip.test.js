@@ -20,6 +20,14 @@ test('приватная проверка PDF, фото и сканирован�
       await page.locator('#ps-files').setInputFiles({name,mimeType,buffer});
       try {await page.waitForSelector('#ps-details',{timeout:45000});}
       catch(error){throw Error(name+' — '+await page.locator('.screen [role=status]').innerText(),{cause:error});}
+      if(name!=='form.pdf') {
+        await page.locator('[data-act=ps-edit]').click();
+        const input=page.locator('#ps-correction');
+        const text=await input.inputValue();
+        assert.match(text,/2000,00/);
+        await input.fill(text.replace(/004[1I|]/g,'004L'));
+        await page.locator('[data-act=ps-apply]').click();
+      }
       const detail=await page.locator('#ps-details').innerText();
       assert.match(detail,/004L/);assert.match(detail,/2\s?000,00/);
       if(name!=='form.pdf') assert.match(await page.locator('.screen').innerText(),/распознаны с изображения/);
