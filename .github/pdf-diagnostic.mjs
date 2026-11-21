@@ -21,6 +21,9 @@ await page.waitForSelector('#ps-details',{timeout:40000});
 const groups=page.locator('#ps-details > details');
 if(await groups.count()!==3 || await page.locator('#ps-details > details[open]').count()) throw Error('Expected three closed sections');
 await page.locator('[data-ps-group="ok"] > summary').click();
+// The fixture omits the tariff; the individual hourly item needs attention.
+await page.locator('[data-ps-group="approx"] > summary').click();
+if(!(await page.locator('[data-ps-group="approx"]').innerText()).includes('004L')) throw Error('Missing tariff was not reported');
 const details=await page.locator('#ps-details').innerText();
 if(!details.includes('004L')||!details.replace(/\s/g,'').includes('2000,00'))throw Error('Synthetic payroll amount missing: '+details);
 await page.locator('[data-act="ps-clear"]').click();
