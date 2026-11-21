@@ -31,3 +31,35 @@ test('расхождение, недостающий итог, отрицате�
   assert.equal(partial.rows[0].amount,-35.43);assert.equal(auditPayslip(partial).items[0].status,'unknown');assert.equal(partial.unread,2);
   assert.throws(()=>parsePayslip(sample+'\nРасчетный листок за март месяц 2025 года'));
 });
+
+test('Отпуска, больничный и отдельная выплата в колонке удержаний',()=>{
+  const sheet=parsePayslip([
+    'Расчетный листок за сентябрь месяц 2025 года',
+    'октябрь Отпуск 032E / 5,00 15.000,00 сентябр Выплата 881B 12.500,00',
+    'октябрь ДопОтпуск 256E / 1,00 3.000,00','ноябрь Северный 260E / 2,00 6.000,00',
+    'сентябрь Учебный 033B / 4,00 10.000,00','сентябрь Пособие 305A / 2,00 2.400,00',
+    'сентябрь Больничный 556W / 4,00 0,00','24 г Премия 269Z 700,00',
+    'Всего начислено 37.100,00','Всего удержано и перечислено 12.500,00'
+  ].join('\n'));
+  const {items,checks}=auditPayslip(sheet);
+  const leave=items.find(x=>x.code==='032E');
+  assert.equal(leave.days,5);assert.equal(leave.pct,null);assert.equal(leave.hours,null);
+  assert.equal(leave.month,'октябрь');assert.equal(leave.status,'info');
+  assert.equal(items.find(x=>x.code==='881B').kind,'deductions');
+  assert.equal(items.find(x=>x.code==='269Z').month,'24 г');
+  assert.match(checks.find(x=>x.title.includes('дополнительных отпусков')).detail,/8 дн/);
+  assert.match(checks.find(x=>x.title.includes('учебного отпуска')).detail,/4 дн/);
+  assert.match(items.find(x=>x.code==='556W').detail,/СФР/);
+  assert.equal(checks.find(x=>x.title==='Сумма строк начислений').status,'ok');
+});
+test('Знаковые перерасчёты сохраняют период и буквенный префикс кода',()=>{
+  const sheet=parsePayslip(['Расчетный листок за октябрь месяц 2025 года','Оклад/Тариф 250,00',
+    'сентябрь Поправка С073 -1,00/ -200,00 сентябр Взнос 902А -3,00',
+    'октябрь Доплата Е073 2,00/ 500,00','октябрь Ночные 023L 2,00/ 40,00 200,00',
+    'Всего начислено 500,00'].join('\n'));
+  const {items,checks}=auditPayslip(sheet);
+  assert.equal(sheet.unread,0);assert.equal(items[0].code,'C073');assert.equal(items[0].hours,-1);
+  assert.equal(items[0].status,'unknown');assert.equal(items[1].month,'сентябрь');
+  assert.equal(items[2].status,'ok');assert.equal(items[3].pct,40);
+  assert.equal(checks.find(x=>x.title==='Сумма строк начислений').status,'ok');
+});

@@ -2472,3 +2472,25 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .ps-diff .ps-mark { color: var(--accent); }
 
 #ps-correction { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; padding: 10px; color: var(--text); background: var(--field); border: 1px solid var(--line-2); border-radius: 8px; font: inherit; }
+
+.ps-report .ps-totals { margin: 12px 0 16px; }
+.ps-report .ps-totals div:last-child { margin-top: 4px; padding-top: 9px; border-top: 1px solid var(--line); }
+.ps-report .ps-totals div:last-child dd { font-size: calc(20px * var(--fs)); }
+.ps-group { margin-top: 7px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-elev); }
+.ps-group > summary { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; list-style: none; font-size: calc(15px * var(--fs)); }
+.ps-group > summary::-webkit-details-marker { display: none; }
+.ps-group > summary:focus-visible,.ps-info > summary:focus-visible { outline: 2px solid var(--text); border-radius: var(--r-md); }
+.ps-group > summary i { width: 8px; height: 8px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); margin: -4px 2px 0 3px; }
+.ps-group[open] > summary i { transform: rotate(225deg); margin-top: 4px; }
+.ps-count { margin-left: auto; min-width: 2em; padding: 2px 6px; border-radius: 8px; background: var(--card-solid); color: var(--text-2); font-variant-numeric: tabular-nums; text-align: center; }
+.ps-body { padding: 0 12px 8px; }
+.ps-body h3 { font-size: calc(13px * var(--fs)); color: var(--muted); margin: 12px 0 6px; }
+.ps-body .ps-row { padding: 9px 0; }
+.ps-body .ps-mark { color: var(--text-2); }
+.ps-body .ps-ok .ps-mark { color: var(--ok); }
+.ps-body .ps-approx .ps-mark { color: var(--warn); }
+.ps-body .ps-diff .ps-mark { color: var(--accent); }
+.ps-info summary { padding: 10px 0; color: var(--text-2); font-size: calc(14px * var(--fs)); }
+.ps-info summary span { margin-left: 5px; font-variant-numeric: tabular-nums; }
+.ps-clear { margin-top: 12px; }
+.ps-private svg { vertical-align: middle; margin-right: 3px; }
