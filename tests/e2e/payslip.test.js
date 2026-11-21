@@ -15,7 +15,13 @@ test('приватная проверка PDF, фото и сканирован�
     await doc.setContent('<img style="width:1000px" src="data:image/png;base64,'+png.toString('base64')+'">');
     const scan=await doc.pdf({width:'1050px',height:'500px'});
     const outgoing=[];
-    context.on('request',req=>{if(req.method()!=='GET' || !req.url().startsWith(env.url+'/')) outgoing.push(req.url());});
+    const origin=new URL(page.url()).origin;
+    const assets=new Set(['pdf.js','pdf.worker.js','ocr.js','worker.js','tesseract-core-lstm.wasm.js','rus.traineddata.gz','eng.traineddata.gz'].map(f=>'/js/vendor/payslip/'+f));
+    context.on('request',req=>{
+      const url=new URL(req.url());
+      if(url.protocol==='blob:' && url.origin===origin) return;
+      if(req.method()!=='GET' || url.origin!==origin || !assets.has(url.pathname) || url.search || req.postData()) outgoing.push(req.url());
+    });
     for(const [name,mimeType,buffer] of [['form.pdf','application/pdf',pdf],['form.png','image/png',png],['scan.pdf','application/pdf',scan]]) {
       await page.locator('#ps-files').setInputFiles({name,mimeType,buffer});
       try {await page.waitForSelector('#ps-details',{timeout:45000});}
