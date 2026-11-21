@@ -1,0 +1,25 @@
+name: Check published iPhone PDF fix
+on:
+  push:
+    branches: [codex/check-live-iphone-pdf]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps webkit > /tmp/webkit-install.log
+      - name: Wait for CABINA 2.34.4
+        run: |
+          for n in $(seq 1 40); do
+            if curl -fsS --max-time 8 "https://cabina-app.ru/sw.js?release-check=$n" | grep -q cabina-v2.34.4; then exit 0; fi
+            sleep 10
+          done
+          exit 1
+      - run: node .github/pdf-diagnostic.mjs
