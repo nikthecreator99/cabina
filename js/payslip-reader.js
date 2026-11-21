@@ -17,6 +17,22 @@ export function pdfPageText(content,vp) {
     return {text:x.str,x:left,y:top,h:Math.abs(x.height)||8};
   }));
 }
+// Safari supports getReader() on this stream even on versions where for-await is unavailable.
+async function readPageText(page, viewport) {
+  const reader = page.streamTextContent().getReader();
+  const items = [];
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      for (const item of value.items) items.push(item);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return pdfPageText({items}, viewport);
+}
+
 async function imageCanvas(file) {
   const url=URL.createObjectURL(file);
   try {
@@ -59,7 +75,10 @@ export async function readPayslip(files,progress,signal) {
   }
   try {
     if(isPdf(files[0])) {
-      const pdf=await import('./vendor/payslip/pdf.js');active();
+      const pdf=await import('./vendor/payslip/pdf.js').catch(()=>{
+        throw Error('Не удалось загрузить модуль чтения PDF. Проверьте подключение и откройте листок ещё раз.');
+      });
+      active();
       pdf.GlobalWorkerOptions.workerSrc=asset('pdf.worker.js');
       task=pdf.getDocument({data:await files[0].arrayBuffer(),isEvalSupported:false,useSystemFonts:true,useWasm:false,enableXfa:false});
       const doc=await task.promise;active();
@@ -67,7 +86,7 @@ export async function readPayslip(files,progress,signal) {
       for(let i=1;i<=doc.numPages;i++) {
         active();progress('Читаем страницу '+i+' из '+doc.numPages+'…');
         const page=await doc.getPage(i), vp=page.getViewport({scale:1});
-        let text=pdfPageText(await page.getTextContent(),vp);
+        let text=await readPageText(page,vp);
         if(text.trim().length<12 && (await page.getOperatorList()).fnArray.some(op=>[pdf.OPS.paintImageXObject,pdf.OPS.paintInlineImageXObject,pdf.OPS.paintImageMaskXObject].includes(op))) {
           const view=page.getViewport({scale:Math.min(3,3000/Math.max(vp.width,vp.height))});
           const canvas=document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);

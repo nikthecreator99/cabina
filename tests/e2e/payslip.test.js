@@ -14,6 +14,8 @@ test('приватная проверка PDF, фото и сканирован�
     const png=await doc.screenshot({scale:'css'});
     await doc.setContent('<img style="width:1000px" src="data:image/png;base64,'+png.toString('base64')+'">');
     const scan=await doc.pdf({width:'1050px',height:'500px'});
+    // Reproduce WebKit's stream API on the document-import path in Chromium.
+    await page.evaluate(()=>Reflect.deleteProperty(ReadableStream.prototype, Symbol.asyncIterator));
     const outgoing=[];
     const origin=new URL(page.url()).origin;
     const assets=new Set(['pdf.js','pdf.worker.js','ocr.js','worker.js','tesseract-core-lstm.wasm.js','rus.traineddata.gz','eng.traineddata.gz'].map(f=>'/js/vendor/payslip/'+f));

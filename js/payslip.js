@@ -61,8 +61,16 @@ export async function loadPayslip(files,refresh) {
     if(!sheet.rows.length) throw Error('Не удалось прочитать строки формы ФТУ-69. Попробуйте исходный PDF или более чёткое фото таблицы.');
     result=report(sheet,usedOCR);
   } catch(e) {
-    if(job===controller) failure=/^(Выберите|Не удалось прочитать)/.test(e.message)?e.message:
-      e.name==='PasswordException'?'PDF защищён паролем. Выберите разблокированную копию.':'Не удалось открыть файл. Для первого запуска распознавания нужен интернет. Проверьте формат и попробуйте ещё раз.';
+    if(job===controller) {
+      const reasons={
+        PasswordException:'PDF защищён паролем. Выберите разблокированную копию.',
+        InvalidPDFException:'Не удалось прочитать структуру PDF. Попробуйте заново сохранить исходный листок.',
+        NotReadableError:'Телефон не смог прочитать выбранный файл. Сохраните его на устройстве и выберите ещё раз.',
+        NotFoundError:'Файл недоступен. Откройте его в «Файлах», затем выберите ещё раз.',
+      };
+      failure=/^(Выберите|Не удалось прочитать|Не удалось загрузить модуль)/.test(e.message)
+        ? e.message : reasons[e.name] || 'Не удалось обработать содержимое файла. Попробуйте другую копию или фотографии страниц.';
+    }
   } finally {if(job===controller){status='';job=null;refresh();}}
 }
 
