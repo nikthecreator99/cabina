@@ -11,7 +11,9 @@ page.on('pageerror',e=>console.log('pageerror',e.message));
 await context.addInitScript(()=>{localStorage.setItem('cabina-tours-off','1');localStorage.setItem('cabina-awards-quiet','1');});
 await page.goto(process.env.CAB_URL||'https://cabina-app.ru/',{waitUntil:'domcontentloaded'});
 try{await page.evaluate(()=>navigator.serviceWorker.ready);await page.reload({waitUntil:'domcontentloaded'});}catch{}
-await page.getByRole('button',{name:'Начать',exact:true}).click();await page.waitForSelector('.layer',{state:'detached'});
+await page.waitForSelector('.screen');
+const welcome=page.locator('[data-act=onb-ok]');
+if(await welcome.isVisible()){await welcome.click();await page.waitForSelector('.layer',{state:'detached'});}
 await page.locator('.tab[data-tab=extra]').click();
 await page.locator('button[data-page=payslip]').click();
 await page.locator('#ps-files').setInputFiles(dir+'/sample.pdf');
