@@ -1,0 +1,21 @@
+name: Check published payslip screen
+on:
+  push:
+    branches: [codex/check-payslip-site]
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Verify deployed public static assets
+        run: |
+          for i in $(seq 1 15); do
+            if curl -fsS --max-time 8 "https://cabina-app.ru/sw.js?release=2.34.3-$i" | grep -q 'cabina-v2.34.3' &&
+               curl -fsS --max-time 8 https://cabina-app.ru/js/payslip.js | grep -q 'ps-correction' &&
+               curl -fsSI --max-time 8 https://cabina-app.ru/js/vendor/payslip/rus.traineddata.gz | grep -iq '^HTTP/.* 200'; then
+              echo "Published main app and OCR model verified"; exit 0
+            fi
+            sleep 15
+          done
+          exit 1
