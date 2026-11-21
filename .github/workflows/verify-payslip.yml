@@ -1,0 +1,20 @@
+name: Test local payslip reader
+on:
+  push:
+    branches: [codex/test-payslip*]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CHROMIUM_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: node --test --test-concurrency=1 tests/e2e/payslip.test.js tests/e2e/v234*.test.js
