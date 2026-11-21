@@ -22,6 +22,7 @@ import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, re
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderGrowth, growthClick } from './growth.js';
+import { payslipCard, renderPayslip, loadPayslip, clearPayslip } from './payslip.js';
 import { initAi, renderAi, aiClick, aiInput, aiKey, aiEnter, aiCardHtml } from './ai.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
@@ -47,7 +48,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.34.2';
+export const VERSION = '2.34.3';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -400,6 +401,7 @@ function renderExtra() {
     // CABINA AI (2.34, решение Никиты 14.11.2026) — в самом верху, крупной плашкой, в перестановке не участвует
     html = `<div class="page-head"><h1>Ещё</h1></div>
       ${aiCardHtml()}
+      ${payslipCard()}
       <div class="panel extra-list" id="extra-list">${extraOrder().map((k) => rows[k]).join('')}</div>
       <p class="hint extra-tip">Порядок можно поменять: удержите строку пальцем и двигайте вверх или вниз.</p>`;
   }
@@ -584,7 +586,7 @@ function renderSetAbout() {
 // ---------------------------------------------------------------- рендер и навигация
 // Гость (2.26): награды, рекорды и персонаж — с аккаунтом; вместо экрана — что там будет и «Зарегистрироваться»
 const locked = (kind, fn) => () => (isGuest() ? guestLockHtml(kind) : fn());
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe, growth: renderGrowth, ai: renderAi };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe, growth: renderGrowth, ai: renderAi, payslip: renderPayslip };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // Уведомления (2.28): ответы на мои идеи и (у администратора) новые идеи подгружаем не чаще раза в 2 минуты, на «Профиле» — раз в 30 секунд;
@@ -621,6 +623,7 @@ function renderTabbar() {
 // иначе экран «дёргается»
 function render({ still = false } = {}) {
   const p = page();
+  if (p !== 'payslip') clearPayslip();
   if (V.sel && (p || V.tab !== 'home')) V.sel = null;
   document.body.classList.toggle('selecting', !!V.sel);
   app.classList.toggle('still', still);
@@ -997,6 +1000,7 @@ app.addEventListener('input', (e) => {
 
 app.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.id === 'ps-files') { await loadPayslip([...t.files], rerender); return; }
   if (await workChange(e)) return;
   if (await profileChange(e)) return;
   if (avatarChange(e)) return;
