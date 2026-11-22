@@ -1,0 +1,26 @@
+name: Проверка Cabina 2.35.1
+on:
+  push:
+    branches: [codex/verify-2351-slip]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, webkit]
+    env:
+      CHROMIUM_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - if: matrix.engine == 'webkit'
+        run: npx playwright install --with-deps webkit && CHECK_WEBKIT=yes node --test tests/e2e/payslip-trips.test.js
+      - if: matrix.engine == 'chromium'
+        run: node --test --test-concurrency=1 tests/e2e/payslip*.test.js tests/e2e/app.test.js tests/e2e/v2249-norm.test.js
