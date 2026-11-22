@@ -48,7 +48,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.35.2';
+export const VERSION = '2.35.3';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -403,8 +403,10 @@ function renderExtra() {
     // CABINA AI (2.34, решение Никиты 14.11.2026) — в самом верху, крупной плашкой, в перестановке не участвует
     html = `<div class="page-head"><h1>Ещё</h1></div>
       ${aiCardHtml()}
-      ${payslipCard()}
-      <div class="panel extra-list" id="extra-list">${extraOrder().map((k) => rows[k]).join('')}</div>
+      <div class="panel ps-menu">
+        ${payslipCard()}
+        <div class="extra-list" id="extra-list">${extraOrder().map((k) => rows[k]).join('')}</div>
+      </div>
       <p class="hint extra-tip">Порядок можно поменять: удержите строку пальцем и двигайте вверх или вниз.</p>`;
   }
   return html;

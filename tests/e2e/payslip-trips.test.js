@@ -17,7 +17,7 @@ test('сверка с поездками определяет месяц из PD
     await page.locator('button[data-page=payslip]').click();
     const audit=page.locator('.ps-panel').filter({has:page.locator('#ps-files')});
     assert.equal(await audit.locator('[data-act=ps-compare]').count(),0);
-    await page.getByRole('button',{name:'Перейти к сверке поездок'}).click();
+    await page.getByRole('button',{name:/Сверить с поездками в CABINA/}).click();
     assert.equal(await page.locator('#ps-month').inputValue(),'');
     // iOS возвращает страницу из системного окна выбора файла до события change.
     assert.equal(await page.locator('#ps-files').evaluate(input=>{
@@ -30,6 +30,11 @@ test('сверка с поездками определяет месяц из PD
     await page.locator('#ps-month').selectOption('2026-04');
     assert.match(await report.innerText(),/Выбран апрель 2026, в листке указан май 2026/);
     await page.locator('#ps-month').selectOption('2026-05');
-    assert.match(await report.innerText(),/Всего отработано[\s\S]*Cabina · 7 ч/);
+    assert.match(await report.innerText(),/Всего отработано[\s\S]*CABINA · 7 ч/);
+    await page.getByRole('button',{name:'Назад'}).click();
+    assert.equal(await page.locator('#ps-month').count(),0);
+    await page.getByRole('heading',{name:'Проверить начисления'}).waitFor();
+    await page.getByRole('button',{name:'Назад'}).click();
+    assert.equal(await page.locator('.ps-menu button[data-page=payslip]').count(),1);
   } finally {if(phone!==env.browser) await phone.close();await env.stop();}
 });
