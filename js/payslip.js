@@ -9,11 +9,33 @@ const title='Проверка расчетного листка';
 const labels={ok:['✓','Сошлось'],approx:['≈','Приблизительно'],diff:['!','Расхождение'],info:['i','Справочно'],unknown:['?','Недостаточно данных']};
 const groups={earnings:'Начислено',deductions:'Удержано и перечислено',natural:'Доходы в натуральной форме'};
 let job=null,status='',result='',failure='',generation=0,ocrText='',editing=false;
-let compare=false,selectedMonth='',savedPeriod='';
+let compare=false,selectedMonth='',savedPeriod='',lastSheet=null,lastOCR=false;
 export function clearPayslip() {clearDocument(); compare=false; selectedMonth='';}
-export function choosePayslipMonth(month,refresh) {clearDocument();selectedMonth=validMonth(month)?month:'';refresh();}
+export function choosePayslipMonth(month,refresh) {
+  selectedMonth=validMonth(month)?month:'';
+  if(lastSheet) result=report(lastSheet,lastOCR);
+  refresh();
+}
+function periodKey(period) {
+  const [name,year]=String(period||'').split(' '), month=months.indexOf(name)+1;
+  const key=year+'-'+String(month).padStart(2,'0');
+  return validMonth(key)?key:'';
+}
+function monthOptions() {
+  const keys=new Set([selectedMonth,periodKey(lastSheet?.period)]);
+  for(const trip of S.trips) {
+    for(const date of [trip.start,trip.end]) if(typeof date==='string') keys.add(date.slice(0,7));
+  }
+  const now=new Date();
+  for(let i=0;i<24;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    keys.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+  }
+  return '<option value="">Определить по листку</option>'+[...keys].filter(validMonth).sort().reverse().map(key=>
+    '<option value="'+key+'"'+(key===selectedMonth?' selected':'')+'>'+monthLabel(key)+'</option>').join('');
+}
 function clearDocument() {
-  savedPeriod='';
+  savedPeriod='';lastSheet=null;lastOCR=false;
   job?.abort(); job=null;status='';result='';failure='';generation++;ocrText='';editing=false;
 }
 export function payslipCard() {
@@ -51,10 +73,11 @@ function section(spec,checks,items) {
 }
 function report(sheet,ocr) {
   if(compare){
-    const {message,rows,count}=compareTrips(sheet,selectedMonth,S.trips,S.absences,myPay());
+    const key=selectedMonth||periodKey(sheet.period);
+    const {message,rows,count}=compareTrips(sheet,key,S.trips,S.absences,myPay());
     const value=h=>Number.isFinite(h)?h.toLocaleString('ru-RU')+' ч':'—';
-    const body=message?'<p>'+esc(message)+'</p>':'<p>Поездок за месяц — '+count+'</p><ul>'+rows.map(x=>row({...x,detail:'Кабина · '+value(x.cabina)+' / Листок · '+value(x.sheet)+'. '+x.detail})).join('')+'</ul>';
-    return '<section class="panel ps-panel" id="ps-details" data-report="'+generation+'"><h2>Сверка за '+esc(monthLabel(selectedMonth))+'</h2>'+body+'<button class="btn btn-ghost" data-act="ps-clear">Очистить отчёт</button></section>';
+    const body=message?'<p>'+esc(message)+'</p>':'<p>Поездок за месяц — '+count+'</p><ul>'+rows.map(x=>row({...x,detail:'Cabina · '+value(x.cabina)+' / Листок · '+value(x.sheet)+'. '+x.detail})).join('')+'</ul>';
+    return '<section class="panel ps-panel" id="ps-details" data-report="'+generation+'"><h2>Сверка за '+esc(validMonth(key)?monthLabel(key):'выбранный месяц')+'</h2>'+body+'<button class="btn btn-ghost" data-act="ps-clear">Очистить отчёт</button></section>';
   }
   const payout=takeHome(sheet);
   const raw=paySet(S.settings.pay,S.profile.role),profile={};
@@ -84,16 +107,20 @@ export function renderPayslip() {
     shown=shown.replace(attr+'>',attr+' open>');
   }
   const choose='<label class="btn '+(result?'btn-ghost':'btn-primary')+' ps-upload">'+(result?'Выбрать другой листок':'Выбрать PDF или фото')+'<input aria-label="Выбрать PDF или фото" id="ps-files" type="file" accept="application/pdf,image/*" multiple></label>';
-  return pageHead(title,{back:true})+shown+'<section class="panel ps-panel">'+
-    (compare?'<h2>Сверка с поездками в Кабине</h2><label for="ps-month">Месяц поездок</label><input class="input" id="ps-month" type="month" value="'+esc(selectedMonth)+'">':result?'':'<h2>Загрузите листок</h2><p>PDF формы ФТУ-69 или фото всех страниц за месяц.</p>')+
-    '<p class="ps-private">'+small(I.shield,18)+' Файл обрабатывается на устройстве. Перед выбором закройте ФИО, табельный номер и реквизиты. На устройстве сохраняются месячные итоги для прогноза премии.</p>'+(!compare||selectedMonth?choose:'')+
-    (compare?'<button class="btn btn-ghost" data-act="ps-audit">Проверить сам листок</button>':'<button class="btn btn-ghost" data-act="ps-compare">Сверить с поездками в Кабине</button>')+
-    '<div role="status" class="hint">'+esc(status||failure)+'</div></section>'+
+  const privacy='<p class="ps-private">'+small(I.shield,18)+' Файл обрабатывается на устройстве. Закройте ФИО, табельный номер и реквизиты. Для прогноза премии сохраняются месячные итоги.</p>';
+  const feedback='<div role="status" class="hint">'+esc(status||failure)+'</div>';
+  const audit='<section class="panel ps-panel"><h2>Проверить сам листок</h2><p>Сверьте начисления, удержания и сумму на руки по цифрам из листка.</p>'+choose+feedback+'</section>';
+  const trips='<section class="panel ps-panel"><h2>Сверить с поездками в Cabina</h2><p>Сравните часы в листке с поездками, которые вы записали за месяц.</p>'+
+    (compare?'<label class="ps-month-label" for="ps-month">Месяц поездок</label><select class="input" id="ps-month">'+monthOptions()+'</select>'+choose+feedback:
+      '<button class="btn btn-ghost" data-act="ps-compare">Перейти к сверке поездок</button>')+'</section>';
+  return pageHead(title,{back:true})+(compare?'<button class="btn btn-ghost ps-return" data-act="ps-audit">‹ К выбору проверки</button>':'')+shown+
+    (compare?'':audit)+trips+privacy+
     (ocrText?'<section class="panel ps-panel">'+(editing?'<label for="ps-correction">Сверьте текст с оригиналом. В кодах строк распознавание может перепутать букву L и цифру 1.</label><textarea id="ps-correction" rows="9" spellcheck="false" autocorrect="off" autocomplete="off">'+esc(ocrText)+'</textarea><button class="btn btn-primary" data-act="ps-apply">Пересчитать</button>':'<button class="btn btn-ghost" data-act="ps-edit">Исправить распознавание</button>')+'</section>':'');
 }
 async function acceptSheet(sheet,ocr) {
+  lastSheet=sheet; lastOCR=ocr;
   result=report(sheet,ocr);
-  if(!compare || sheet.period===monthLabel(selectedMonth)){
+  if(!compare || !selectedMonth || sheet.period===monthLabel(selectedMonth)){
     const previous=savedPeriod;
     savedPeriod=sheet.period;
     await rememberPayslipBonus(sheet,previous);
@@ -101,7 +128,7 @@ async function acceptSheet(sheet,ocr) {
 }
 export async function loadPayslip(files,refresh) {
   if(!files.length) return;
-  if(compare && !validMonth(selectedMonth)) return;
+
   clearDocument();const controller=new AbortController();job=controller;
   const update=s=>{if(job===controller){status=s;refresh();}};
   try {
@@ -127,7 +154,12 @@ export async function loadPayslip(files,refresh) {
 }
 
 export async function payslipAction(act,refresh) {
-  if(act==='ps-compare'||act==='ps-audit'){clearPayslip();compare=act==='ps-compare';refresh();return true;}
+  if(act==='ps-compare'||act==='ps-audit'){
+    const sheet=lastSheet, text=ocrText, ocr=lastOCR;
+    clearPayslip();compare=act==='ps-compare';
+    if(sheet){lastSheet=sheet;ocrText=text;lastOCR=ocr;result=report(sheet,ocr);}
+    refresh();window.scrollTo(0,0);return true;
+  }
   if(act==='ps-clear') {clearDocument();refresh();return true;}
   if(act==='ps-edit') { editing=true;refresh();document.querySelector('#ps-correction')?.focus();return true; }
   if(act!=='ps-apply') return false;

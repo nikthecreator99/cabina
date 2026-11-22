@@ -48,7 +48,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.35.0';
+export const VERSION = '2.35.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -222,10 +222,10 @@ function renderHome() {
   const payCtx = hasRate(cfg) ? { cfg, or: overRestByTrip() } : null;
   const pay = payCtx ? payMonth(V.y, V.m, S.trips, S.absences, cfg, statsOf, { overRest: overRestIntervals(S.trips, statsOf) }) : null;
 
-  // В скобках — дата и норма на эту дату, как на листке в депо.
+  // На второй строке — норма на сегодняшнюю дату.
   const soFar = isCurrent ? normSoFar(V.y, V.m, dateKeyOf(now), S.absences, sum.norm) : null;
   const showSoFar = soFar != null && sum.normMin > 0 && Math.round(soFar * 60) !== sum.normMin;
-  const normHead = `<div class="hero-norm" id="hero-norm">Норма: <b class="num">${fmtHours(sum.norm)}</b>${showSoFar ? ` <span class="so-far">(на ${dayMonth(now)} — <span class="num">${fmtHours(soFar)}</span>)</span>` : ''}</div>`;
+  const normHead = `<div class="hero-norm" id="hero-norm">Норма: <b class="num">${fmtHours(sum.norm)}</b>${showSoFar ? `<span class="so-far">На ${dayMonth(now)} — <span class="num">${fmtHours(soFar)}</span></span>` : ''}</div>`;
   let normHtml = '';
   if (sum.normMin === 0 && sum.base > 0) normHtml = `<div class="norm-full">Норма на этот месяц полностью покрыта отвлечениями.</div>`;
   else if (sum.absTotal > 0) normHtml = `<div class="norm-sub">${fmtHours(sum.base)} по календарю − ${fmtHours(sum.absTotal)} отвлечений</div>`;
@@ -1134,7 +1134,7 @@ async function start() {
   // раз в минуту: время «в пути», остаток отдыха и статус в профиле
   setInterval(() => { if ((V.tab === 'home' || V.tab === 'profile') && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); colleaguesTick(); }, 60000);
   initPull({ can: canPull, refresh: pullRefresh, style: () => pullStyle(S.settings.pullAnim), screen: app });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { colleaguesWake(); if (!layerCount()) rerender(); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { colleaguesWake(); if (!layerCount() && page() !== 'payslip') rerender(); } });
   registerSW();
 }
 
