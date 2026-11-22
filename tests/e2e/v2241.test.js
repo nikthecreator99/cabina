@@ -29,11 +29,21 @@ test('«Заработано» под нормой; «Отвлечения» —
   assert.ok(b.height >= 40, 'удобно нажать пальцем');
   assert.ok(await page.locator('.hero-abs').evaluate((el) => parseFloat(getComputedStyle(el, '::before').height) >= 44), 'зона нажатия не меньше 44 px');
   // «Заработано» — под нормой, выше линии (над ночными и кнопкой)
-  assert.equal(await page.locator('.hero-left .hero-pay').count(), 1);
+  assert.equal(await page.locator('.hero > .hero-pay').count(), 1);
   const pay = await page.locator('.hero-pay').boundingBox();
   const foot = await page.locator('.hero-foot').boundingBox();
   const norm = await page.locator('.hero .big').boundingBox(); // 2.24.9: норма — вверху карточки, под ней часы
   assert.ok(pay.y > norm.y && pay.y + pay.height <= foot.y, '«Заработано» между нормой и линией');
+  const mid = ({ x, width }) => x + width / 2;
+  const stats = await page.locator('.hero-link > span').boundingBox();
+  const ring = await page.locator('.hero .ring').boundingBox();
+  const remain = await page.locator('.hero .remain').boundingBox();
+  assert.ok(Math.abs(mid(stats) - mid(ring)) < 1 && Math.abs(mid(ring) - mid(remain)) < 1);
+  const monthly = await page.locator('#hero-norm').boundingBox();
+  assert.ok(Math.abs((foot.y - pay.y - pay.height) - (monthly.y - hero.y)) < 5);
+  await page.locator('.hero-link').click();
+  await page.locator('.screen[data-page=stats]').waitFor();
+  await page.locator('.screen .page-head [data-act=back]').click();
   // карточка ниже — «Добавить поездку»
   const add = await page.locator('[data-act=add-trip]').boundingBox();
   assert.ok(add.y > hero.y + hero.height - 1);
@@ -54,7 +64,10 @@ test('«Заработано» под нормой; «Отвлечения» —
 });
 
 test('320 px, светлая тема, очень крупный текст: кнопка в карточке, без прокрутки вбок; без поездок кнопка тоже есть', async () => {
-  for (const [textSize, trips] of [['xl', TRIPS], ['m', []]]) {
+  const longMonth = Array.from({length:11}, (_,i)=>({
+    id:'shift-'+i, start:`2026-10-${String(i+1).padStart(2,'0')}T16:00`, end:`2026-10-${String(i+2).padStart(2,'0')}T04:00`,
+  }));
+  for (const [textSize, trips] of [['xl', longMonth], ['m', []]]) {
     const { context, page, errors } = await openApp(env);
     await page.setViewportSize({ width: 320, height: 760 });
     await seed(page, { trips, settings: { theme: 'light', textSize, pay: trips.length ? PAY : undefined } });
@@ -64,6 +77,8 @@ test('320 px, светлая тема, очень крупный текст: к�
     const b = await page.locator('.hero [data-act=absences]').boundingBox();
     const hero = await page.locator('.hero').boundingBox();
     assert.ok(b.x >= hero.x && b.x + b.width <= hero.x + hero.width, 'кнопка внутри карточки');
+    const hours = page.locator('.hero .big');
+    assert.equal(await hours.evaluate(el=>el.scrollWidth<=el.clientWidth),true, 'цифры и единицы в своей колонке');
     assert.deepEqual(errors, []);
     await context.close();
   }

@@ -77,12 +77,10 @@ const consentBox = (id, text, act, icon, btn) => `<div class="pay-field"><div cl
 const docsBtns = `<div class="acc-docs"><button type="button" class="link-btn" data-act="acc-consent-doc">${small(I.shield, 16)} Согласие</button><button type="button" class="link-btn" data-act="acc-policy">${small(I.book, 16)} Политика</button></div>`;
 const localNote = `<div class="notice ok">${I.shield}<div><b>Аккаунт не обязателен.</b> Без него CABINA работает как раньше. Поездки, заработок, отвлечения и документы хранятся только в этом телефоне и на сервер не отправляются — с аккаунтом тоже.</div></div>`;
 
-function signedInHtml(s, colHtml) {
+function signedInHtml(colHtml) {
   // «Мои данные на сервере» (2.19.3 — вместо длинной плашки; с 2.21.2 — в группе «Документы», просьба Никиты);
   // полный список того, что хранит сервер, и «Не на сервере» — в её окне (myDataHtml)
-  return `<div class="panel"><div class="row"><span class="ico" style="--c:var(--ok)">${I.user}</span>
-      <div class="grow"><div class="t1 acc-email">${esc(s.email)}</div></div></div></div>
-    ${colHtml}
+  return `${colHtml}
     <div class="group"><div class="group-title">Документы</div>
       <div class="panel">
         <button class="row" data-act="acc-export"><span class="ico" style="--c:var(--ok)">${I.database}</span><div class="grow"><div class="t1">Мои данные на сервере</div><div class="t2">Поездок и заработка там нет</div></div>${small(I.right, 18)}</button>
@@ -142,7 +140,7 @@ function formHtml() {
 export function renderAccount(colHtml = '') {
   const s = session();
   return `${pageHead('Настройки аккаунта', { back: true })}
-    ${s && A.mode !== 'newpass' ? signedInHtml(s, colHtml) : formHtml()}`;
+    ${s && A.mode !== 'newpass' ? signedInHtml(colHtml) : formHtml()}`;
 }
 
 // ---------------------------------------------------------------- действия

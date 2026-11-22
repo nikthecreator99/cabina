@@ -48,7 +48,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.35.1';
+export const VERSION = '2.35.2';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -128,7 +128,7 @@ function ring(pct) {
 
 function bigDur(min) {
   const v = Math.round(min);
-  return `<span>${Math.floor(v / 60)}</span><small>ч</small><span>${p2(v % 60)}</span><small>мин</small>`;
+  return `<span>${Math.floor(v / 60)}<small>ч</small></span><span>${p2(v % 60)}<small>мин</small></span>`;
 }
 
 function tripRow(t, mk, payCtx) {
@@ -275,13 +275,15 @@ function renderHome() {
 
       </div>
       <section class="glass hero" data-act="stats" role="button" tabindex="0" aria-label="Итоги месяца — открыть статистику">
-        <div class="hero-top">${normHead}<span class="hero-link">Статистика ›</span></div>
+        ${normHead}
+        <span class="hero-link"><span>Статистика<span class="hero-chevron" aria-hidden="true">›</span></span></span>
         <div class="hero-left">
           <div class="big num ${Math.floor(Math.round(sum.work) / 60) >= 100 ? 'long' : ''}" aria-label="Отработано в ${MONTHS_PREP[V.m - 1]}: ${fmtDur(sum.work)}">${bigDur(sum.work)}</div>
           ${normHtml}
-          ${payHtml}
         </div>
-        <div class="hero-right">${ring(sum.normMin === 0 ? null : pct)}${remainHtml}</div>
+        ${ring(sum.normMin === 0 ? null : pct)}
+        ${payHtml}
+        ${remainHtml}
         <div class="hero-foot"><div class="hero-row">${linesHtml}<button class="btn hero-abs" data-act="absences">Отвлечения${absCount ? `<span class="count" aria-label="в этом месяце: ${absCount}">${absCount}</span>` : ''}</button></div></div>
       </section>
     </div>

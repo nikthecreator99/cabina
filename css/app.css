@@ -168,21 +168,31 @@ body .home-top.on-sky .round-btn, body .home-top.on-sky .chip-btn, body .home-to
   backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
   box-shadow: var(--shadow);
 }
-.hero { padding: 16px 16px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; cursor: pointer; text-align: left; }
+.hero {
+  padding: 16px 16px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(94px, 30%, 128px);
+  grid-template-areas: "norm stats" "time ring" "pay remain" "footer footer";
+  gap: 10px 12px;
+  align-items: center;
+  cursor: pointer;
+  text-align: left;
+}
 .hero:active { transform: scale(.995); }
-.hero-top { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.hero-link { font-size: calc(13px * var(--fs)); font-weight: 700; color: var(--text-2); white-space: nowrap; }
-.hero-right { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.hero-foot { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
-/* «Заработано» — под нормой, выше линии (2.24.1, по фото Никиты); узко — сумма переносится строкой ниже */
-.hero-pay { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; margin-top: 8px; font-size: calc(16px * var(--fs)); color: var(--text-2); }
-.hero-pay .pay-sum { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.hero-link { grid-area: stats; align-self: start; text-align: center; font-size: calc(13px * var(--fs)); font-weight: 700; color: var(--text-2); }
+.hero-link > span { position: relative; display: inline-block; }
+.hero-chevron { position: absolute; inset-inline-start: 100%; margin-inline-start: .35em; }
+.hero > .ring { grid-area: ring; justify-self: center; }
+.hero > .remain { grid-area: remain; align-self: end; }
+.hero-foot { grid-area: footer; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+.hero-pay { grid-area: pay; align-self: end; justify-self: start; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; max-width: 100%; font-size: calc(16px * var(--fs)); color: var(--text-2); }
+.hero-pay .pay-sum { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; max-width: 100%; }
 .hero-pay svg { color: var(--ok); }
 .hero-pay b { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
-button.hero-pay.set { display: inline-flex; color: var(--ok); font-weight: 700; min-height: 32px; }
+button.hero-pay.set { display: inline-flex; flex-direction: row; align-items: center; color: var(--ok); font-weight: 700; min-height: 32px; }
 /* «Отвлечения» — в карточке месяца справа внизу, на одной строке с «Ночные» (2.24.1, по фото Никиты) */
 .hero-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px 10px; }
-.hero-row .hero-lines { flex: 1 1 130px; min-width: 0; align-self: center; }
+.hero-row .hero-lines { flex: 1 1 84px; min-width: 0; align-self: center; }
 /* 2.24.9 (просьба Никиты): без пальмы и синего свечения, чуть компактнее */
 .btn.hero-abs { width: auto; flex: none; margin-left: auto; min-height: 40px; padding: 0 14px; gap: 6px; border-radius: 12px; font-size: calc(15px * var(--fs)); font-weight: 600;
   color: var(--text); background: var(--card-2); border: 1px solid var(--line-2); box-shadow: none; position: relative; }
@@ -194,7 +204,7 @@ button.hero-pay.set { display: inline-flex; color: var(--ok); font-weight: 700; 
 .hl-sick span { color: var(--sick); } .hl-vacation span { color: var(--vacation); } .hl-medical span { color: var(--medical); } .hl-study span { color: var(--study); }
 .btn .count { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 99px; background: var(--accent); color: #fff; font-size: calc(13px * var(--fs)); font-weight: 800; display: inline-grid; place-items: center; margin-left: 2px; }
 /* Месячная норма и норма на текущую дату вверху карточки месяца */
-.hero-norm { font-size: calc(15px * var(--fs)); color: var(--text-2); font-weight: 600; min-width: 0; }
+.hero-norm { grid-area: norm; font-size: calc(15px * var(--fs)); color: var(--text-2); font-weight: 600; min-width: 0; }
 .hero-norm b { color: var(--text); font-weight: 800; }
 .hero-norm .so-far { display: block; margin-top: 4px; font-size: calc(13px * var(--fs)); color: var(--text-2); font-weight: 500; }
 .hero-norm .so-far .num { white-space: nowrap; }
@@ -215,7 +225,10 @@ button.hero-pay.set { display: inline-flex; color: var(--ok); font-weight: 700; 
 .ring .ring-track { stroke: var(--line-2); }
 .ring .ring-val { transition: stroke-dashoffset .6s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 0 6px rgba(255, 61, 61, .55)); }
 .ring-label { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: calc(clamp(17px, 5vw, 22px) * var(--fs)); font-variant-numeric: tabular-nums; }
-.hero-left { min-width: 0; }
+.hero-left { grid-area: time; min-width: 0; container-type: inline-size; }
+.hero .big { display: flex; flex-wrap: wrap; column-gap: .14em; font-size: min(clamp(34px, 12vw, 56px), 23cqi); }
+.hero .big.long { font-size: min(clamp(29px, 9vw, 45px), 20cqi); }
+.hero .big small { margin-right: 0; }
 .bar { grid-column: 1 / 2; height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; margin-top: 8px; }
 .bar > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 14px rgba(255, 61, 61, .6); transition: width .6s cubic-bezier(.2,.8,.2,1); }
 .bar.full > i { background: linear-gradient(90deg, var(--ok), #6be3b2); box-shadow: 0 0 14px rgba(47, 208, 138, .5); }
