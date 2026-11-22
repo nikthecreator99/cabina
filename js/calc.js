@@ -349,6 +349,12 @@ export function monthSummary(y, m, trips, absences) {
   return { mk, base, absTotal, norm, normMin, work, night, holiday, restDay, wait, pass, overtime, absByType, pct, monthTrips, monthAbs };
 }
 
+// Недоработка в статистике: только завершённый месяц, за который есть записи.
+export function finishedMonthShortfall(sum, currentMonth) {
+  if (sum.mk >= currentMonth || !(sum.monthTrips.length || sum.monthAbs.length)) return 0;
+  return Math.max(0, sum.normMin - sum.work);
+}
+
 // Норма на сегодня (2.24.9, как нарастающий итог на листке в депо): часы дней с 1-го числа по `todayKey`
 // включительно, без дней отвлечений. Не больше нормы месяца с учётом отвлечений.
 export function normSoFar(y, m, todayKey, absences, monthNormH) {

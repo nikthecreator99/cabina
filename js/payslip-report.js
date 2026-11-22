@@ -10,6 +10,18 @@ function check(title,expected,actual,formula,tolerance=0) {
   const status=diff===0?'ok':Math.abs(diff)<=tolerance?'approx':'diff';
   return note(status,title,formula+' = '+rub(expected)+'. В листке '+rub(actual)+'.'+(diff?' Разница '+rub(diff/100)+'.':''));
 }
+export function takeHome(s) {
+  const holds=s.rows.filter(r=>r.kind==='deductions');
+  const advance=sum(holds.filter(r=>r.code==='880A'));
+  let {bank,cash}=s;
+  if(known(s.gross,s.deducted)) {
+    const balance=Math.round((s.gross-s.deducted)*100);
+    if(!known(cash)&&known(bank)&&Math.round(bank*100)===balance) cash=0;
+    if(!known(bank)&&known(cash)&&Math.round(cash*100)===balance) bank=0;
+  }
+  const partial=s.unread>0 || (known(s.deducted)&&sum(holds)!==s.deducted);
+  return {advance,bank,cash,total:!partial&&known(bank,cash)?Math.round((advance+bank+cash)*100)/100:null};
+}
 const names={
   '004':'Повременная оплата по тарифной ставке','010':'Премия за работу','011':'Премия рабочим по времени','018':'Оплата по тарифу','023':'Доплата за работу в ночное время','026':'Районный коэффициент','027':'Северная надбавка','035':'Оплата выходных дней сверх нормы времени','049':'Техническая учёба в нерабочее время','052':'Оплата по тарифу','057':'Доплата за вредные условия труда','072':'Оплата работы сверх нормы часов','073':'Доплата за сверхурочные','076':'Доплата за выходные и праздники сверх нормы','152':'Доплата за тяжеловесные и длинносоставные поезда','172':'Выплата за время отдыха сверх нормы','174':'Оплата медосвидетельствования','248':'Премия за экономию ресурсов','349':'Возмещение расходов на наём жилья','461':'Компенсация дополнительных расходов, суточные','880':'Плановый аванс','881':'Разовая выплата через банк','883':'Удержанный НДФЛ','902':'Профсоюзные взносы','932':'Удержание взноса',
 };

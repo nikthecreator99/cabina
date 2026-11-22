@@ -27,8 +27,8 @@ test('первый запуск: приветствие, затем пустой
   await page.getByRole('button', { name: 'Начать' }).click();
   await waitNoLayers(page);
   assert.equal(await text(page, '.month-title'), 'Октябрь');
-  // 2.24.9: вверху — «Норма 179 ч (113 ч)»: месяц по шестидневке и норма с 1-го по сегодня (20 октября)
-  assert.match(await text(page, '#hero-norm'), /^Норма 179 ч \(113 ч\)$/);
+  // 2.24.9: вверху — «Норма: 179 ч (на 20 октября — 113 ч)»: месяц по шестидневке и норма с 1-го по сегодня (20 октября)
+  assert.match(await text(page, '#hero-norm'), /^Норма: 179 ч \(на 20 октября — 113 ч\)$/);
   // ставка не указана — вместо заработка ссылка на тарифные ставки
   assert.match(await text(page, '.hero'), /Указать ставку/);
   assert.match(await text(page, '.empty'), /В октябре поездок нет/);
@@ -112,7 +112,7 @@ test('отвлечение уменьшает норму и открываетс
   await f.locator('[data-act=save-abs]').click();
   await waitNoLayers(page);
   const hero = await text(page, '.hero');
-  assert.match(hero, /Норма 165 ч \(99 ч\)/);
+  assert.match(hero, /Норма: 165 ч \(на 20 октября — 99 ч\)/);
   assert.match(hero, /179 ч по календарю − 14 ч отвлечений/);
   assert.match(await text(page, '.hero-lines'), /Отпуск:\s*−14 ч/);
   assert.equal(await text(page, '[data-act=absences] .count'), '1');
@@ -279,7 +279,7 @@ test('переключение месяцев и возврат к текуще�
   // 2.6: не текущий месяц — название становится кнопкой «к сегодня»
   assert.match(await text(page, '.month-title'), /^Ноябрь\s+к сегодня$/);
   // не текущий месяц — без нормы на сегодня в скобках
-  assert.match(await text(page, '#hero-norm'), /^Норма 159 ч$/);
+  assert.match(await text(page, '#hero-norm'), /^Норма: 159 ч$/);
   await page.locator('[data-act=next]').click();
   await page.locator('[data-act=next]').click();
   assert.match(await text(page, '.month-title'), /^Январь 2027\s+к сегодня$/);
@@ -346,7 +346,7 @@ test('резервная копия: сохранить и восстанови�
   await two.page.waitForFunction(() => document.querySelector('.toast-wrap')?.innerText.includes('Данные восстановлены'));
   await tab(two.page, 'home');
   assert.match(await text(two.page, '.trip'), /Няндома → Коноша/);
-  assert.match(await text(two.page, '.hero'), /Норма 165 ч/);
+  assert.match(await text(two.page, '.hero'), /Норма: 165 ч/);
   await two.context.close();
 });
 

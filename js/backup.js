@@ -4,6 +4,7 @@
 // недостающие поля дополняются при загрузке (store.loadAll).
 export const FORMAT = 2;
 import * as db from './db.js';
+import { isBonusRecord } from './payslip-bonus.js';
 import { S, loadAll, emit } from './store.js';
 import { confirmDialog, toast, plural, saveToDevice } from './ui.js';
 
@@ -37,6 +38,7 @@ const fromB64 = (b64) => {
 export async function exportBackup({ withDocs = true, version }) {
   const data = {};
   for (const s of ['trips', 'absences', 'routes', 'notes', 'meta']) data[s] = await db.getAll(s);
+  data.meta = data.meta.filter(r => !isBonusRecord(r.id));
   data.trips = data.trips.map((t) => { const c = { ...t }; delete c._stats; delete c._statsAt; return c; });
   if (withDocs) {
     data.files = await db.getAll('files');
@@ -78,7 +80,7 @@ export async function importBackup(file) {
   if (!ok) return false;
   try {
     const next = {
-      trips: d.trips || [], absences: d.absences || [], routes: d.routes || [], notes: d.notes || [], meta: d.meta || [],
+      trips: d.trips || [], absences: d.absences || [], routes: d.routes || [], notes: d.notes || [], meta: (d.meta || []).filter(r => !isBonusRecord(r.id)),
     };
     if (payload.withDocs) {
       next.files = (d.files || []).map((f) => (f.kind === 'file' ? { ...f, mime: safeMime(f.mime) } : f));

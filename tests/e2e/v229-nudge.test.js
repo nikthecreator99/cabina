@@ -53,6 +53,20 @@ test('днём, после урока сегодня и без серии — н
   }
 });
 
+test('плашка исчезает сама, а точка остаётся до продления серии', async () => {
+  const { context, page, errors } = await openApp(env, { now: EVENING });
+  await prepare(page);
+  await nag(page).waitFor();
+  await nag(page).waitFor({ state: 'detached', timeout: 12000 });
+  assert.equal(await dot(page), true);
+  await page.locator('.tab[data-tab=learn]').click();
+  await page.locator('.tab[data-tab=home]').click();
+  assert.equal(await nag(page).count(), 0);
+  assert.equal(await dot(page), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('крестик — до завтра; выключатель в окне «Ударный режим» — совсем', async () => {
   const { context, page, errors } = await openApp(env, { now: EVENING });
   await prepare(page);

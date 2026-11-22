@@ -2,7 +2,7 @@
 // Показываются только блоки, где есть данные.
 import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, MONTHS_PREP, plural, sheet, openLayer, closeLayer, hm } from './ui.js';
 import { S, statsOf, nowLocal, routeOf, locoLabel, normType, normNum, myPay, refreshLive, isPending, overRestByTrip, legRoute, locosOf, legKm } from './store.js';
-import { monthSummary, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN, legsOf } from './calc.js';
+import { monthSummary, finishedMonthShortfall, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN, legsOf } from './calc.js';
 import { dayInfo } from './calendar.js';
 import { payMonth, payTotal, overRestIntervals, hasRate, isAvg, rateOn, fmtRub, fmtH } from './pay.js';
 import { houseOf, dayOffIntervals } from './rest.js';
@@ -90,9 +90,11 @@ function collect(p) {
   const months = periodMonths(p);
   const keys = new Set(months.map(([y, m]) => mkOf(y, m)));
   const sums = months.map(([y, m]) => monthSummary(y, m, S.trips, S.absences));
-  const R = { months, sums, keys, work: 0, norm: 0, overtime: 0, night: 0, holiday: 0, wait: 0, abs: { sick: 0, vacation: 0, medical: 0, study: 0 } };
+  const currentMonth = monthKeyOf(nowLocal());
+  const R = { months, sums, keys, work: 0, norm: 0, overtime: 0, underwork: 0, night: 0, holiday: 0, wait: 0, abs: { sick: 0, vacation: 0, medical: 0, study: 0 } };
   for (const s of sums) {
     R.work += s.work; R.norm += s.normMin; R.overtime += s.overtime; R.night += s.night; R.holiday += s.holiday; R.wait += s.wait || 0;
+    R.underwork += finishedMonthShortfall(s, currentMonth);
     for (const k of Object.keys(R.abs)) R.abs[k] += s.absByType[k] || 0;
   }
   const trips = tripsIn(keys).sort((a, b) => statsOf(a).start - statsOf(b).start);
@@ -323,7 +325,8 @@ function tripsView(R) {
   const pct = R.norm > 0 ? Math.round((R.work / R.norm) * 100) : null;
   html += `<section class="st-hero"><div class="eyebrow">Отработано</div><div class="st-big num">${fmtDur(R.work, { short: true })}</div>
     <div class="st-sub">${R.norm > 0 ? `норма ${fmtDur(R.norm, { short: true })} · ${pct}%` : 'норма покрыта отвлечениями'}</div>${cmp}
-    ${R.overtime > 0 ? `<div class="st-pill warn">${small(I.overtime, 15)} Переработка ${fmtDur(R.overtime, { short: true })}</div>` : ''}</section>`;
+    ${R.overtime > 0 ? `<div class="st-pill warn">${small(I.overtime, 15)} Переработка ${fmtDur(R.overtime, { short: true })}</div>` : ''}
+    ${R.underwork > 0 ? `<div class="st-pill">Недоработка ${fmtDur(R.underwork, { short: true })}${ST.period === 'month' ? '' : ' за завершённые месяцы'}</div>` : ''}</section>`;
   if (ST.period === 'year' || (ST.period === 'all' && R.months.length > 1 && R.months.length <= 24)) {
     const items = R.months.map(([y, m], i) => ({ v: R.sums[i].work, norm: R.sums[i].normMin, label: R.months.length > 12 ? MONTHS_SHORT[m - 1][0] : MONTHS_SHORT[m - 1], full: `${MONTHS[m - 1]} ${y}` }));
     if (items.some((x) => x.v > 0)) html += block('Часы по месяцам', barChart(items, { fmt: (v) => fmtDur(v, { short: true }), normKey: 'norm', id: 'ch-hours' }));
@@ -464,18 +467,27 @@ function slipHtml(t, { single }) {
 
 function payView(R) {
   const cfg = myPay();
+  let premiumHint = '';
+  if (cfg.bonusEstimate != null) {
+    let detail = '';
+    if (cfg.mode === 'avg') detail = ' В режиме по среднему премия уже входит в часовую ставку.';
+    else if (!cfg.bonusFromSlips) detail = ` Для расчёта указан свой процент — ${String(cfg.bonus).replace('.', ',')}%.`;
+    premiumHint = `<div class="hint money">Средняя премия ≈ ${String(cfg.bonusEstimate).replace('.', ',')}%. Примерно: на основе ваших расчётных листков.${detail}</div>`;
+  } else if (S.bonusRecords.length) {
+    premiumHint = '<div class="hint">Чтобы оценить премию, загрузите листок за месяц работы и листок, в котором за него начислена премия.</div>';
+  }
   if (!hasRate(cfg)) {
-    return `<div class="empty"><div class="em-ico" style="--accent:var(--ok)">${I.wallet}</div><b>Укажите тарифную ставку</b><p>По ней приложение посчитает заработок на руки за каждую поездку, месяц и год.</p>
+    return `${premiumHint}<div class="empty"><div class="em-ico" style="--accent:var(--ok)">${I.wallet}</div><b>Укажите тарифную ставку</b><p>По ней приложение посчитает заработок на руки за каждую поездку, месяц и год.</p>
       <button class="btn btn-primary btn-sm" data-act="go" data-page="tariffs">Указать ставку</button></div>`;
   }
   const or = overRestIntervals(S.trips, statsOf);
   const months = R.months.map(([y, m]) => payMonth(y, m, S.trips, S.absences, cfg, statsOf, { overRest: or }));
   const total = payTotal(months);
   if (total.gross <= 0 && total.comp <= 0) {
-    return `<div class="empty"><div class="em-ico" style="--accent:var(--ok)">${I.wallet}</div><b>За этот период заработка нет</b><p>Здесь появится расчёт, похожий на квиток, когда в периоде будут поездки.</p></div>`;
+    return `${premiumHint}<div class="empty"><div class="em-ico" style="--accent:var(--ok)">${I.wallet}</div><b>За этот период заработка нет</b><p>Здесь появится расчёт, похожий на квиток, когда в периоде будут поездки.</p></div>`;
   }
   let html = `<section class="st-hero"><div class="eyebrow st-eye">На руки${ST.period === 'month' ? '' : ' за период'}${eyeBtn()}</div><div class="st-big num">≈ ${fmtRub(total.net)}</div>
-    <div class="st-sub">начислено ${fmtRub(total.gross)} · НДФЛ 13%</div></section>`;
+    <div class="st-sub">начислено ${fmtRub(total.gross)} · НДФЛ 13%</div>${premiumHint}</section>`;
   if (R.months.length > 1) {
     const items = months.map((r, i) => ({ v: r.net, label: R.months.length > 12 ? MONTHS_SHORT[R.months[i][1] - 1][0] : MONTHS_SHORT[R.months[i][1] - 1], full: `${MONTHS[R.months[i][1] - 1]} ${R.months[i][0]}` }));
     if (R.months.length <= 24) html += block('На руки по месяцам', barChart(items, { fmt: (v) => fmtRub(v), id: 'ch-pay' }));

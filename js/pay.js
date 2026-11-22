@@ -21,7 +21,7 @@
 //  • режим «по среднему»: все рабочие часы × средний заработок за час, без отдельных доплат и надбавок;
 //  • тестовый режим «оплата по сменам» (2.18) — см. shiftSplit.
 // Все суммы — в рублях, время на входе — в минутах.
-import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal, hasLegs, legsOf } from './calc.js';
+import { MIN, HOUR, monthKeyOf, dateKeyOf, monthSummary, parseLocal, legsOf } from './calc.js';
 import { dayInfo } from './calendar.js';
 
 export const ROLES = { assistant: 'Помощник машиниста', driver: 'Машинист' };
@@ -31,7 +31,7 @@ export const OVERREST_MAX = 48 * HOUR; // больше 48 ч между поез
 
 // Поля набора ставок. pct — проценты, rub — рубли. def — значение по умолчанию.
 export const PAY_FIELDS = [
-  { k: 'bonus', label: 'Премия', unit: '%', def: 12, hint: 'В квитке — строки «Премия…» за прошлый месяц. В среднем 9–15% от заработка за работу.' },
+  { k: 'bonus', label: 'Премия', unit: '%', def: 10, hint: 'До первого расчёта по листкам — 10%. Можно указать свой процент.' },
   { k: 'night', label: 'Ночные', unit: '%', def: 40, hint: 'Доплата за часы с 22:00 до 6:00. В квитке — «Доплата за работу в ночное время», обычно 40%.' },
   { k: 'harm', label: 'Вредность', unit: '%', def: 4, hint: 'Доплата за вредные условия на все часы. В квитке — «Допл…ВредДляЛБ», обычно 4%.' },
   { k: 'klass', label: 'Надбавка за класс', unit: '%', def: null, hint: 'Доплата за класс квалификации машиниста, процент от тарифа. Смотрите в квитке или спросите в нарядной.', role: 'driver' },
@@ -62,7 +62,7 @@ export function paySet(sets, role = 'assistant') {
 }
 
 // Набор ставок с подставленными значениями по умолчанию. role — должность из профиля (надбавка за класс — только машинисту)
-export function payCfg(sets, role = 'assistant') {
+export function payCfg(sets, role = 'assistant', estimatedBonus = null) {
   const raw = paySet(sets, role);
   const cfg = { role, mode: raw.mode === 'avg' ? 'avg' : 'tariff', rates: Array.isArray(raw.rates) ? raw.rates.filter((r) => num(r.rate)) : [] };
   cfg.shiftTest = cfg.mode === 'tariff' && raw.shiftTest === true; // тестовый режим «оплата по сменам» — только по тарифу
@@ -72,6 +72,9 @@ export function payCfg(sets, role = 'assistant') {
     cfg[f.k] = v === undefined || v === null ? num(f.def) : num(v); // пустое поле, введённое человеком, = 0
     if (f.max) cfg[f.k] = Math.min(cfg[f.k], f.max);
   }
+  cfg.bonusEstimate = estimatedBonus;
+  cfg.bonusFromSlips = estimatedBonus != null && raw.bonus == null;
+  if (cfg.bonusFromSlips) cfg.bonus = estimatedBonus;
   return cfg;
 }
 
@@ -107,7 +110,7 @@ export function overRestIntervals(trips, statsOf) {
 }
 
 // Минуты интервалов, попавшие в месяц 'YYYY-MM'
-function minutesInMonth(ivs, mk) {
+export function minutesInMonth(ivs, mk) {
   let total = 0;
   for (const { s, e } of ivs) {
     const y = +mk.slice(0, 4);
@@ -132,12 +135,36 @@ export const heavyCount = (trip, cfg) => legsOf(trip).filter((l) => isHeavy(l, c
 // Минуты на локомотиве с тяжёлым или длинным поездом — за всю поездку или за месяц mk.
 // У поездки со сменой локомотива — только часы тех локомотивов, у которых поезд тяжелее или длиннее нормы их маршрута.
 export function heavyMin(trip, st, cfg, mk) {
-  if (hasLegs(trip) && Array.isArray(st?.legs)) {
-    return legsOf(trip).reduce((sum, l, i) => sum + (isHeavy(l, cfg) ? (mk ? st.legs[i]?.byMonth[mk] || 0 : st.legs[i]?.work || 0) : 0), 0);
-  }
-  if (!isHeavy(trip, cfg)) return 0;
+  return legsOf(trip).reduce((sum, leg, i) => sum + (isHeavy(leg, cfg) ? locoMinutes(st, i, mk) : 0), 0);
+}
+
+function locoMinutes(st, i, mk) {
+  if (Array.isArray(st?.legs)) return mk ? st.legs[i]?.byMonth[mk] || 0 : st.legs[i]?.work || 0;
+  if (i !== 0) return 0;
   const part = mk ? st?.byMonth?.[mk] : st;
   return part ? Math.max(0, part.work - (part.wait || 0) - (part.pass || 0)) : 0;
+}
+
+const sectionRates = [10, 20, 30, 35, 50];
+export function sectionPct(distanceKm) {
+  const km = num(distanceKm);
+  if (!km) return null;
+  if (km >= 1000) return 50;
+  if (km >= 500) return 35;
+  if (km >= 450) return 30;
+  if (km >= 350) return 20;
+  return km > 250 ? 10 : 0;
+}
+
+// Код 151: часы на локомотиве по ставке каждого участка. null — длина участка неизвестна.
+export function sectionMinutes(trip, st, cfg, mk) {
+  const minutes = new Map();
+  for (const [i, leg] of legsOf(trip).entries()) {
+    const pct = sectionPct(cfg.norms?.[leg.routeId]?.distanceKm);
+    const work = locoMinutes(st, i, mk);
+    if (work) minutes.set(pct, (minutes.get(pct) || 0) + work);
+  }
+  return minutes;
 }
 
 // Тестовый режим «оплата по сменам» (2.18, просьба Никиты: посмотреть, какой была бы зарплата при такой системе;
@@ -160,13 +187,14 @@ export function shiftSplit(overMin, shifts) {
 // heavy — минуты на локомотиве с тяжёлым или длинным поездом (heavyMin).
 // У резерва часы на локомотиве идут своей строкой, тоже по тарифу.
 // Пассажирский и манёвры пока оплачиваются как грузовой (доплаты за тяжёлый поезд манёврам не положены).
-function hoursPay(part, rate, cfg, trip, heavy = 0) {
+function hoursPay(part, rate, cfg, trip, heavy, section) {
   const h = part.work / 60;
   const w = (part.wait || 0) / 60;
   const p = (part.pass || 0) / 60;
   const drive = Math.max(0, h - w - p);
   const reserve = trip?.kind === 'reserve';
   return {
+    ...Object.fromEntries(sectionRates.map((pct) => [`section${pct}`, (section.get(pct) || 0) / 60 * rate * pct / 100])),
     base: reserve ? 0 : drive * rate,
     pass: p * rate,
     wait: w * rate,
@@ -192,7 +220,7 @@ export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
   if (isAvg(cfg)) gross = (st.work / 60) * cfg.avgHour;
   else {
     const rate = rateOn(cfg, dateKeyOf(st.start));
-    const p = hoursPay(st, rate, cfg, trip, heavyMin(trip, st, cfg));
+    const p = hoursPay(st, rate, cfg, trip, heavyMin(trip, st, cfg), sectionMinutes(trip, st, cfg));
     const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3;
     gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
   }
@@ -210,6 +238,8 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   let comp = 0;
   let reserveMin = 0;
   let heavyTotal = 0;
+  const sectionTotals = new Map();
+  for (const pct of sectionRates) acc[`section${pct}`] = 0;
   let shifts = 0; // тестовый режим: смены — поездки с явкой в этом месяце
   for (const t of sum.monthTrips) {
     const st = statsOf(t);
@@ -217,7 +247,9 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
     const part = st.byMonth[mk];
     if (!part) continue;
     const hv = heavyMin(t, st, cfg, mk);
-    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t, hv);
+    const section = sectionMinutes(t, st, cfg, mk);
+    for (const [pct, minutes] of section) sectionTotals.set(pct, (sectionTotals.get(pct) || 0) + minutes);
+    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t, hv, section);
     for (const k of Object.keys(acc)) acc[k] += p[k];
     const drive = Math.max(0, part.work - (part.wait || 0) - (part.pass || 0));
     if (t.kind === 'reserve') reserveMin += drive;
@@ -268,6 +300,10 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   L('klass', 'Надбавка за класс', acc.klass, { pct: cfg.klass, hours: h(sum.work) });
   L('holiday', 'Праздничные', acc.holiday, { pct: 100, hours: h(sum.holiday) });
   L('heavy', 'Тяжёлые и длинносоставные поезда', acc.heavy, { pct: cfg.heavy, hours: h(heavyTotal) });
+  for (const pct of sectionRates) {
+    const key = `section${pct}`;
+    L(key, '151 · Работа на удлинённых участках', acc[key], { pct, hours: h(sectionTotals.get(pct) || 0) });
+  }
   L('overOther', 'Переработка', noAvg(overOther), { pct: 50, hours: O - Ow });
   L('overWeekend', 'Переработка в выходные', noAvg(overWeekend), { pct: 100, hours: Ow - hOw });
   L('shift1', 'Переработка, первые 2 ч на смену', noAvg(shift.pay1), { pct: 50, hours: h(shift.first) });
@@ -349,7 +385,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', 'overOther', 'overWeekend', 'shift1', 'shift2', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension', 'alimony'];
+  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', ...sectionRates.map((pct) => `section${pct}`), 'overOther', 'overWeekend', 'shift1', 'shift2', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension', 'alimony'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));

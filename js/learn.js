@@ -93,9 +93,12 @@ export function learnResume() {
 // ---------------------------------------------------------------- вечернее напоминание о серии (2.29.0)
 // Просьба Никиты 11.11.2026: «ближе к вечеру напоминать, если не продлил ударный режим — всего минута твоего времени».
 // Веб-приложение в фоне не работает, а push через Google/Apple — передача за границу, поэтому напоминание — внутри CABINA:
-// плашка на главной и точка на вкладке «Обучение» с 18:00, пока урока сегодня нет. «Не сегодня» и выключатель
+// краткая плашка на главной и точка на вкладке «Обучение» с 18:00, пока урока сегодня нет. «Не сегодня» и выключатель
 // «Напоминать вечером» (окно «Ударный режим») — в localStorage, только удобство этого телефона.
 const NUDGE_KEY = 'cabina-streak-nag';
+const NUDGE_BANNER_MS = 8000;
+let bannerDay = null;
+let bannerTimer = null;
 function nudgeState() { try { return JSON.parse(localStorage.getItem(NUDGE_KEY)) || {}; } catch { return {}; } }
 function setNudge(v) { try { localStorage.setItem(NUDGE_KEY, JSON.stringify({ ...nudgeState(), ...v })); } catch { /* хранилище недоступно — не страшно */ } }
 const nudgeOn = () => !nudgeState().off;
@@ -109,6 +112,16 @@ export function streakNudgeNow() {
 export function streakNagHtml() {
   const x = streakNudgeNow();
   if (!x) return '';
+  const t = today();
+  if (bannerDay !== t) {
+    bannerDay = t;
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => {
+      bannerTimer = null;
+      document.getElementById('streak-nag')?.remove();
+    }, NUDGE_BANNER_MS);
+  }
+  if (bannerTimer === null) return '';
   return `<div class="loyal-banner streak-banner" role="status" id="streak-nag"><button class="grow" data-act="streak-go"><span class="ico on">${ART.flame(26)}</span>
     <span class="txt"><b>Ударный режим: ${days(x.n)}</b><small>Сегодня ещё без урока — всего минута${x.freeze ? '. Заморозка в запасе' : ''}</small></span></button>
     <button class="icon-btn" data-act="streak-hide" aria-label="Не напоминать сегодня">${small(I.x, 18)}</button></div>`;

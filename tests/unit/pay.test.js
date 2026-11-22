@@ -12,7 +12,7 @@ const line = (r, key) => r.lines.find((l) => l.key === key);
 
 test('набор ставок: значения по умолчанию, пустое поле = 0, класс только у машиниста', () => {
   const d = payCfg({}, 'assistant');
-  assert.equal(d.bonus, 12);
+  assert.equal(d.bonus, 10);
   assert.equal(d.night, 40);
   assert.equal(d.harm, 4);
   assert.equal(d.rk, 0);
@@ -108,9 +108,9 @@ test('отдых сверх нормы в пункте оборота — 2/3 с
 test('заработок за одну поездку на руки, с ком. расходами без налога', () => {
   const t = T('n', '2026-10-14T22:00', '2026-10-15T06:00');
   const p = tripPay(t, st(t), cfgOf({ trip: 500 }));
-  // 8 ч × 300 + ночные 40% + вредность 4% = 3456; премия 12% → 3870,72; минус 13%; плюс 500
-  assert.equal(p.gross, 3870.72);
-  assert.equal(p.net, 3867.53);
+  // 8 ч × 300 + ночные 40% + вредность 4% = 3456; премия 10% → 3801,60; минус 13%; плюс 500
+  assert.equal(p.gross, 3801.60);
+  assert.equal(p.net, 3807.39);
   // поездка «в пути»: ком. расходы ещё не начислены
   const live = T('l', '2026-10-20T10:00', '');
   const pl = tripPay(live, tripStats(live, parseLocal('2026-10-20T12:00')), cfgOf({ trip: 500, bonus: 0, harm: 0 }));

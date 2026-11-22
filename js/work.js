@@ -1,6 +1,6 @@
 // Меню ☰ «Настройки работы»: участки (до 2.25 — маршруты), тарифные ставки и надбавки, дома отдыха, междусменный отдых.
 import { I, esc, small, pageHead, stepperHtml, openLayer, closeLayer, sheet, toast, confirmDialog, infoDialog, plural, MONTHS_GEN } from './ui.js';
-import { S, nowLocal, saveSettings, deleteRoute, myPay, usesRoute, stationsList } from './store.js';
+import { S, nowLocal, saveSettings, deleteRoute, myPay, forgetPayslipBonuses, usesRoute, stationsList } from './store.js';
 import { fmtDur, fmtLocal, legsOf } from './calc.js';
 import { openRouteForm } from './forms.js';
 import { restHouses, dayOffMin } from './rest.js';
@@ -77,17 +77,18 @@ export const SHIFT_INFO = 'Переработка за месяц (отрабо�
 const AVG_INFO = 'Это примерно вся ваша зарплата до вычета НДФЛ, делённая на отработанные часы. Если включить «Считать зарплату по среднему», все рабочие часы умножаются на эту сумму — без отдельных доплат и надбавок. Позже CABINA поможет посчитать ваш средний.';
 export function renderTariffs() {
   const raw = paySet(S.settings.pay, payRole());
-  const cfg = payCfg(S.settings.pay, payRole());
+  const cfg = myPay();
   const today = todayKey();
   const rates = [...cfg.rates].sort((a, b) => String(b.from || '').localeCompare(String(a.from || '')));
   const cur = currentRate(cfg, today);
   const field = (f, hint = f.hint) => {
     const v = raw[f.k];
-    const shown = v === undefined || v === null ? (f.def ?? '') : v;
+    const shown = v ?? (f.k === 'bonus' ? cfg.bonus : f.def ?? '');
     return `<div class="pay-field">
       <label for="pf-${f.k}">${esc(f.label)}</label>
       <div class="input-unit"><input class="input" id="pf-${f.k}" data-pf="${f.k}" inputmode="decimal" autocomplete="off" value="${esc(numText(shown))}" placeholder="${f.ph || '0'}"><span>${f.unit}</span></div>
-      ${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</div>`;
+      ${hint ? `<div class="hint">${esc(hint)}</div>` : ''}
+      ${f.k === 'bonus' && v != null ? '<button class="btn btn-ghost btn-sm" data-act="bonus-auto">Использовать автоматический процент</button>' : ''}</div>`;
   };
   const fields = PAY_FIELDS.filter((f) => !f.role || f.role === payRole());
   const avg = cfg.mode === 'avg';
@@ -113,6 +114,10 @@ export function renderTariffs() {
       <div class="switch-row"><div class="grow t1">Тестовый режим: оплата по сменам</div>
         <button class="switch" role="switch" data-act="pay-shift" aria-checked="${cfg.shiftTest}" aria-label="Тестовый режим: оплата по сменам"></button></div>
       <div class="hint">${esc(SHIFT_INFO)} Выключите, чтобы вернуться к обычному расчёту.</div></div></div>`}
+    ${S.bonusRecords.length ? `<div class="panel pay-panel"><div class="pay-field">
+      <div class="t1">Премия по расчётным листкам</div>
+      <div class="hint">${cfg.bonusEstimate != null ? 'Средний процент — ' + numText(cfg.bonusEstimate) + '%.' : 'Для оценки нужны строки обычной премии и база за месяц, за который её начислили.'} На устройстве сохранены только месячные итоги для расчёта.</div>
+      <button class="btn btn-ghost btn-sm" data-act="bonus-forget">Удалить данные о премии из листков</button></div></div>` : ''}
     <div class="group-title">Больничный</div>
     <div class="panel pay-panel" id="pay-sick">${fields.filter((f) => f.group === 'sick').map((f) => field(f)).join('')}
       <div class="pay-field"><div class="hint">Тогда в квитке появится строка «Больничный»: число дней больничного в месяце × оплата одного дня. НДФЛ с неё тоже вычитается.</div></div></div>
@@ -242,6 +247,13 @@ function openHouse(key) {
 // ---------------------------------------------------------------- действия
 export async function workClick(act, b, ctx) {
   switch (act) {
+    case 'bonus-auto': await savePaySet({ bonus: null }); return true;
+    case 'bonus-forget':
+      if (await confirmDialog({ title: 'Удалить данные о премии?', text: 'Месячные итоги из листков будут удалены с устройства. Процент премии вернётся к настройке тарифа.', ok: 'Удалить' })) {
+        await forgetPayslipBonuses();
+        toast('Данные о премии удалены');
+      }
+      return true;
     case 'shift-minus': { const v = S.settings.minShiftRest ?? 960; if (v > 0) await saveSettings({ minShiftRest: Math.max(0, v - 30) }); return true; }
     case 'shift-plus': { const v = S.settings.minShiftRest ?? 960; if (v < 48 * 60) await saveSettings({ minShiftRest: v + 30 }); return true; }
     case 'rest-minus': if (S.settings.minRest > 0) await saveSettings({ minRest: Math.max(0, S.settings.minRest - 30) }); return true;

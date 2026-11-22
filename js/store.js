@@ -2,6 +2,7 @@
 import * as db from './db.js';
 import { tripStats, parseLocal, MIN, legsOf, hasLegs, PENDING_MAX } from './calc.js';
 import { payCfg, overRestIntervals } from './pay.js';
+import { bonusRecordId, isBonusRecord, meanBonus, summarizeBonus } from './payslip-bonus.js';
 import { emptyLearn, normalizeLearn } from './learn-state.js';
 import { setNormWeek, normWeekOf } from './calendar.js';
 
@@ -22,6 +23,7 @@ export const S = {
   contacts: [], // записная книжка «Телефоны»: [{ id, group, name, who, phones: [], note, createdAt, updatedAt }], только в этом телефоне
   contactGroups: [], // названия групп «Телефонов», запоминаются для следующих номеров
   learn: emptyLearn(), // «Обучение» (2.23.0): прогресс курсов, серия, заморозки — только в этом телефоне (learn-state.js)
+  bonusRecords: [], bonusEstimate: null,
   onboarded: false,
 };
 
@@ -37,6 +39,7 @@ export async function loadAll() {
     ['trips', 'absences', 'routes', 'notes', 'files', 'meta'].map((s) => db.getAll(s).catch(() => [])));
   S.trips = trips; S.absences = absences; S.routes = routes; S.notes = notes; S.files = files;
   const m = Object.fromEntries(meta.map((x) => [x.id, x]));
+  readBonusRecords(meta);
   S.settings = { ...DEFAULT_SETTINGS, ...(m.settings || {}) };
   // 2.0: вариант «Как в системе» убран, тема по умолчанию — тёмная
   if (S.settings.theme !== 'light' && S.settings.theme !== 'dark') S.settings.theme = 'dark';
@@ -71,7 +74,7 @@ export const refreshLive = () => S.trips.forEach((t) => { if (isLive(t)) statsOf
 
 // Набор ставок для должности из профиля и отдых сверх нормы по поездкам (минуты)
 // norms — нормы веса и длины маршрутов: по ним видно тяжёлый и длинносоставный поезд
-export const myPay = () => ({ ...payCfg(S.settings.pay, S.profile.role), norms: Object.fromEntries(S.routes.filter((r) => r.weightNorm || r.lengthNorm).map((r) => [r.id, { weight: r.weightNorm, length: r.lengthNorm }])) });
+export const myPay = () => ({ ...payCfg(S.settings.pay, S.profile.role, S.bonusEstimate), norms: Object.fromEntries(S.routes.map((r) => [r.id, { weight: r.weightNorm, length: r.lengthNorm, distanceKm: r.distanceKm }])) });
 export function overRestByTrip() {
   const m = new Map();
   for (const x of overRestIntervals(S.trips, statsOf)) m.set(x.trip.id, (m.get(x.trip.id) || 0) + (x.e - x.s) / MIN);
@@ -257,6 +260,38 @@ export function extraOrder(saved = S.settings.extraOrder) {
 // Размер текста (2.21.6): 'm' обычный, 'l' крупный, 'xl' очень крупный
 export const TEXT_SIZES = [{ id: 'm', name: 'Обычный' }, { id: 'l', name: 'Крупный' }, { id: 'xl', name: 'Очень крупный' }];
 export const textSize = (v = S.settings?.textSize) => (TEXT_SIZES.some((x) => x.id === v) ? v : 'm');
+
+function readBonusRecords(meta) {
+  S.bonusRecords = meta.filter(r => isBonusRecord(r.id));
+  S.bonusEstimate = meanBonus(S.bonusRecords);
+}
+
+export async function rememberPayslipBonus(sheet, replacedPeriod = null) {
+  const record = summarizeBonus(sheet);
+  const oldId = bonusRecordId(replacedPeriod);
+  const ops = [];
+  if (oldId && oldId !== record?.id) ops.push({ store: 'meta', del: oldId });
+  if (record) {
+    if (record.base || Object.keys(record.premiums).length || Object.keys(record.corrections).length) {
+      ops.push({ store: 'meta', put: record });
+    } else ops.push({ store: 'meta', del: record.id });
+  }
+  if (ops.length) {
+    // Отчёт остаётся доступным, даже если на устройстве нет места для итогов.
+    try {
+      await db.write(ops);
+      readBonusRecords(await db.getAll('meta'));
+    } catch {}
+  }
+  return S.bonusEstimate;
+}
+
+export async function forgetPayslipBonuses() {
+  const records = (await db.getAll('meta')).filter(r => isBonusRecord(r.id));
+  if (records.length) await db.write(records.map(r => ({ store: 'meta', del: r.id })));
+  readBonusRecords(await db.getAll('meta'));
+  emit();
+}
 
 // «Обучение»: прогресс целиком (уже проверенный learn-state.js), запись meta 'learn'
 export async function saveLearn(next) {
