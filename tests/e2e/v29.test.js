@@ -212,7 +212,9 @@ test('вход, отметка «заходил сегодня» раз в де�
   await page.locator('#acc-pass').fill('Probnyj-parol-1');
   await page.locator('#acc-submit').click();
   await toastHas(page, /Вы вошли в аккаунт/);
-  assert.match(await page.locator('.screen').innerText(), /ivan@example\.com[\s\S]*Мои данные на сервере[\s\S]*Поездок и заработка там нет/);
+  assert.doesNotMatch(await page.locator('.screen').innerText(), /ivan@example\.com/);
+  assert.equal(await page.locator('.screen > .group').first().locator('.group-title').innerText(), 'Коллеги');
+  assert.match(await page.locator('.screen').innerText(), /Мои данные на сервере[\s\S]*Поездок и заработка там нет/);
   assert.equal(await page.locator('[data-act=acc-stats]').count(), 0, 'обычный человек статистику не видит');
   assert.equal(await page.locator('[data-act=acc-invite-new]').count(), 0, 'обычный человек приглашения не создаёт');
   // строка в Настройках показывает почту
@@ -392,7 +394,7 @@ test('код из письма: подтверждение почты и нов�
   const put = log.filter((r) => r.path === '/auth/v1/user').at(-1);
   assert.deepEqual(put.body, { password: 'Novyj-parol-12345' });
   assert.equal(put.auth, `Bearer ${ACCESS}`);
-  assert.match(await page.locator('.screen').innerText(), /ivan@example\.com/);
+  assert.match(await page.locator('.screen').innerText(), /Мои данные на сервере/);
   assert.deepEqual(realErrors(errors), []);
   await context.close();
 });
@@ -403,7 +405,7 @@ test('ссылки из писем: подтверждение почты вхо
   await page.goto(`${env.url}?from=mail#access_token=${ACCESS}&expires_at=${EXP}&expires_in=3600&refresh_token=refresh-secret-1&token_type=bearer&type=signup`);
   await toastHas(page, /Почта подтверждена/);
   assert.ok(!page.url().includes('access_token'), 'данные входа убраны из адресной строки');
-  assert.match(await page.locator('.screen').innerText(), /ivan@example\.com/);
+  assert.match(await page.locator('.screen').innerText(), /Мои данные на сервере/);
   // сброс пароля
   await page.goto(`${env.url}?from=mail2#access_token=${ACCESS}&refresh_token=refresh-secret-1&type=recovery`);
   await page.locator('#acc-pass').waitFor();
