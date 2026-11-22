@@ -13,7 +13,7 @@ const NOV10 = '2026-11-10T12:00:00+03:00';
 
 test('«Норма: 159 ч (на 10 ноября — 46 ч)» вместо «Отработано в ноябре»; отвлечение — по 7 ч, как на листке', async () => {
   const { context, page, errors } = await openApp(env, { now: NOV10 });
-  assert.equal(await text(page, '#hero-norm'), 'Норма: 159 ч (на 10 ноября — 46 ч)');
+  assert.equal(await text(page, '#hero-norm'), 'Норма: 159 ч\nНа 10 ноября — 46 ч');
   assert.doesNotMatch(await text(page, '.hero'), /Отработано в/);
   assert.equal(await page.locator('.hero .norm-line').count(), 0, 'норма не повторяется второй строкой');
   // отпуск 9–10 ноября (пн, вт): 7 + 7
@@ -28,7 +28,7 @@ test('«Норма: 159 ч (на 10 ноября — 46 ч)» вместо «О�
   await f.locator('[data-act=save-abs]').click();
   await waitNoLayers(page);
   // норма 159 − 19 = 140; на сегодня 46 − 19 = 27
-  assert.equal(await text(page, '#hero-norm'), 'Норма: 140 ч (на 10 ноября — 27 ч)');
+  assert.equal(await text(page, '#hero-norm'), 'Норма: 140 ч\nНа 10 ноября — 27 ч');
   assert.match(await text(page, '.hero'), /159 ч по календарю − 19 ч отвлечений/);
   // прошлый месяц — без скобок; октябрь по шестидневке — 179 ч
   await page.locator('[data-act=prev]').click();
@@ -40,7 +40,7 @@ test('«Норма: 159 ч (на 10 ноября — 46 ч)» вместо «О�
 test('пятидневка для других депо: переключатель в «Календарь и часовой пояс», норма и отвлечения пересчитываются', async () => {
   const { context, page, errors } = await openApp(env, { now: NOV10 });
   await seed(page, { absences: [{ id: 'v1', type: 'vacation', start: '2026-11-09', end: '2026-11-10' }] });
-  assert.equal(await text(page, '#hero-norm'), 'Норма: 145 ч (на 10 ноября — 32 ч)');
+  assert.equal(await text(page, '#hero-norm'), 'Норма: 145 ч\nНа 10 ноября — 32 ч');
   await openSettings(page, 'set-time');
   assert.equal(await page.locator('#week-seg [aria-pressed=true]').innerText(), 'Шестидневка');
   assert.match(await text(page, '#week-hint'), /по 7 ч, суббота 5 ч/);
@@ -49,7 +49,7 @@ test('пятидневка для других депо: переключате�
   assert.match(await text(page, '[data-act=cal-info]'), /пятидневка[\s\S]*2026 год — 1972 ч/);
   await page.reload(); await page.waitForSelector('.hero');
   // пятидневка: 159 − 16 = 143; со 2 по 10 ноября: 8 + 7 + 8 + 8 (+ 8 + 8 — отпуск) = 31
-  assert.equal(await text(page, '#hero-norm'), 'Норма: 143 ч (на 10 ноября — 31 ч)');
+  assert.equal(await text(page, '#hero-norm'), 'Норма: 143 ч\nНа 10 ноября — 31 ч');
   assert.deepEqual(errors, []);
   await context.close();
 });

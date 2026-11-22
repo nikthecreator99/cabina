@@ -28,7 +28,7 @@ test('первый запуск: приветствие, затем пустой
   await waitNoLayers(page);
   assert.equal(await text(page, '.month-title'), 'Октябрь');
   // 2.24.9: вверху — «Норма: 179 ч (на 20 октября — 113 ч)»: месяц по шестидневке и норма с 1-го по сегодня (20 октября)
-  assert.match(await text(page, '#hero-norm'), /^Норма: 179 ч \(на 20 октября — 113 ч\)$/);
+  assert.match(await text(page, '#hero-norm'), /^Норма: 179 ч\s+На 20 октября — 113 ч$/);
   // ставка не указана — вместо заработка ссылка на тарифные ставки
   assert.match(await text(page, '.hero'), /Указать ставку/);
   assert.match(await text(page, '.empty'), /В октябре поездок нет/);
@@ -112,7 +112,7 @@ test('отвлечение уменьшает норму и открываетс
   await f.locator('[data-act=save-abs]').click();
   await waitNoLayers(page);
   const hero = await text(page, '.hero');
-  assert.match(hero, /Норма: 165 ч \(на 20 октября — 99 ч\)/);
+  assert.match(hero, /Норма: 165 ч\s+На 20 октября — 99 ч/);
   assert.match(hero, /179 ч по календарю − 14 ч отвлечений/);
   assert.match(await text(page, '.hero-lines'), /Отпуск:\s*−14 ч/);
   assert.equal(await text(page, '[data-act=absences] .count'), '1');

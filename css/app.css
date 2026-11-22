@@ -196,7 +196,7 @@ button.hero-pay.set { display: inline-flex; color: var(--ok); font-weight: 700; 
 /* Месячная норма и норма на текущую дату вверху карточки месяца */
 .hero-norm { font-size: calc(15px * var(--fs)); color: var(--text-2); font-weight: 600; min-width: 0; }
 .hero-norm b { color: var(--text); font-weight: 800; }
-.hero-norm .so-far { color: var(--text-2); font-weight: 700; }
+.hero-norm .so-far { display: block; margin-top: 4px; font-size: calc(13px * var(--fs)); color: var(--text-2); font-weight: 500; }
 .hero-norm .so-far .num { white-space: nowrap; }
 .eyebrow { font-size: calc(12px * var(--fs)); letter-spacing: .14em; text-transform: uppercase; color: var(--text-2); font-weight: 600; }
 .big {
@@ -2455,6 +2455,10 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .ps-panel p { margin: 7px 0 12px; color: var(--text-2); line-height: 1.45; }
 .ps-panel .ps-alert { padding: 11px; border-left: 3px solid var(--warn); background: var(--bg-elev); border-radius: 6px; }
 .ps-alert svg { vertical-align: middle; color: var(--warn); }
+.ps-month-label { display: block; margin-bottom: 4px; }
+#ps-month { width: 100%; margin-bottom: 14px; }
+.ps-return { margin-bottom: 12px; }
+.screen > .ps-private { font-size: calc(13px * var(--fs)); color: var(--text-2); }
 .ps-upload { position: relative; cursor: pointer; }
 .ps-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .ps-upload:focus-within { outline: 2px solid var(--text); }

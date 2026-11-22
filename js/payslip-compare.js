@@ -8,11 +8,11 @@ export const monthLabel = key => months[Number(key.slice(5))-1]+' '+key.slice(0,
 const fmt = n => n.toLocaleString('ru-RU',{maximumFractionDigits:2});
 
 export function compareTrips(sheet,key,trips,absences,cfg={}) {
-  if (!validMonth(key)) return {message:'Выберите месяц поездок.'};
+  if (!validMonth(key)) return {message:'Не удалось определить месяц. Проверьте заголовок первой страницы листка.'};
   if (!sheet.period) return {message:'Не удалось прочитать месяц и год листка.'};
   if (sheet.period!==monthLabel(key)) return {message:'Выбран '+monthLabel(key)+', в листке указан '+sheet.period+'. Выберите соответствующий месяц или другой файл.'};
   const [year,month]=key.split('-').map(Number), summary=monthSummary(year,month,trips,absences);
-  if (!summary.monthTrips.length) return {message:'За '+sheet.period+' в Кабине нет поездок. Добавьте поездки для сверки.'};
+  if (!summary.monthTrips.length) return {message:'За '+sheet.period+' в Cabina нет поездок. Добавьте поездки для сверки.'};
   const incomplete=summary.monthTrips.some(t=>!t.end)?'Есть незавершённая поездка. Укажите время окончания для сверки.':'';
   const stats=t=>t._stats||tripStats(t), rest=overRestIntervals(trips,stats);
   const current=sheet.rows.filter(r=>r.kind==='earnings' && r.month===months[month-1]);
@@ -35,13 +35,16 @@ export function compareTrips(sheet,key,trips,absences,cfg={}) {
   function hours(title,minutes,code,reason='',payKey) {
     const matches=current.filter(r=>code.test(r.code));
     if (!minutes && !matches.length && !/^Ночные/.test(title)) return;
-    if (!reason && (sheet.unread || !matches.length || matches.some(r=>!Number.isFinite(r.hours)||(r.amount<0&&r.hours>0)))) reason='Проверьте часы в строках листка за выбранный месяц.';
+    if (!reason && (!matches.length || matches.some(r=>!Number.isFinite(r.hours)||(r.amount<0&&r.hours>0)))) reason='Проверьте часы в строках листка за выбранный месяц.';
     const total=reason?null:matches.reduce((n,r)=>n+Math.round(r.hours*100),0)/100;
     const row=metric(title,minutes,total,incomplete||reason,matches.length);
+    if(sheet.unread && row.status!=='unknown'){
+      row.status='approx'; row.detail+=' Сравнение по прочитанным строкам. Часть строк листка не распознана.';
+    }
     if(pay && payKey && row.status!=='unknown'){
       const expected=pay.lines.filter(l=>payKey.test(l.key)).reduce((n,l)=>n+Math.round(l.amount*100),0);
       const actual=matches.reduce((n,r)=>n+Math.round(r.amount*100),0);
-      row.detail+=' По тарифам Кабины '+rub(expected/100)+', в листке '+rub(actual/100)+'.';
+      row.detail+=' По тарифам Cabina '+rub(expected/100)+', в листке '+rub(actual/100)+'.';
       if(actual!==expected && row.status==='ok') row.status=Math.abs(actual-expected)<=matches.length?'approx':'diff';
     }
   }
