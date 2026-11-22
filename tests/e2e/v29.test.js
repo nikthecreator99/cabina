@@ -213,7 +213,7 @@ test('вход, отметка «заходил сегодня» раз в де�
   await page.locator('#acc-submit').click();
   await toastHas(page, /Вы вошли в аккаунт/);
   assert.doesNotMatch(await page.locator('.screen').innerText(), /ivan@example\.com/);
-  assert.equal(await page.locator('.screen > .group').first().locator('.group-title').innerText(), 'Коллеги');
+  assert.equal(await page.locator('.screen > .group').first().locator('.group-title').textContent(), 'Коллеги');
   assert.match(await page.locator('.screen').innerText(), /Мои данные на сервере[\s\S]*Поездок и заработка там нет/);
   assert.equal(await page.locator('[data-act=acc-stats]').count(), 0, 'обычный человек статистику не видит');
   assert.equal(await page.locator('[data-act=acc-invite-new]').count(), 0, 'обычный человек приглашения не создаёт');
