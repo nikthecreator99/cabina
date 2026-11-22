@@ -2461,17 +2461,40 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .ai-h .ai-q-echo { display: none; }
 .ai-docs { margin-top: 18px; }
 
-.ps-link { margin: 10px 0; }
+/* Расчётный листок — первый пункт общего блока под CABINA AI. */
+.ps-menu { margin-top: 14px; overflow: hidden; }
+.ps-feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(68px, 36%); gap: 8px; align-items: center; text-align: start; }
+.ps-link, .ps-audit {
+  background: radial-gradient(ellipse at 82% 35%, color-mix(in srgb, var(--night) 16%, transparent), transparent 65%), var(--card);
+}
+.ps-link { width: 100%; padding: 16px; border-bottom: 1px solid var(--line-2); }
+.ps-feature-copy { display: grid; gap: 6px; min-width: 0; }
+.ps-feature-copy > strong, .ps-audit h2 { margin: 0; font-family: var(--font-display); font-size: calc(21px * var(--fs)); line-height: 1.15; overflow-wrap: anywhere; }
+.ps-link .ps-feature-copy > span:not(.btn) { color: var(--text-2); font-size: calc(14px * var(--fs)); }
+.ps-cta { width: fit-content; max-width: 100%; min-height: 42px; padding: 8px 14px; margin-top: 5px; }
+.ps-art { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
+.ps-audit .ps-feature { margin-bottom: 12px; }
+.ps-audit .ps-feature p { margin: 0; }
+.ps-compare-link { width: 100%; text-align: start; }
+.ps-compare-link .ico { color: var(--night); background: color-mix(in srgb, var(--night) 14%, var(--card)); }
+.ps-compare-link .t1, .ps-compare-link .t2 { display: block; }
+.ps-compare-link .grow { min-width: 0; }
+.ps-feedback:not(:empty) { margin-top: 10px; }
 .ps-panel { padding: 16px; margin-bottom: 12px; overflow-wrap: anywhere; }
-.ps-panel h2,.ps-panel summary { margin: 0; font-size: calc(18px * var(--fs)); font-weight: 750; }
+.ps-panel:not(.ps-audit) h2,.ps-panel summary { margin: 0; font-size: calc(18px * var(--fs)); font-weight: 750; }
 .ps-panel h3 { margin: 18px 0 6px; font-size: calc(16px * var(--fs)); }
 .ps-panel p { margin: 7px 0 12px; color: var(--text-2); line-height: 1.45; }
 .ps-panel .ps-alert { padding: 11px; border-left: 3px solid var(--warn); background: var(--bg-elev); border-radius: 6px; }
 .ps-alert svg { vertical-align: middle; color: var(--warn); }
 .ps-month-label { display: block; margin-bottom: 4px; }
 #ps-month { width: 100%; margin-bottom: 14px; }
-.ps-return { margin-bottom: 12px; }
-.screen > .ps-private { font-size: calc(13px * var(--fs)); color: var(--text-2); }
+.screen > .ps-private { display: flex; gap: 8px; align-items: flex-start; margin: 20px 2px 14px; font-size: calc(13px * var(--fs)); line-height: 1.45; color: var(--text-2); }
+.ps-private svg, .ps-upload svg { flex: none; }
+@media (max-width: 360px) {
+  .ps-feature { grid-template-columns: minmax(0, 1fr) 27%; }
+  .ps-link .ps-feature-copy > strong, .ps-audit h2 { font-size: calc(18px * var(--fs)); }
+  .ps-cta { padding-inline: 10px; }
+}
 .ps-upload { position: relative; cursor: pointer; }
 .ps-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .ps-upload:focus-within { outline: 2px solid var(--text); }
@@ -2511,4 +2534,3 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .ps-info summary { padding: 10px 0; color: var(--text-2); font-size: calc(14px * var(--fs)); }
 .ps-info summary span { margin-left: 5px; font-variant-numeric: tabular-nums; }
 .ps-clear { margin-top: 12px; }
-.ps-private svg { vertical-align: middle; margin-right: 3px; }

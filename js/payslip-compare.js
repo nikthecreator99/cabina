@@ -12,7 +12,7 @@ export function compareTrips(sheet,key,trips,absences,cfg={}) {
   if (!sheet.period) return {message:'Не удалось прочитать месяц и год листка.'};
   if (sheet.period!==monthLabel(key)) return {message:'Выбран '+monthLabel(key)+', в листке указан '+sheet.period+'. Выберите соответствующий месяц или другой файл.'};
   const [year,month]=key.split('-').map(Number), summary=monthSummary(year,month,trips,absences);
-  if (!summary.monthTrips.length) return {message:'За '+sheet.period+' в Cabina нет поездок. Добавьте поездки для сверки.'};
+  if (!summary.monthTrips.length) return {message:'За '+sheet.period+' в CABINA нет поездок. Добавьте поездки для сверки.'};
   const incomplete=summary.monthTrips.some(t=>!t.end)?'Есть незавершённая поездка. Укажите время окончания для сверки.':'';
   const stats=t=>t._stats||tripStats(t), rest=overRestIntervals(trips,stats);
   const current=sheet.rows.filter(r=>r.kind==='earnings' && r.month===months[month-1]);
@@ -44,7 +44,7 @@ export function compareTrips(sheet,key,trips,absences,cfg={}) {
     if(pay && payKey && row.status!=='unknown'){
       const expected=pay.lines.filter(l=>payKey.test(l.key)).reduce((n,l)=>n+Math.round(l.amount*100),0);
       const actual=matches.reduce((n,r)=>n+Math.round(r.amount*100),0);
-      row.detail+=' По тарифам Cabina '+rub(expected/100)+', в листке '+rub(actual/100)+'.';
+      row.detail+=' По тарифам CABINA '+rub(expected/100)+', в листке '+rub(actual/100)+'.';
       if(actual!==expected && row.status==='ok') row.status=Math.abs(actual-expected)<=matches.length?'approx':'diff';
     }
   }
