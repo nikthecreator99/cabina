@@ -1,0 +1,19 @@
+name: Проверка карточки месяца и настроек аккаунта
+on:
+  push:
+    branches: [codex/verify-account-2352]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    env:
+      CHROMIUM_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - run: node --test --test-name-pattern="вход, отметка" tests/e2e/v29.test.js
