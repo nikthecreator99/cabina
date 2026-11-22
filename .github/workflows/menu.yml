@@ -1,0 +1,25 @@
+name: CABINA 2.35 browser checks
+on:
+  push:
+    branches: [codex/verify-235-menu]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [0]
+    env:
+      CHROMIUM_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - shell: bash
+        run: |
+          node --test tests/e2e/v221.test.js
