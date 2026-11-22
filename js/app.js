@@ -1134,7 +1134,7 @@ async function start() {
   // раз в минуту: время «в пути», остаток отдыха и статус в профиле
   setInterval(() => { if ((V.tab === 'home' || V.tab === 'profile') && !V.pages.length && !layerCount() && !swipe.busy()) rerender(); colleaguesTick(); }, 60000);
   initPull({ can: canPull, refresh: pullRefresh, style: () => pullStyle(S.settings.pullAnim), screen: app });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { colleaguesWake(); if (!layerCount()) rerender(); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { colleaguesWake(); if (!layerCount() && page() !== 'payslip') rerender(); } });
   registerSW();
 }
 

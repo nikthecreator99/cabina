@@ -19,6 +19,11 @@ test('сверка с поездками определяет месяц из PD
     assert.equal(await audit.locator('[data-act=ps-compare]').count(),0);
     await page.getByRole('button',{name:'Перейти к сверке поездок'}).click();
     assert.equal(await page.locator('#ps-month').inputValue(),'');
+    // iOS возвращает страницу из системного окна выбора файла до события change.
+    assert.equal(await page.locator('#ps-files').evaluate(input=>{
+      document.dispatchEvent(new Event('visibilitychange'));
+      return input===document.querySelector('#ps-files');
+    }),true);
     await page.locator('#ps-files').setInputFiles({name:'demo.pdf',mimeType:'application/pdf',buffer:pdf});
     const report=page.locator('#ps-details');
     assert.match(await report.innerText(),/Сверка за май 2026[\s\S]*Ночные часы[\s\S]*меньше на 1 ч/);
