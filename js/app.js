@@ -22,7 +22,7 @@ import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, re
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderGrowth, growthClick } from './growth.js';
-import { payslipCard, renderPayslip, loadPayslip, clearPayslip, payslipAction } from './payslip.js';
+import { payslipCard, renderPayslip, loadPayslip, clearPayslip, payslipAction, choosePayslipMonth } from './payslip.js';
 import { initAi, renderAi, aiClick, aiInput, aiKey, aiEnter, aiCardHtml } from './ai.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
@@ -48,7 +48,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.34.5';
+export const VERSION = '2.35.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -222,10 +222,10 @@ function renderHome() {
   const payCtx = hasRate(cfg) ? { cfg, or: overRestByTrip() } : null;
   const pay = payCtx ? payMonth(V.y, V.m, S.trips, S.absences, cfg, statsOf, { overRest: overRestIntervals(S.trips, statsOf) }) : null;
 
-  // 2.24.9 (просьба Никиты): вверху карточки — «Норма 159 ч (32 ч)», в скобках — норма на сегодня, как на листке в депо
+  // В скобках — дата и норма на эту дату, как на листке в депо.
   const soFar = isCurrent ? normSoFar(V.y, V.m, dateKeyOf(now), S.absences, sum.norm) : null;
   const showSoFar = soFar != null && sum.normMin > 0 && Math.round(soFar * 60) !== sum.normMin;
-  const normHead = `<div class="hero-norm" id="hero-norm">Норма <b class="num">${fmtHours(sum.norm)}</b>${showSoFar ? ` <span class="so-far num" aria-label="на сегодня ${fmtHours(soFar)}" title="Норма на сегодня">(${fmtHours(soFar)})</span>` : ''}</div>`;
+  const normHead = `<div class="hero-norm" id="hero-norm">Норма: <b class="num">${fmtHours(sum.norm)}</b>${showSoFar ? ` <span class="so-far">(на ${dayMonth(now)} — <span class="num">${fmtHours(soFar)}</span>)</span>` : ''}</div>`;
   let normHtml = '';
   if (sum.normMin === 0 && sum.base > 0) normHtml = `<div class="norm-full">Норма на этот месяц полностью покрыта отвлечениями.</div>`;
   else if (sum.absTotal > 0) normHtml = `<div class="norm-sub">${fmtHours(sum.base)} по календарю − ${fmtHours(sum.absTotal)} отвлечений</div>`;
@@ -834,7 +834,7 @@ app.addEventListener('click', async (e) => {
   if (nagClick(act, ctx)) return;
   if (statsClick(act, b, ctx)) return;
   if (growthClick(act, b, ctx)) return;
-  if (payslipAction(act, rerender)) return;
+  if (await payslipAction(act, rerender)) return;
   if (aiClick(act, b)) return;
   if (yearClick(act, b, ctx)) return;
   const sk = streakClick(act);
@@ -1001,6 +1001,7 @@ app.addEventListener('input', (e) => {
 
 app.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.id === 'ps-month') {choosePayslipMonth(t.value, rerender);return;}
   if (t.id === 'ps-files') { await loadPayslip([...t.files], rerender); return; }
   if (await workChange(e)) return;
   if (await profileChange(e)) return;

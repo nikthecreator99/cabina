@@ -158,7 +158,7 @@ test('«Ещё»: все пункты одним списком, порядок 
   const cdp = await context.newCDPSession(page);
   await tab(page, 'extra');
   assert.deepEqual(await extraKeys(page), ['notes', 'docs', 'phones', 'fix', 'help', 'ideas']);
-  assert.equal(await page.locator('.screen .panel').count(), 1, 'один общий список');
+  assert.equal(await page.locator('.screen .extra-list').count(), 1, 'один список переставляемых пунктов');
   // «Помощь» — наверх
   const help = page.locator('#extra-list > .row[data-key=help]');
   const h = (await help.boundingBox()).height;

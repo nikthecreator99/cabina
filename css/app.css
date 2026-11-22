@@ -193,10 +193,11 @@ button.hero-pay.set { display: inline-flex; color: var(--ok); font-weight: 700; 
 .hl-night span { color: var(--night); } .hl-holiday span { color: var(--holiday); } .hl-over span { color: var(--warn); }
 .hl-sick span { color: var(--sick); } .hl-vacation span { color: var(--vacation); } .hl-medical span { color: var(--medical); } .hl-study span { color: var(--study); }
 .btn .count { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 99px; background: var(--accent); color: #fff; font-size: calc(13px * var(--fs)); font-weight: 800; display: inline-grid; place-items: center; margin-left: 2px; }
-/* «Норма 159 ч (32 ч)» вверху карточки месяца (2.24.9): в скобках — норма на сегодня, как на листке в депо */
+/* Месячная норма и норма на текущую дату вверху карточки месяца */
 .hero-norm { font-size: calc(15px * var(--fs)); color: var(--text-2); font-weight: 600; min-width: 0; }
 .hero-norm b { color: var(--text); font-weight: 800; }
-.hero-norm .so-far { color: var(--text-2); font-weight: 700; white-space: nowrap; }
+.hero-norm .so-far { color: var(--text-2); font-weight: 700; }
+.hero-norm .so-far .num { white-space: nowrap; }
 .eyebrow { font-size: calc(12px * var(--fs)); letter-spacing: .14em; text-transform: uppercase; color: var(--text-2); font-weight: 600; }
 .big {
   font-family: var(--font-display); font-weight: 800; font-size: clamp(34px, 11.4vw, 54px); line-height: 1.02; letter-spacing: -.02em;

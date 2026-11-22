@@ -11,7 +11,7 @@ import {
 } from './calc.js';
 import { normDay } from './calendar.js';
 import { routeEnds, sameSt, houseOf, houseMinRest, computeHomeRest, queueUntil, dayOffMin, dayOffUntil, restEndOf, HOME_PICKS } from './rest.js';
-import { tripPay, overRestIntervals, hasRate, fmtRub, vacationPay, VAC_MIN_MONTHS } from './pay.js';
+import { tripPay, overRestIntervals, hasRate, sectionPct, fmtRub, vacationPay, VAC_MIN_MONTHS } from './pay.js';
 import { offerMedReminder, lastMedical, medFormHtml, medClick, medChange } from './med.js';
 import { openReceive, sectionFor } from './share.js';
 import { openRemind } from './remind.js';
@@ -1334,9 +1334,11 @@ export function openRouteForm(id, preset, opts = {}) {
   function kmHint() {
     const n = named().length + 1;
     const km = Number($(el, '#rf-km').value.replace(',', '.'));
-    $(el, '#rf-km-hint').textContent = n > 1 && km > 0
+    const pct = sectionPct(km);
+    const text = n > 1 && km > 0
       ? `От начала до конца участка. Перегонов: ${n} — один перегон ≈ ${String(Math.round((km / n) * 10) / 10).replace('.', ',')} км.`
       : 'От начала до конца участка.';
+    $(el, '#rf-km-hint').textContent = text + (pct ? ` Доплата 151 — ${pct}% тарифа за часы на локомотиве на этом участке.` : '');
   }
   function renderSt() {
     const box = $(el, '#rf-st');

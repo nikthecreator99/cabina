@@ -145,7 +145,7 @@ test('учёба: вычитается из нормы с расшифровко
   await page.locator('#pf-avgHour').blur();
   await page.waitForFunction(async () => (await import('./js/store.js')).S.settings.pay.main?.avgHour === 500);
   await tab(page, 'home');
-  assert.match(await text(page, '.hero'), /Норма 167 ч/, 'в октябре 30-е (7 ч) и 31-е (суббота, 5 ч): 179 − 12');
+  assert.match(await text(page, '.hero'), /Норма: 167 ч/, 'в октябре 30-е (7 ч) и 31-е (суббота, 5 ч): 179 − 12');
   await page.locator('.hero').click();
   await page.locator('#st-kind button').nth(1).click();
   assert.match(await text(page, '.screen'), /Учёба \(сессия\)[\s\S]*12\s*ч[\s\S]*6\s000/, '30 октября 7 ч и 31-е (суббота) 5 ч × 500 — те же часы, что вычтены из нормы');

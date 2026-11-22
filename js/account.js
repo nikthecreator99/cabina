@@ -81,7 +81,7 @@ function signedInHtml(s, colHtml) {
   // «Мои данные на сервере» (2.19.3 — вместо длинной плашки; с 2.21.2 — в группе «Документы», просьба Никиты);
   // полный список того, что хранит сервер, и «Не на сервере» — в её окне (myDataHtml)
   return `<div class="panel"><div class="row"><span class="ico" style="--c:var(--ok)">${I.user}</span>
-      <div class="grow"><div class="t1 acc-email">${esc(s.email)}</div><div class="t2">Вы вошли в аккаунт CABINA</div></div></div></div>
+      <div class="grow"><div class="t1 acc-email">${esc(s.email)}</div></div></div></div>
     ${colHtml}
     <div class="group"><div class="group-title">Документы</div>
       <div class="panel">

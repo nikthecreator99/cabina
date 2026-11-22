@@ -317,7 +317,7 @@ test('обновление с 1.x: данные на месте, тема тём
   await page.waitForSelector('.trip');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
   assert.equal(await page.locator('.trip').count(), 2);
-  assert.match(await text(page, '.hero'), /Норма 165 ч/);
+  assert.match(await text(page, '.hero'), /Норма: 165 ч/);
   assert.match(await text(page, '.rest-banner'), /Полный отдых · до завтра, 03:12/);
   await page.locator('.trip').first().click();
   assert.equal(await sheet(page).locator('[data-choice=full]').getAttribute('aria-pressed'), 'true');
