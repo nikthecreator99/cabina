@@ -1,3 +1,4 @@
+import { regeneration } from './meters.js';
 // Статистика: поездная и заработная плата за месяц, квартал, год или всё время.
 // Показываются только блоки, где есть данные.
 import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, MONTHS_PREP, plural, sheet, openLayer, closeLayer, hm } from './ui.js';
@@ -344,9 +345,11 @@ function tripsView(R) {
   if (ST.period === 'month') html += block('Календарь', monthCalendar(ST.y, ST.m));
   // поездки
   if (R.count) {
+    const regen = regeneration(R.trips);
     const longest = R.longest ? statsOf(R.longest) : null;
     html += block('Поездки', `<div class="kv-grid">
       ${kv('Поездок', R.count)}
+      ${regen !== null ? kv('Рекуперация', regen.toLocaleString('ru-RU') + ' кВт·ч') : ''}
       ${R.avg ? kv('Средняя', fmtDur(R.avg, { short: true })) : ''}
       ${longest ? kv('Самая длинная', fmtDur(longest.work, { short: true }), `${new Date(longest.start).getUTCDate()} ${MONTHS_SHORT[new Date(longest.start).getUTCMonth()]}`) : ''}
       ${R.km > 0 ? kv('Пройдено', `${Math.round(R.km).toLocaleString('ru-RU')} км`) : ''}

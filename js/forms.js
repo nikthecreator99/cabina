@@ -1,3 +1,4 @@
+import { newMeters, meterLabels, meterModes, meterIssues, seriesKey } from './meters.js';
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
 import { I, esc, openLayer, closeLayer, sheet, confirmDialog, infoDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe, plural, small } from './ui.js';
 import {
@@ -213,7 +214,7 @@ export function openTripForm(tripId) {
     ed: base.end ? base.end.slice(0, 10) : (base.start ? base.start.slice(0, 10) : today),
     et: base.end ? base.end.slice(11, 16) : '',
     endTouched: !!existing && !wasLive,
-    locoType: base.locoType || '', locoNumber: base.locoNumber || '',
+    locoType: base.locoType || '', locoNumber: base.locoNumber || '', meters: base.meters,
     kind: kindOf(base), kindOpen: false,
     weight: base.weight ? String(base.weight) : '', axles: base.axles ? String(base.axles) : '', length: base.length ? String(base.length) : '',
     routeNo: base.routeNo || '', routeNoOpen: !!base.routeNo,
@@ -224,7 +225,7 @@ export function openTripForm(tripId) {
       id: l.id || uid(), sd: String(l.start || '').slice(0, 10), st: String(l.start || '').slice(11, 16),
       routeId: l.routeId && S.routes.some((r) => r.id === l.routeId) ? l.routeId : null, routeLabel: l.routeLabel || '',
       stFrom: l.stFrom || '', stTo: l.stTo || '',
-      locoType: l.locoType || '', locoNumber: l.locoNumber || '',
+      locoType: l.locoType || '', locoNumber: l.locoNumber || '', meters: l.meters,
       weight: l.weight ? String(l.weight) : '', axles: l.axles ? String(l.axles) : '', length: l.length ? String(l.length) : '', kind: kindOf({ kind: l.kind ?? base.kind }),
     })),
     passenger: (base.passenger || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: (p.end || p.start).slice(0, 10), et: (p.end || '').slice(11, 16), train: trainNo(p.train) })),
@@ -264,7 +265,7 @@ export function openTripForm(tripId) {
       legs: F.legs.map((l) => ({
         id: l.id, start: at(l.sd, l.st), kind: l.kind,
         ...secFields(l),
-        locoType: l.locoType.trim(), locoNumber: normNum(l.locoNumber),
+        locoType: l.locoType.trim(), locoNumber: normNum(l.locoNumber), ...(l.meters ? { meters: l.meters } : {}),
         weight: posInt(l.weight, 20000), axles: posInt(l.axles, 2000), length: posInt(l.length, 1000),
       })),
       waiting: F.waiting.map((p) => ({ id: p.id, start: p.sd && p.st ? `${p.sd}T${p.st}` : '', end: p.ed && p.et ? `${p.ed}T${p.et}` : '' })),
@@ -272,7 +273,7 @@ export function openTripForm(tripId) {
       weight: posInt(F.weight, 20000), axles: posInt(F.axles, 2000), length: posInt(F.length, 1000),
       routeNo: F.routeNo.trim().slice(0, 20),
       mates: F.mates.map((m) => ({ id: m.id, name: m.name })),
-      locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber),
+      locoType: F.locoType.trim(), locoNumber: normNum(F.locoNumber), ...(F.meters ? { meters: F.meters } : {}),
       restType: F.restType, homeRest, homeChoice,
     };
     if (!d.legs.length) delete d.legs;
@@ -343,6 +344,7 @@ export function openTripForm(tripId) {
     <div class="field">
       <label for="tf-ln" id="tf-ln-cap">Номер локомотива</label>
       <input id="tf-ln" class="input" inputmode="numeric" placeholder="Например, 355" autocomplete="off" maxlength="12">
+      <div data-meter-box></div>
       <div id="tf-loco-notes"></div>
       <div id="tf-note-box" hidden>
         <button type="button" class="add-btn" data-act="add-note" id="tf-add-note">${I.note} Заметка о локомотиве</button>
@@ -433,7 +435,7 @@ export function openTripForm(tripId) {
     const box = $(el, '#tf-train');
     $(el, '#tf-train-cap').hidden = !F.legs.length;
     const f = (k, label, ph, max) => `<div><label for="tf-${k}" class="mini-label">${label}</label><input class="input" id="tf-${k}" data-tf="${k}" inputmode="numeric" maxlength="${max}" autocomplete="off" placeholder="${ph}" value="${esc(F[k])}"></div>`;
-    if (!box.querySelector('#tf-weight')) setHTML(box, `<div class="train-row">${f('weight', 'Вес, т', '6000', 6)}${f('axles', 'Оси', '280', 4)}${f('length', 'Длина, усл. ваг.', '71', 4)}</div>`);
+    if (!box.querySelector('#tf-weight')) setHTML(box, `<div class="train-row">${f('weight', 'Вес, т (брутто)', '6000', 6)}${f('axles', 'Кол-во осей', '280', 4)}${f('length', 'Длина, усл. ваг.', '71', 4)}</div>`);
   }
   // ---- смена локомотива (2.19.7): карточки «Второй локомотив», «Третий…» ----
   // откуда и куда ехал предыдущий локомотив — от этого подсказка «обратно» у следующего
@@ -468,6 +470,7 @@ export function openTripForm(tripId) {
         <input id="tf-ln-${i}" class="input" data-lf="locoNumber" inputmode="numeric" placeholder="355" autocomplete="off" maxlength="12" value="${esc(l.locoNumber)}"></div>
       </div>
       ${legTypes.length ? `<div class="quick">${legTypes.map((t) => `<button type="button" class="qchip" data-ltype="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}
+      <div data-meter-box></div>
       <div data-leg-notes></div>
       <div data-leg-train></div>
     </div>`;
@@ -481,10 +484,11 @@ export function openTripForm(tripId) {
     setHTML(qb, q.map((x) => `<button type="button" class="qchip" data-lrev="1">${esc(x.label)}</button>`).join(''));
     qb.hidden = !q.length;
     card.querySelectorAll('[data-ltype]').forEach((b) => b.setAttribute('aria-pressed', String(locoKey(b.dataset.ltype, '') === locoKey(l.locoType, ''))));
+    renderMeters(card.querySelector('[data-meter-box]'), l);
     const notes = l.locoType.trim() && normNum(l.locoNumber) ? notesFor(l.locoType, l.locoNumber).filter((n) => n.tripId !== base.id) : [];
     setHTML(card.querySelector('[data-leg-notes]'), l.locoType.trim() && normNum(l.locoNumber) ? locoNotesButton(l.locoType, l.locoNumber, notes.length, 'leg-notes') : '');
     const tb = card.querySelector('[data-leg-train]');
-    if (!tb.querySelector('[data-lf=weight]')) setHTML(tb, `<div class="train-row">${trainField('weight', 'Вес, т', '6000', 6, i, l.weight)}${trainField('axles', 'Оси', '280', 4, i, l.axles)}${trainField('length', 'Длина, усл. ваг.', '71', 4, i, l.length)}</div>`);
+    if (!tb.querySelector('[data-lf=weight]')) setHTML(tb, `<div class="train-row">${trainField('weight', 'Вес, т (брутто)', '6000', 6, i, l.weight)}${trainField('axles', 'Кол-во осей', '280', 4, i, l.axles)}${trainField('length', 'Длина, усл. ваг.', '71', 4, i, l.length)}</div>`);
   }
   function renderLegsParts() { F.legs.forEach((_, i) => renderLegParts(i)); }
   // с карточками подписи первого локомотива уточняются: «Тип первого локомотива»
@@ -774,7 +778,31 @@ export function openTripForm(tripId) {
     $(el, '#tf-summary').innerHTML = `<div><div class="eyebrow">${live ? 'В пути' : 'Рабочее время'}</div><div class="v">${fmtDur(st.work)}</div>${pay ? `<div class="hint"><span class="money">≈ ${fmtRub(pay.net)}</span> на руки</div>` : ''}</div>
       <div class="chips" style="justify-content:flex-end">${st.night ? `<span class="chip" style="--c:var(--night)">${ico(I.moon, 14)} ${fmtDur(st.night, { short: true })}</span>` : ''}${st.holiday ? `<span class="chip" style="--c:var(--holiday)">${ico(I.calStar, 14)} ${fmtDur(st.holiday, { short: true })}</span>` : ''}</div>`;
   }
-  function refreshAll() { renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
+  function meterOwner(box) {
+    const card = box.closest('[data-lid]');
+    return card ? F.legs.find(l => l.id === card.dataset.lid) : F;
+  }
+  function renderMeters(box, leg) {
+    const series = seriesKey(leg.locoType);
+    if (leg.meterSeries !== undefined && leg.meterSeries !== series && !leg.meters?.sections.some(row => Object.values(row).some(Boolean))) {
+      leg.meters = undefined;
+    }
+    leg.meterSeries = series;
+    if (leg.meterOpen && !leg.meters) leg.meters = newMeters(leg.locoType, S.trips);
+    const m = leg.meters;
+    const names = { electric: 'Электроэнергия и рекуперация', traction: 'Только электроэнергия', diesel: 'Топливо' };
+    let body = '';
+    if (leg.meterOpen) {
+      body = `<label class="mini-label">Вид показаний<select class="input" data-meter-mode>${Object.entries(names).map(([k, name]) => `<option value="${k}" ${k === m.mode ? 'selected' : ''}>${name}</option>`).join('')}</select></label>`;
+      m.sections.forEach((row, j) => {
+        body += `<div class="interval"><b>Секция ${j + 1}</b>${meterModes[m.mode].map(k => `<div class="mini-label">${meterLabels[k]}</div><div class="two">${[['From', 'Было'], ['To', 'Стало']].map(([suffix, label]) => `<label>${label}<input class="input" inputmode="decimal" maxlength="15" data-section="${j}" data-reading="${k + suffix}" value="${esc(row[k + suffix])}"></label>`).join('')}</div>`).join('')}</div>`;
+      });
+      body += '<button type="button" class="qchip" data-meter-act="add">+ Добавить секцию</button>';
+      if (m.sections.length > 1) body += ' <button type="button" class="qchip" data-meter-act="remove">Убрать последнюю секцию</button>';
+    }
+    setHTML(box, `<button type="button" class="pick" data-meter-act="toggle" aria-expanded="${!!leg.meterOpen}"><span class="grow">Эл. энергия/Топливо</span>${leg.meterOpen ? '−' : '+'}</button>${body}`);
+  }
+  function refreshAll() { renderMeters(el.querySelector('[data-meter-box]'), F); renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
 
   renderRoute(); renderKind(); renderTrain(); renderRouteNo(); renderMates(); renderPass(); renderLegs(); refreshAll();
   setTimeout(() => tripFormTour(el), 450);
@@ -789,6 +817,18 @@ export function openTripForm(tripId) {
 
   const onTripField = (e) => {
     const t = e.target;
+    const box = t.closest('[data-meter-box]');
+    if (box) {
+      const leg = meterOwner(box);
+      if (t.dataset.reading) leg.meters.sections[t.dataset.section][t.dataset.reading] = t.value.trim();
+      if (t.hasAttribute('data-meter-mode') && leg.meters.mode !== t.value) {
+        const keep = meterModes[t.value];
+        const lost = leg.meters.sections.some(row => Object.entries(row).some(([k, v]) => v && !keep.some(field => k.startsWith(field))));
+        if (lost) { toast('Сначала очистите показания, которые хотите убрать'); t.value = leg.meters.mode; return; }
+        leg.meters.mode = t.value; renderMeters(box, leg);
+      }
+      return;
+    }
     if (t.dataset.lf) { onLegField(t); return; }
     const map = { 'tf-sd': 'sd', 'tf-st': 'st', 'tf-ed': 'ed', 'tf-et': 'et', 'tf-lt': 'locoType', 'tf-ln': 'locoNumber', 'tf-note': 'note', 'tf-rn': 'routeNo' };
     let obj = F;
@@ -823,6 +863,16 @@ export function openTripForm(tripId) {
     const b = e.target.closest('button');
     if (!b || !el.contains(b)) return;
     if (b.hasAttribute('data-close')) { closeLayer(el); return; }
+    if (b.dataset.meterAct) {
+      const box = b.closest('[data-meter-box]'), leg = meterOwner(box);
+      if (b.dataset.meterAct === 'toggle') leg.meterOpen = !leg.meterOpen;
+      if (b.dataset.meterAct === 'add') leg.meters.sections.push({});
+      if (b.dataset.meterAct === 'remove') {
+        if (Object.values(leg.meters.sections.at(-1)).some(Boolean) && !(await confirmDialog({ title: 'Убрать секцию с показаниями?', ok: 'Убрать' }))) return;
+        leg.meters.sections.pop();
+      }
+      renderMeters(box, leg); return;
+    }
     const legEl = b.closest('#tf-legs [data-lid]');
     if (legEl) { await onLegClick(b, legEl); return; }
     if (b.dataset.type) { F.locoType = b.dataset.type; $(el, '#tf-lt').value = b.dataset.type; refreshAll(); return; }
@@ -927,7 +977,19 @@ export function openTripForm(tripId) {
       // сначала ошибки в полях, потом — вид отдыха
       if (d.end && !d.restType && needRest()) { showError(el, ''); nudgeRest(); return; }
       if (d.end && needHome()) { showError(el, ''); nudgeHome(); return; }
+      for (const leg of [d, ...(d.legs || [])]) {
+        for (const row of leg.meters?.sections || []) {
+          if (Object.values(row).some(v => v && !/^\d+(?:[.,]\d+)?$/.test(v))) {
+            showError(el, 'Проверьте показания счётчиков. Введите число, например 52350,5.'); return;
+          }
+          if (row.regenFrom && row.regenTo && Number(row.regenTo.replace(',', '.')) < Number(row.regenFrom.replace(',', '.'))) {
+            showError(el, 'Конечное показание рекуперации меньше начального. Проверьте значения.'); return;
+          }
+        }
+      }
       const warn = draftWarnings(d);
+      const missing = d.end ? meterIssues(d) : [];
+      if (missing.length) warn.push('Не заполнено «Стало». ' + missing.join('. ') + '. Всё равно завершить поездку?');
       if (warn.length) {
         const ok = await confirmDialog({ title: 'Проверьте поездку', text: warn.join(' '), ok: 'Сохранить', cancel: 'Исправить', danger: false });
         if (!ok) return;
