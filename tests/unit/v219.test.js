@@ -71,7 +71,7 @@ test('награды: ночная сова, часы, разные локомо
   assert.equal(aw.hours.tier, 0, '230 ч — до 500 ещё далеко');
 });
 
-test('награды: «Ракета» — каждый раз, когда быстрее обычного на тот момент; ожидание от 4 ч; тяжеловес; без расстояния км не идут', () => {
+test('награды: без «Ракеты»; ожидание от 4 ч; тяжеловес; без расстояния км не идут', () => {
   S.routes = [{ id: 'h', from: 'Ельник', to: 'Берёзово', weightNorm: 5199 }];
   const day = (i) => `2026-10-${pad(i)}`;
   S.trips = [
@@ -82,8 +82,7 @@ test('награды: «Ракета» — каждый раз, когда бы�
     T('lt', `${day(12)}T08:00`, `${day(12)}T16:00`, { routeId: 'h', weight: 4000 }),
   ];
   const { aw, c, records } = computeAwards();
-  assert.equal(aw.rocket.n, 4, '6 ч против обычных 10 ч, потом обычное сползает к 6 ч');
-  assert.deepEqual(aw.rocket.days, [day(4)]);
+  assert.equal(aw.rocket, undefined);
   assert.equal(aw.wait.n, 1, 'ожидание 4 ч 10 мин');
   assert.equal(c.heavy, 1, '6100 т при норме 5199 т');
   assert.equal(aw.heavy.tier, 0, 'тяжеловес — со ступенями: бронза с 10 поездов, без «×N»');

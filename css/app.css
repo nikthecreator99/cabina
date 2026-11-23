@@ -2534,3 +2534,36 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .ps-info summary { padding: 10px 0; color: var(--text-2); font-size: calc(14px * var(--fs)); }
 .ps-info summary span { margin-left: 5px; font-variant-numeric: tabular-nums; }
 .ps-clear { margin-top: 12px; }
+
+.hero-pay.set { text-align: start; line-height: 1.25; }
+.train-row input::placeholder { color: var(--muted); opacity: .65; font-weight: 400; }
+.dialog:has(#annual-earned) { display: grid; gap: 12px; }
+.dialog:has(#annual-earned) output { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .aw-dialog { position: relative; isolation: isolate; overflow: hidden; }
+  .aw-dialog::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 34%, #f7bc5747, transparent 65%);
+    animation: award-halo 1.6s ease-out both;
+  }
+  .aw-dialog::after {
+    content: ""; position: absolute; top: 6%; left: 8%; width: 84%; height: 68%; pointer-events: none;
+    background: radial-gradient(circle at 14% 35%, #ffe0a0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 28% 13%, #ffba57 2px, transparent 3px),
+      radial-gradient(circle at 81% 25%, #ffe9b2 2px, transparent 3px),
+      radial-gradient(circle at 89% 65%, #ffb967 1.5px, transparent 2.5px),
+      radial-gradient(circle at 16% 76%, #ffd994 2px, transparent 3px);
+    animation: award-sparks 1.25s ease-out both;
+  }
+  .aw-pop { animation: none; }
+  .aw-pop .aw-art { animation: award-medal .85s cubic-bezier(.22,.8,.32,1) both; }
+  .aw-pop:nth-child(2) .aw-art { animation-delay: .15s; }
+}
+@keyframes award-halo { 0% { opacity: 0; } 35% { opacity: 1; } 100% { opacity: .32; } }
+@keyframes award-sparks { 0% { opacity: 0; transform: scale(.4); } 32% { opacity: 1; } 100% { opacity: 0; transform: scale(1.12); } }
+@keyframes award-medal {
+  0% { opacity: 0; transform: translateY(14px) scale(.68) rotate(-12deg); }
+  65% { opacity: 1; transform: translateY(-3px) scale(1.1) rotate(3deg); }
+  100% { opacity: 1; transform: none; }
+}

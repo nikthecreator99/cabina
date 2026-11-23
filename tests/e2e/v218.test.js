@@ -24,22 +24,22 @@ async function payView(page) {
 
 test('тестовый режим «оплата по сменам»: переключатель, строки квитка, пометки «тест»; выключили — как раньше', async () => {
   const { context, page, errors } = await openApp(env);
-  // норма октября — 179 ч (шестидневка, 2.24.9); 10 смен по 20 ч = 200 ч → переработка 21 ч: 10 × 2 = 20 ч ×1,5, остальной 1 ч ×2
+  // норма октября — 179 ч (шестидневка, 2.24.9); 10 смен по 20 ч = 200 ч → переработка 21 ч: 10 × 1,5 = 15 ч ×1,5, остальные 6 ч ×2
   const days = ['01', '03', '05', '07', '09', '11', '13', '15', '17', '19'];
-  const list = days.map((d) => ({ id: `t${d}`, start: `2026-10-${d}T06:00`, end: `2026-10-${String(+d + 1).padStart(2, '0')}T02:00` }));
+  const list = days.map((d) => ({ id: `t${d}`, restType: 'home', routeLabel: 'Депо → Депо', start: `2026-10-${d}T06:00`, end: `2026-10-${String(+d + 1).padStart(2, '0')}T02:00` }));
   await seed(page, { settings: { pay: PAY }, trips: list });
   await tariffs(page);
   const sw = page.locator('#pay-shift [data-act=pay-shift]');
   assert.equal(await sw.getAttribute('aria-checked'), 'false');
-  assert.match(await text(page, '#pay-shift'), /Тестовый режим: оплата по сменам[\s\S]*на каждую смену первые 2 часа переработки оплачиваются в полуторном размере, всё остальное — в двойном/);
+  assert.match(await text(page, '#pay-shift'), /Тестовый режим: оплата по сменам[\s\S]*На каждую явку до 1,5 часа месячной переработки/);
   await sw.click();
   await page.waitForFunction(() => document.querySelector('#pay-shift [data-act=pay-shift]')?.getAttribute('aria-checked') === 'true');
   assert.equal(await page.evaluate(async () => (await import('./js/store.js')).S.settings.pay.main.shiftTest), true);
 
   let s = await payView(page);
   assert.match(s, /Тестовый режим: оплата по сменам/);
-  assert.match(s, /Переработка, первые 2 ч на смену 50% 20 ч 3 000,00 ₽/, '20 ч × 300 × 0,5');
-  assert.match(s, /Переработка сверх 2 ч на смену 100% 1 ч 300,00 ₽/, '1 ч × 300');
+  assert.match(s, /Переработка, до 1,5 ч на явку 50% 15 ч 2 250,00 ₽/, '15 ч × 300 × 0,5');
+  assert.match(s, /Переработка сверх 1,5 ч на явку 100% 6 ч 1 800,00 ₽/, '6 ч × 300');
   assert.doesNotMatch(s, /Переработка \d/);
   await tab(page, 'home');
   assert.match(await text(page, '.hero-pay'), /тест/i);
@@ -81,4 +81,24 @@ test('светофор: тянете — красный, отпустили — 
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.ptr-on.g')).opacity === '1');
   assert.deepEqual(errors, []);
   await context.close();
+});
+
+test('переход к ставке и калькулятор среднего за день', async () => {
+  const { context, page, errors } = await openApp(env);
+  try {
+    await seed(page, { trips: [{ id: 'one', start: '2026-10-19T06:00', end: '2026-10-19T16:00' }] });
+    await page.getByRole('button', { name: /Заполните тарифную ставку/ }).click();
+    await page.getByRole('button', { name: 'Формула среднего заработка за день' }).click();
+    assert.match(await text(page, '.dialog'), /12 ÷ 29,3/);
+    await page.getByRole('button', { name: 'Понятно' }).click();
+    await page.getByRole('button', { name: 'Рассчитать средний за день' }).click();
+    const amount = page.getByLabel('Заработок за 12 месяцев, ₽');
+    await amount.fill('1 200 000');
+    assert.equal((await text(page, 'output')).replace(/\s/g, ''), '3412,97₽задень');
+    await amount.fill('351 600,00');
+    assert.equal((await text(page, 'output')).replace(/\s/g, ''), '1000,00₽задень');
+    await page.getByRole('button', { name: 'Готово' }).click();
+    assert.equal(await page.locator('#pf-avgHour').inputValue(), '');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
 });

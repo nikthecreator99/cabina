@@ -12,7 +12,6 @@ import { isGuest } from './auth.js';
 const IRON_MIN = 12 * 60; // «Железная пятая точка»: поездка от 12 часов (согласовано с Никитой)
 const WAIT_MIN = 4 * 60; // «Ждём-с»: ожидание следования за одну поездку
 const CABIN_MIN = 200 * 60; // «Рвач» (до 2.19.8 — «Живу в кабине»): часов работы за месяц
-const FAST_RATIO = 0.85; // «Ракета»: на 15% быстрее обычного по этому пути (участок или его часть)
 const FAST_MIN_TRIPS = 3; // ...если до неё по маршруту уже было хотя бы 3 поездки
 const H = 60;
 
@@ -34,7 +33,6 @@ export const AWARDS = [
   { id: 'first', g: 'trips', color: 'special', name: 'Добро пожаловать в кабину', how: 'Первая записанная поездка', fun: 'Ключ от кабины ваш. Дальше — только вперёд.', key: 'trips', goals: [1], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
   { id: 'trips', g: 'trips', art: ['s50', 's300', 's1000'], name: 'Маршрутные листы', how: 'Записанные поездки', fun: 'Маршрутными листами уже можно обклеить кабину.', key: 'trips', goals: [50, 300, 1000], unit: (n) => plural(n, 'поездка', 'поездки', 'поездок') },
   { id: 'iron', g: 'trips', color: 'repeat', name: 'Железная пятая точка', how: 'Поездка 12 часов и дольше. Даётся за каждую такую поездку.', fun: '12 часов в кресле машиниста — тут любая точка станет железной.', key: 'iron', repeat: true, goals: [1] },
-  { id: 'rocket', g: 'trips', color: 'repeat', name: 'Ракета', how: 'Поездка на 15% быстрее обычного между этими станциями (когда так уже ездили 3 раза). Даётся каждый раз.', fun: 'Пролетели участок быстрее обычного.', key: 'rocket', repeat: true, goals: [1] },
   { id: 'heavy', g: 'trips', name: 'Тяжеловес', how: 'Поезда тяжелее или длиннее нормы участка (норма — в настройках участка)', fun: 'Локомотив кряхтел, но вёз.', key: 'heavy', goals: [10, 50, 200], unit: (n) => plural(n, 'поезд', 'поезда', 'поездов') },
   { id: 'loco', g: 'trips', name: 'Знаток техники', how: 'Разные локомотивы — по серии и номеру', fun: 'У каждого локомотива свой характер, и вы с ними знакомы.', key: 'locos', goals: [10, 50, 150], unit: (n) => plural(n, 'локомотив', 'локомотива', 'локомотивов') },
   { id: 'km', g: 'km', art: ['k10', 'earth', 'k100'], name: 'Вёрсты', how: 'Пройденный путь по длине участков', fun: 'Километр к километру — и вот уже тысячи.', key: 'km', kind: 'km', goals: [10000, 40075, 100000], notes: ['', 'вокруг Земли', ''] },
@@ -93,7 +91,7 @@ export function computeAwards(trips = S.trips) {
     .map((t) => ({ t, st: statsOf(t) })).filter((x) => x.st.work > 0)
     .sort((a, b) => a.st.end - b.st.end);
   const cfg = myPay();
-  const c = { account: 0, invited: 0, ideas: 0, useful: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, rocket: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
+  const c = { account: 0, invited: 0, ideas: 0, useful: 0, trips: 0, km: 0, noKm: 0, work: 0, night: 0, lark: 0, pass: 0, locos: 0, iron: 0, heavy: 0, wait: 0, cabin: 0, newyear: 0, holiday: 0 };
   const aw = Object.fromEntries(AWARDS.map((a) => [a.id, { tier: 0, n: 0, days: [], last: null }]));
   const locos = new Set(); const years = new Set(); const hdays = new Set();
   const months = {}; const monthTrips = {}; const byRoute = new Map();
@@ -138,13 +136,12 @@ export function computeAwards(trips = S.trips) {
     const smk = monthKeyOf(st.start);
     monthTrips[smk] = (monthTrips[smk] || 0) + 1;
     if (!rec.monthTrips || monthTrips[smk] > rec.monthTrips.n) rec.monthTrips = { mk: smk, n: monthTrips[smk] };
-    // «Ракета»: быстрее обычного по маршруту на момент поездки — поздние поездки не отбирают уже полученную награду
+    // Длительность поездок по участку для личного рекорда.
     if (t.kind !== 'reserve' && t.kind !== 'shunt') {
       const k = routeKey(t);
       const d = (parseLocal(t.end) - parseLocal(t.start)) / MIN;
       if (k && d > 0) {
         const r = byRoute.get(k) || { list: [], sorted: [] };
-        if (r.sorted.length >= FAST_MIN_TRIPS && d / median(r.sorted) <= FAST_RATIO) c.rocket++;
         r.list.push({ t, d });
         insertSorted(r.sorted, d);
         byRoute.set(k, r);

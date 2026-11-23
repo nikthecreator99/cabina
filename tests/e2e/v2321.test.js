@@ -101,7 +101,7 @@ test('награда «Своя бригада»: со днём в телефо�
   const { context, page, errors } = await openApp(env);
   await page.evaluate(async () => { await (await import('./js/store.js')).saveProfile({ groupAward: '2026-10-20' }); });
   await page.locator('.tab[data-tab=profile]').click();
-  assert.match(await text(page, '#pr-awards'), /1 из 41/);
+  assert.match(await text(page, '#pr-awards'), /1 из 40/);
   await page.locator('#pr-awards-all').click();
   await page.waitForSelector('.aw-grid');
   const aw = page.locator('.aw[data-id=group]');

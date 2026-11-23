@@ -4,7 +4,7 @@ import { I, esc, small, pageHead, MONTHS, MONTHS_SHORT, MONTHS_GEN, MONTHS_PREP,
 import { S, statsOf, nowLocal, routeOf, locoLabel, normType, normNum, myPay, refreshLive, isPending, overRestByTrip, legRoute, locosOf, legKm } from './store.js';
 import { monthSummary, finishedMonthShortfall, fmtDur, fmtHours, parseLocal, monthKeyOf, dateKeyOf, DAY, MIN, legsOf } from './calc.js';
 import { dayInfo } from './calendar.js';
-import { payMonth, payTotal, overRestIntervals, hasRate, isAvg, rateOn, fmtRub, fmtH } from './pay.js';
+import { shiftPayNote, payMonth, payTotal, overRestIntervals, hasRate, isAvg, rateOn, fmtRub, fmtH } from './pay.js';
 import { houseOf, dayOffIntervals } from './rest.js';
 import { ABS_TYPES, openTripForm } from './forms.js';
 import { exportSlip } from './slip.js';
@@ -477,8 +477,8 @@ function payView(R) {
     premiumHint = '<div class="hint">Чтобы оценить премию, загрузите листок за месяц работы и листок, в котором за него начислена премия.</div>';
   }
   if (!hasRate(cfg)) {
-    return `${premiumHint}<div class="empty"><div class="em-ico" style="--accent:var(--ok)">${I.wallet}</div><b>Укажите тарифную ставку</b><p>По ней приложение посчитает заработок на руки за каждую поездку, месяц и год.</p>
-      <button class="btn btn-primary btn-sm" data-act="go" data-page="tariffs">Указать ставку</button></div>`;
+    return `${premiumHint}<div class="empty"><div class="em-ico" style="--accent:var(--ok)">${I.wallet}</div><b>${cfg.mode === 'avg' ? 'Заполните средний за час' : 'Заполните тарифную ставку'}</b><p>По ней приложение посчитает заработок на руки за каждую поездку, месяц и год.</p>
+      <button class="btn btn-primary btn-sm" data-act="go" data-page="tariffs">Открыть настройки оплаты</button></div>`;
   }
   const or = overRestIntervals(S.trips, statsOf);
   const months = R.months.map(([y, m]) => payMonth(y, m, S.trips, S.absences, cfg, statsOf, { overRest: or }));
@@ -498,7 +498,7 @@ function payView(R) {
   if (ST.period === 'month') html += `<button class="btn btn-ghost" data-act="slip-pdf">${I.download} Скачать квиток в PDF</button>`;
   html += `<div class="notice">${I.info}<div><b>Расчёт ориентировочный, итог — по вашему расчётному листку.</b> Отпускные, техучёба и разовые выплаты не учитываются. Больничный — если в «Тарифных ставках» указана оплата одного дня.</div></div>`;
   // тестовый режим «оплата по сменам» — чтобы не спутать с обычным расчётом
-  const test = total.shiftTest ? `<div class="notice" id="st-shift">${I.alert}<div><b>Тестовый режим: оплата по сменам.</b> Переработка: первые 2 ч на каждую смену — в полуторном размере, остальное — в двойном. Выключить: ☰ → «Тарифные ставки».</div></div>` : '';
+  const test = total.shiftTest ? `<div class="notice" id="st-shift">${I.alert}<div><b>Тестовый режим: оплата по сменам.</b> ${shiftPayNote(months)}</div></div>` : '';
   return `<div class="money-area">${test}${html}</div>`;
 }
 

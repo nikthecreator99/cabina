@@ -59,8 +59,8 @@ test('профиль по примеру Никиты: персонаж слев
   assert.ok(stBox.width > card.width - 40, 'статус — во всю ширину карточки');
   assert.equal((await text(page, '#col-find')).trim(), 'Найти'); // 2.21.2
   const order = GROUPS_LIVE
-    ? /Профиль[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Группы[\s\S]*Награды[\s\S]*Все \d+ из 41/
-    : /Профиль[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Награды[\s\S]*Все \d+ из 41/;
+    ? /Профиль[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Группы[\s\S]*Награды[\s\S]*Все \d+ из 40/
+    : /Профиль[\s\S]*Коллеги[\s\S]*Найти[\s\S]*Мои коллеги[\s\S]*Награды[\s\S]*Все \d+ из 40/;
   assert.match(await text(page, '.screen'), order);
   assert.equal(await page.locator('#inv-entry').count(), 0, '2.33.1: «Пригласить коллег» убрана из профиля');
   assert.equal(await page.locator('#pr-awards .aw-mini.locked').count(), 0, 'в полоске — только полученные награды');

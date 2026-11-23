@@ -4,7 +4,7 @@ import { S, nowLocal, saveSettings, deleteRoute, myPay, forgetPayslipBonuses, us
 import { fmtDur, fmtLocal, legsOf } from './calc.js';
 import { openRouteForm } from './forms.js';
 import { restHouses, dayOffMin } from './rest.js';
-import { PAY_FIELDS, ROLES, payCfg, paySet, currentRate, hasRate, fmtRub } from './pay.js';
+import { averageDailyPay, PAY_FIELDS, ROLES, payCfg, paySet, currentRate, hasRate, fmtRub } from './pay.js';
 import { openDepotShare, openDepotReceive } from './depot.js';
 
 
@@ -73,8 +73,25 @@ export function renderRoutes() {
 const payRole = () => S.profile.role || 'assistant';
 // средний за час: поле и переключатель, пояснение — по кнопке «!»
 // тестовый режим «оплата по сменам» (2.18): посмотреть, какой была бы зарплата при такой системе
-export const SHIFT_INFO = 'Переработка за месяц (отработано больше нормы) делится по сменам: на каждую смену первые 2 часа переработки оплачиваются в полуторном размере, всё остальное — в двойном. Например, 21 смена: 42 часа — в полуторном, сверх них — в двойном. Все надбавки и премия — как обычно.';
-const AVG_INFO = 'Это примерно вся ваша зарплата до вычета НДФЛ, делённая на отработанные часы. Если включить «Считать зарплату по среднему», все рабочие часы умножаются на эту сумму — без отдельных доплат и надбавок. Позже CABINA поможет посчитать ваш средний.';
+export const SHIFT_INFO = 'Смена начинается с явки из домашнего депо и длится до домашнего отдыха. На каждую явку до 1,5 часа месячной переработки оплачивается в полуторном размере, остальное — в двойном.';
+const AVG_INFO = 'Средний заработок за час — зарплата до вычета НДФЛ, делённая на отработанные часы. В этом режиме все рабочие часы умножаются на указанную часовую ставку.';
+function openDailyAverage() {
+  const el = openLayer(`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="daily-title">
+    <h3 id="daily-title">Средний заработок за день</h3>
+    <label for="annual-earned">Заработок за 12 месяцев, ₽</label>
+    <input id="annual-earned" class="input" inputmode="decimal" autocomplete="off" placeholder="Например, 1 200 000">
+    <output for="annual-earned" aria-live="polite"></output>
+    <button class="btn btn-primary" data-close>Готово</button></div>`, { kind: 'dialog' });
+  const input = el.querySelector('input');
+  const output = el.querySelector('output');
+  input.oninput = () => {
+    const raw = input.value.replace(/\s/g, '');
+    const annual = parseNum(raw);
+    output.textContent = raw === '' ? '' : /^\d+(?:[.,]\d{0,2})?$/.test(raw) && Number.isFinite(annual)
+      ? `${fmtRub(averageDailyPay(annual), true)} за день` : 'Введите сумму в рублях и копейках';
+  };
+  input.focus();
+}
 export function renderTariffs() {
   const raw = paySet(S.settings.pay, payRole());
   const cfg = myPay();
@@ -98,6 +115,9 @@ export function renderTariffs() {
       <div class="pay-field"><div class="switch-row" id="pay-mode"><div class="grow t1">Считать зарплату по среднему</div>
         <button class="info-btn" data-act="avg-info" aria-label="Что такое средний заработок">${I.excl}</button>
         <button class="switch" role="switch" data-act="pay-mode" aria-checked="${avg}" aria-label="Считать зарплату по среднему"></button></div></div>
+      <div class="pay-field switch-row">
+        <button class="btn btn-ghost btn-sm" data-act="daily-average">Рассчитать средний за день</button>
+        <button class="info-btn" data-act="daily-formula" aria-label="Формула среднего заработка за день">?</button></div>
     </div>
     ${avg ? '' : `<div class="group-title">Тарифная ставка и надбавки</div>
     <div class="panel pay-panel">
@@ -113,7 +133,7 @@ export function renderTariffs() {
     <div class="panel pay-panel" id="pay-shift"><div class="pay-field">
       <div class="switch-row"><div class="grow t1">Тестовый режим: оплата по сменам</div>
         <button class="switch" role="switch" data-act="pay-shift" aria-checked="${cfg.shiftTest}" aria-label="Тестовый режим: оплата по сменам"></button></div>
-      <div class="hint">${esc(SHIFT_INFO)} Выключите, чтобы вернуться к обычному расчёту.</div></div></div>`}
+      <div class="hint">${esc(SHIFT_INFO)} ${cfg.shiftTest ? (cfg.homeShifts.home ? 'Домашняя станция — ' + esc(cfg.homeShifts.home) + '.' : 'Отметьте домашний отдых три раза подряд на одной станции. До подтверждения действует обычный расчёт.') : ''}</div></div></div>`}
     ${S.bonusRecords.length ? `<div class="panel pay-panel"><div class="pay-field">
       <div class="t1">Премия по расчётным листкам</div>
       <div class="hint">${cfg.bonusEstimate != null ? 'Средний процент — ' + numText(cfg.bonusEstimate) + '%.' : 'Для оценки нужны строки обычной премии и база за месяц, за который её начислили.'} На устройстве сохранены только месячные итоги для расчёта.</div>
@@ -272,6 +292,8 @@ export async function workClick(act, b, ctx) {
       if (ok) { await deleteRoute(r.id); toast('Участок удалён'); } else ctx.closeSwipes();
       return true;
     }
+    case 'daily-average': openDailyAverage(); return true;
+    case 'daily-formula': infoDialog({ title: 'Как считается средний за день', text: 'Заработок за 12 месяцев ÷ 12 ÷ 29,3. Это оценка за день для 12 полностью отработанных месяцев. Часовая ставка для оплаты поездок задаётся отдельно.' }); return true;
     case 'avg-info': infoDialog({ title: 'Средний заработок за час', text: AVG_INFO }); return true;
     case 'pay-mode': {
       const m = b.getAttribute('aria-checked') === 'true' ? 'tariff' : 'avg';
