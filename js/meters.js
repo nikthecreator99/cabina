@@ -2,7 +2,7 @@
 export const meterModes = {
   electric: ['energy', 'regen'], traction: ['energy'], diesel: ['fuel'],
 };
-export const meterLabels = { energy: 'Эл. энергия', regen: 'Рекуперация', fuel: 'Топливо' };
+export const meterLabels = { energy: 'Электроэнергия', regen: 'Рекуперация', fuel: 'Топливо' };
 export const seriesKey = (type) => String(type || '').toUpperCase().replace(/[\s-]/g, '');
 
 export function newMeters(type, trips) {

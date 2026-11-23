@@ -344,7 +344,6 @@ export function openTripForm(tripId) {
     <div class="field">
       <label for="tf-ln" id="tf-ln-cap">Номер локомотива</label>
       <input id="tf-ln" class="input" inputmode="numeric" placeholder="Например, 355" autocomplete="off" maxlength="12">
-      <div data-meter-box></div>
       <div id="tf-loco-notes"></div>
       <div id="tf-note-box" hidden>
         <button type="button" class="add-btn" data-act="add-note" id="tf-add-note">${I.note} Заметка о локомотиве</button>
@@ -356,6 +355,7 @@ export function openTripForm(tripId) {
           ${shareSwitchHtml('tf-note-share', F.noteShared, linkedNote?.id)}
         </div>
       </div>
+      <div data-meter-box></div>
     </div>
     <div class="field">
       <div class="list" id="tf-legs"></div>
@@ -470,8 +470,8 @@ export function openTripForm(tripId) {
         <input id="tf-ln-${i}" class="input" data-lf="locoNumber" inputmode="numeric" placeholder="355" autocomplete="off" maxlength="12" value="${esc(l.locoNumber)}"></div>
       </div>
       ${legTypes.length ? `<div class="quick">${legTypes.map((t) => `<button type="button" class="qchip" data-ltype="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}
-      <div data-meter-box></div>
       <div data-leg-notes></div>
+      <div data-meter-box></div>
       <div data-leg-train></div>
     </div>`;
   const legCard = (i) => el.querySelectorAll('#tf-legs .leg')[i];
@@ -795,12 +795,20 @@ export function openTripForm(tripId) {
     if (leg.meterOpen) {
       body = `<label class="mini-label">Вид показаний<select class="input" data-meter-mode>${Object.entries(names).map(([k, name]) => `<option value="${k}" ${k === m.mode ? 'selected' : ''}>${name}</option>`).join('')}</select></label>`;
       m.sections.forEach((row, j) => {
-        body += `<div class="interval"><b>Секция ${j + 1}</b>${meterModes[m.mode].map(k => `<div class="mini-label">${meterLabels[k]}</div><div class="two">${[['From', 'Было'], ['To', 'Стало']].map(([suffix, label]) => `<label>${label}<input class="input" inputmode="decimal" maxlength="15" data-section="${j}" data-reading="${k + suffix}" value="${esc(row[k + suffix])}"></label>`).join('')}</div>`).join('')}</div>`;
+        const groups = meterModes[m.mode].map(key => {
+          const title = meterLabels[key];
+          const inputs = [['From', 'Было'], ['To', 'Стало']].map(([suffix, label]) =>
+            `<input class="input" inputmode="decimal" maxlength="15" data-section="${j}" data-reading="${key + suffix}"
+              placeholder="${label}" aria-label="Секция ${j + 1}, ${title}, ${label}" value="${esc(row[key + suffix])}">`
+          ).join('');
+          return `<div class="meter-group"><strong>${title}</strong><div class="meter-pair">${inputs}</div></div>`;
+        }).join('');
+        body += `<section class="interval meter-section"><b>Секция ${j + 1}</b>${groups}</section>`;
       });
-      body += '<button type="button" class="qchip" data-meter-act="add">+ Добавить секцию</button>';
-      if (m.sections.length > 1) body += ' <button type="button" class="qchip" data-meter-act="remove">Убрать последнюю секцию</button>';
+      body += `<div class="meter-actions"><button type="button" class="qchip" data-meter-act="add">+ Добавить секцию</button>
+        ${m.sections.length > 1 ? '<button type="button" class="qchip" data-meter-act="remove">Убрать последнюю секцию</button>' : ''}</div>`;
     }
-    setHTML(box, `<button type="button" class="pick" data-meter-act="toggle" aria-expanded="${!!leg.meterOpen}"><span class="grow">Эл. энергия/Топливо</span>${leg.meterOpen ? '−' : '+'}</button>${body}`);
+    setHTML(box, `<button type="button" class="add-btn" data-meter-act="toggle" aria-expanded="${!!leg.meterOpen}">${I.bolt} Эл. энергия/Топливо</button>${body}`);
   }
   function refreshAll() { renderMeters(el.querySelector('[data-meter-box]'), F); renderEndHint(); renderLocoNotes(); renderTypeChips(); renderRest(); renderCalc(); }
 
