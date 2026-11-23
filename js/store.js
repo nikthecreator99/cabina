@@ -209,7 +209,9 @@ export function homeShiftHistory(trips, now = nowLocal()) {
       runStart = shifts.length - 1;
     }
     if (station && ++streak === 3 && station !== depots.at(-1)?.station) {
-      depots.push({ start: depots.length ? runStart : 0, station, name });
+      // При переводе первая поездка на новую станцию ещё могла начаться в старом депо.
+      const firstDeparture = runStart + (shifts[runStart].from === station ? 0 : 1);
+      depots.push({ start: depots.length ? firstDeparture : 0, station, name });
     }
     shift = null;
   }

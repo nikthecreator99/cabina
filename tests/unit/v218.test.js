@@ -118,6 +118,8 @@ test('дом подтверждается тремя домашними отды
   const changed = [...list, ...['06', '07', '08'].map(d => trip('2026-10-' + d, 'Новое', 'Новое', 'home'))];
   assert.equal(homeShiftHistory(changed, Infinity).home, 'Новое');
   assert.equal(homeShiftHistory(changed, Infinity).months['2026-10'].count, 5);
+  changed[list.length] = trip('2026-10-06', 'Депо', 'Новое', 'home');
+  assert.equal(homeShiftHistory(changed, Infinity).months['2026-10'].count, 5);
 });
 
 test('до подтверждения депо месячная переработка остаётся по обычной схеме', () => {
