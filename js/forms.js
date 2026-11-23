@@ -191,7 +191,7 @@ export function usualKind(trips = S.trips) {
   return last.length ? best : 'freight';
 }
 // вес, оси и условная длина — для грузового (и если уже были введены)
-const hasTrain = (t) => t.weight || t.axles || t.length;
+
 const posInt = (v, max) => { const n = Math.round(Number(String(v ?? '').replace(',', '.').replace(/\s/g, ''))); return Number.isFinite(n) && n > 0 && n <= max ? n : null; };
 
 export function openTripForm(tripId) {
@@ -216,7 +216,6 @@ export function openTripForm(tripId) {
     locoType: base.locoType || '', locoNumber: base.locoNumber || '',
     kind: kindOf(base), kindOpen: false,
     weight: base.weight ? String(base.weight) : '', axles: base.axles ? String(base.axles) : '', length: base.length ? String(base.length) : '',
-    trainOpen: !!hasTrain(base),
     routeNo: base.routeNo || '', routeNoOpen: !!base.routeNo,
     mates: existing ? matesOf(base) : lastMates(S.trips), // напарник (2.32) — только в этом телефоне; в новой — как в прошлой поездке
     matesAuto: !existing && lastMates(S.trips).length > 0,
@@ -226,7 +225,7 @@ export function openTripForm(tripId) {
       routeId: l.routeId && S.routes.some((r) => r.id === l.routeId) ? l.routeId : null, routeLabel: l.routeLabel || '',
       stFrom: l.stFrom || '', stTo: l.stTo || '',
       locoType: l.locoType || '', locoNumber: l.locoNumber || '',
-      weight: l.weight ? String(l.weight) : '', axles: l.axles ? String(l.axles) : '', length: l.length ? String(l.length) : '', trainOpen: !!hasTrain(l),
+      weight: l.weight ? String(l.weight) : '', axles: l.axles ? String(l.axles) : '', length: l.length ? String(l.length) : '', kind: kindOf({ kind: l.kind ?? base.kind }),
     })),
     passenger: (base.passenger || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: (p.end || p.start).slice(0, 10), et: (p.end || '').slice(11, 16), train: trainNo(p.train) })),
     waiting: (base.waiting || []).map((p) => ({ id: p.id || uid(), sd: p.start.slice(0, 10), st: p.start.slice(11, 16), ed: p.end.slice(0, 10), et: p.end.slice(11, 16) })),
@@ -263,7 +262,7 @@ export function openTripForm(tripId) {
         return x;
       }),
       legs: F.legs.map((l) => ({
-        id: l.id, start: at(l.sd, l.st),
+        id: l.id, start: at(l.sd, l.st), kind: l.kind,
         ...secFields(l),
         locoType: l.locoType.trim(), locoNumber: normNum(l.locoNumber),
         weight: posInt(l.weight, 20000), axles: posInt(l.axles, 2000), length: posInt(l.length, 1000),
@@ -429,13 +428,10 @@ export function openTripForm(tripId) {
     $(el, '#tf-add-routeno').hidden = F.routeNoOpen;
     $(el, '#tf-routeno-field').hidden = !F.routeNoOpen;
   }
-  // вес, оси, условная длина — кнопкой «+» у грузового
+  // Вес, оси и условная длина первого поезда.
   function renderTrain() {
     const box = $(el, '#tf-train');
-    const can = F.kind === 'freight' || F.weight || F.axles || F.length;
-    $(el, '#tf-train-cap').hidden = !(can && F.legs.length);
-    if (!can) { setHTML(box, ''); return; }
-    if (!F.trainOpen) { setHTML(box, `<button type="button" class="add-btn" data-act="add-train">${I.train} Вес, оси, длина</button>`); return; }
+    $(el, '#tf-train-cap').hidden = !F.legs.length;
     const f = (k, label, ph, max) => `<div><label for="tf-${k}" class="mini-label">${label}</label><input class="input" id="tf-${k}" data-tf="${k}" inputmode="numeric" maxlength="${max}" autocomplete="off" placeholder="${ph}" value="${esc(F[k])}"></div>`;
     if (!box.querySelector('#tf-weight')) setHTML(box, `<div class="train-row">${f('weight', 'Вес, т', '6000', 6)}${f('axles', 'Оси', '280', 4)}${f('length', 'Длина, усл. ваг.', '71', 4)}</div>`);
   }
@@ -463,6 +459,8 @@ export function openTripForm(tripId) {
       <div class="mini-label">Участок <span class="opt">· необязательно</span></div>
       <button class="pick" type="button" data-act="leg-route">${I.route}<span class="grow" data-leg-route></span>${I.right}</button>
       <div class="quick" data-leg-quick></div>
+      <label class="mini-label" for="tf-kind-${i}">Вид движения</label>
+      <select class="input" id="tf-kind-${i}" data-lf="kind">${Object.entries(TRIP_KINDS).map(([k, v]) => `<option value="${k}" ${k === l.kind ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
       <div class="two leg-loco">
         <div><label class="mini-label" for="tf-lt-${i}">Тип локомотива</label>
         <input id="tf-lt-${i}" class="input" data-lf="locoType" list="tf-types" placeholder="2ЭС5К" autocomplete="off" autocapitalize="characters" maxlength="30" value="${esc(l.locoType)}"></div>
@@ -486,10 +484,7 @@ export function openTripForm(tripId) {
     const notes = l.locoType.trim() && normNum(l.locoNumber) ? notesFor(l.locoType, l.locoNumber).filter((n) => n.tripId !== base.id) : [];
     setHTML(card.querySelector('[data-leg-notes]'), l.locoType.trim() && normNum(l.locoNumber) ? locoNotesButton(l.locoType, l.locoNumber, notes.length, 'leg-notes') : '');
     const tb = card.querySelector('[data-leg-train]');
-    const can = F.kind === 'freight' || l.weight || l.axles || l.length;
-    if (!can) setHTML(tb, '');
-    else if (!l.trainOpen) setHTML(tb, `<button type="button" class="add-btn" data-act="leg-train">${I.train} Вес, оси, длина</button>`);
-    else if (!tb.querySelector('[data-lf=weight]')) setHTML(tb, `<div class="train-row">${trainField('weight', 'Вес, т', '6000', 6, i, l.weight)}${trainField('axles', 'Оси', '280', 4, i, l.axles)}${trainField('length', 'Длина, усл. ваг.', '71', 4, i, l.length)}</div>`);
+    if (!tb.querySelector('[data-lf=weight]')) setHTML(tb, `<div class="train-row">${trainField('weight', 'Вес, т', '6000', 6, i, l.weight)}${trainField('axles', 'Оси', '280', 4, i, l.axles)}${trainField('length', 'Длина, усл. ваг.', '71', 4, i, l.length)}</div>`);
   }
   function renderLegsParts() { F.legs.forEach((_, i) => renderLegParts(i)); }
   // с карточками подписи первого локомотива уточняются: «Тип первого локомотива»
@@ -513,7 +508,7 @@ export function openTripForm(tripId) {
     if (!l || l[key] === t.value) return;
     l[key] = t.value;
     if (key === 'locoType' || key === 'locoNumber') { renderLegParts(i); return; }
-    if (key === 'sd' || key === 'st') { $(el, '[data-error]').innerHTML = ''; refreshAll(); }
+    if (key === 'sd' || key === 'st' || key === 'kind') { $(el, '[data-error]').innerHTML = ''; refreshAll(); }
   }
   async function onLegClick(b, card) {
     const i = F.legs.findIndex((l) => l.id === card.dataset.lid);
@@ -539,8 +534,7 @@ export function openTripForm(tripId) {
     else if (act === 'leg-route') {
       const res = await pickRoute(l);
       if (res !== undefined) { setSec(l, res); changed(); }
-    } else if (act === 'leg-train') { l.trainOpen = true; renderLegParts(i); card.querySelector('[data-lf=weight]')?.focus(); }
-    else if (act === 'leg-notes') openLocoNotesSheet(l.locoType, l.locoNumber, base.id);
+    } else if (act === 'leg-notes') openLocoNotesSheet(l.locoType, l.locoNumber, base.id);
   }
 
   function renderLocoNotes() {
@@ -853,7 +847,7 @@ export function openTripForm(tripId) {
       const nowMs = nowLocal();
       const n = fmtLocal(nowMs);
       const going = !F.et && F.sd && F.st && parseLocal(`${F.sd}T${F.st}`) < nowMs;
-      F.legs.push({ id: uid(), sd: going ? n.slice(0, 10) : F.sd || today, st: going ? n.slice(11, 16) : '', routeId: null, routeLabel: '', stFrom: '', stTo: '', locoType: '', locoNumber: '', weight: '', axles: '', length: '', trainOpen: false });
+      F.legs.push({ id: uid(), sd: going ? n.slice(0, 10) : F.sd || today, st: going ? n.slice(11, 16) : '', routeId: null, routeLabel: '', stFrom: '', stTo: '', locoType: '', locoNumber: '', weight: '', axles: '', length: '', kind: F.legs.at(-1)?.kind || F.kind });
       renderLegs(); refreshAll();
       legCard(F.legs.length - 1)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else if (b.id === 'tf-note-share') {
@@ -868,8 +862,6 @@ export function openTripForm(tripId) {
       F.mates = F.mates.filter((x) => mateKey(x) !== b.dataset.k); F.matesAuto = false; renderMates();
     } else if (act === 'add-routeno') {
       F.routeNoOpen = true; renderRouteNo(); $(el, '#tf-rn').focus();
-    } else if (act === 'add-train') {
-      F.trainOpen = true; renderTrain(); $(el, '#tf-weight')?.focus();
     } else if (act === 'home-calc') {
       F.homeOpen = true;
       if (!F.homeSel.length) F.homeSel = suggestChain(draft()).chain.map((c) => c.id); // сразу вся поездка (или одна эта)

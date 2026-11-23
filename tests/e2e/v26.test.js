@@ -65,9 +65,9 @@ test('форма поездки: без номеров шагов и «Заве�
   assert.equal(await f.locator('.step-n').count(), 0);
   assert.equal(await f.locator('[data-act=finish-now]').count(), 0);
   // вес, оси, длина — сразу после вида движения
-  const add = f.locator('[data-act=add-train]');
+  const add = f.locator('#tf-weight');
   assert.ok((await add.boundingBox()).y > (await f.locator('#tf-kind').boundingBox()).y);
-  await add.click();
+
   await f.locator('#tf-weight').fill('5 200');
   await f.locator('#tf-axles').fill('220');
   await f.locator('#tf-length').fill('57');
@@ -200,7 +200,7 @@ test('экраны 2.6 на 320 px в обеих темах: ничего не �
     assert.equal(await wide(), 320, `поиск, ${theme}`);
     await tab(page, 'home');
     await page.locator('[data-act=add-trip]').click();
-    await sheet(page).locator('[data-act=add-train]').click();
+
     await sheet(page).locator('#tf-add-routeno').click();
     assert.equal(await wide(), 320, `форма поездки, ${theme}`);
     await sheet(page).locator('button[data-close]').first().click();

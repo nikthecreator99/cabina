@@ -39,7 +39,7 @@ test('в пути: «Добавить локомотив» — время «се
   assert.equal(await card.locator('[data-lf=locoType]').inputValue(), '2ЭС5К');
   await card.locator('[data-lf=locoType]').fill('ВЛ80С');
   await card.locator('[data-lf=locoNumber]').fill('1234');
-  await card.locator('[data-act=leg-train]').click();
+  await card.locator('[data-lf=kind]').selectOption('passenger');
   await card.locator('[data-lf=weight]').fill('5000');
   // пассажиром — с этой минуты, окончание пустое
   await f.locator('[data-act=add-pass]').click();
@@ -58,6 +58,7 @@ test('в пути: «Добавить локомотив» — время «се
   assert.equal(t.end, '', 'поездка осталась «в пути»');
   assert.deepEqual(t.passenger.map((p) => [p.start, p.end]), [['2026-10-20T11:00', '']]);
   assert.equal(t.legs.length, 1);
+  assert.equal(t.legs[0].kind, 'passenger');
   assert.deepEqual([t.legs[0].start, t.legs[0].locoType, t.legs[0].locoNumber, t.legs[0].weight], ['2026-10-20T10:30', 'ВЛ80С', '1234', 5000]);
   assert.deepEqual([t.legs[0].routeId, t.legs[0].stFrom, t.legs[0].stTo], ['ab', 'Ольховка', 'Сосновка']);
   assert.equal(await page.evaluate(async () => (await import('./js/store.js')).S.routes.length), 1);
