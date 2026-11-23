@@ -108,12 +108,22 @@ function collect(p) {
   const arms = new Map();
   R.passenger = 0;
   // следование резервом: число поездок периода и их часы по месяцам периода (без ожидания — как в заработке)
-  R.reserve = { n: trips.filter((t) => t.kind === 'reserve').length, min: 0 };
-  R.shunt = { n: trips.filter((t) => t.kind === 'shunt').length, min: 0 }; // манёвры — так же
+  R.reserve = { n: 0, min: 0 };
+  R.shunt = { n: 0, min: 0 };
   for (const t of S.trips) {
-    const x = t.kind === 'reserve' ? R.reserve : t.kind === 'shunt' ? R.shunt : null;
-    if (!x) continue;
-    for (const [mk, b] of Object.entries(statsOf(t).byMonth || {})) if (keys.has(mk)) x.min += b.work - (b.wait || 0);
+    const st = statsOf(t);
+    const kinds = new Set();
+    for (const [i, leg] of legsOf(t).entries()) {
+      if (!['reserve', 'shunt'].includes(leg.kind)) continue;
+      const months = st.legs?.[i]?.byMonth;
+      for (const [mk, b] of Object.entries(st.byMonth)) {
+        if (!keys.has(mk)) continue;
+        const min = months ? months[mk] || 0 : b.work - (b.wait || 0);
+        R[leg.kind].min += min;
+        if (min > 0 || (!months && trips.includes(t))) kinds.add(leg.kind);
+      }
+    }
+    for (const kind of kinds) R[kind].n++;
   }
   // у поездки со сменой локомотива каждое плечо — своё: свои километры и своя строка в «Плечах»
   for (const t of trips) {

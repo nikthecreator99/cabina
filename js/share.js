@@ -20,7 +20,7 @@ const CODE_MAX = 8000; // длина кода в ссылке
 const JSON_MAX = 64 * 1024; // распакованные данные
 const DAY_MIN = 24 * 60;
 const KINDS = { passenger: 'p', reserve: 'r', shunt: 's' };
-const KIND_BACK = { p: 'passenger', r: 'reserve', s: 'shunt' };
+const KIND_BACK = { f: 'freight', p: 'passenger', r: 'reserve', s: 'shunt' };
 
 // ---- упаковка ----
 export const b64u = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
@@ -47,6 +47,8 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? M
 
 // Маршрут и локомотив с поездом — у поездки и у каждого следующего локомотива одинаково
 function packLeg(l, x) {
+  if (l.kind === 'freight') x.k = 'f';
+  else if (KINDS[l.kind]) x.k = KINDS[l.kind];
   const ends = legEnds(l);
   if (ends) { x.f = ends.from; x.to = ends.to; }
   if (num(legKm(l))) x.km = num(legKm(l)); // у части участка — её километры
@@ -61,7 +63,7 @@ function packLeg(l, x) {
 function packTrip(t, base) {
   const s = mins(t.start); const e = mins(t.end);
   const x = packLeg(t, { a: s - base, d: e - s });
-  if (KINDS[t.kind]) x.k = KINDS[t.kind];
+
   if (t.routeNo) x.rn = String(t.routeNo);
   if (t.restType === 'home') x.r = 'h'; else if (t.restType === 'turnaround') x.r = 't';
   const p = iv(closePass(t.passenger, t.end), s); if (p.length) x.p = p;
@@ -144,6 +146,7 @@ function unpackTrip(x, base, nowMs) {
       if (o == null) return null;
       prev = o;
       const leg = { id: uid(), start: fmtLocal((s + o) * MIN), routeId: null, routeLabel: '', locoType: clean(g.lt, 20), locoNumber: clean(g.ln, 12) };
+      if (Object.hasOwn(KIND_BACK, g.k)) leg.kind = KIND_BACK[g.k];
       unpackTrain(g, leg);
       legs.push({ leg, ...stationsIn(g) });
     }

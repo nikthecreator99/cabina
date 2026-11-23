@@ -62,7 +62,7 @@ export function legsOf(t) {
   const first = { id: t.id, start: t.start };
   for (const k of LEG_FIELDS) first[k] = t[k];
   const all = [first, ...(hasLegs(t) ? t.legs : [])];
-  return all.map((l, i) => ({ ...l, kind: t.kind, end: i + 1 < all.length ? all[i + 1].start : t.end }));
+  return all.map((l, i) => ({ ...l, kind: l.kind ?? t.kind, end: i + 1 < all.length ? all[i + 1].start : t.end }));
 }
 
 // [s, e] минус интервалы off (уже объединённые и отсортированные)

@@ -190,18 +190,22 @@ export function shiftSplit(overMin, shifts) {
 // heavy — минуты на локомотиве с тяжёлым или длинным поездом (heavyMin).
 // У резерва часы на локомотиве идут своей строкой, тоже по тарифу.
 // Пассажирский и манёвры пока оплачиваются как грузовой (доплаты за тяжёлый поезд манёврам не положены).
-function hoursPay(part, rate, cfg, trip, heavy, section) {
+function reserveMinutes(trip, st, mk) {
+  return legsOf(trip).reduce((sum, leg, i) => sum + (leg.kind === 'reserve' ? locoMinutes(st, i, mk) : 0), 0);
+}
+
+function hoursPay(part, rate, cfg, reserveMin, heavy, section) {
   const h = part.work / 60;
   const w = (part.wait || 0) / 60;
   const p = (part.pass || 0) / 60;
   const drive = Math.max(0, h - w - p);
-  const reserve = trip?.kind === 'reserve';
+  const reserve = Math.min(drive, reserveMin / 60);
   return {
     ...Object.fromEntries(sectionRates.map((pct) => [`section${pct}`, (section.get(pct) || 0) / 60 * rate * pct / 100])),
-    base: reserve ? 0 : drive * rate,
+    base: (drive - reserve) * rate,
     pass: p * rate,
     wait: w * rate,
-    reserve: reserve ? drive * rate : 0,
+    reserve: reserve * rate,
     night: (part.night / 60) * rate * cfg.night / 100,
     harm: h * rate * cfg.harm / 100,
     klass: h * rate * cfg.klass / 100,
@@ -223,7 +227,7 @@ export function tripPay(trip, st, cfg, { overRestMin = 0 } = {}) {
   if (isAvg(cfg)) gross = (st.work / 60) * cfg.avgHour;
   else {
     const rate = rateOn(cfg, dateKeyOf(st.start));
-    const p = hoursPay(st, rate, cfg, trip, heavyMin(trip, st, cfg), sectionMinutes(trip, st, cfg));
+    const p = hoursPay(st, rate, cfg, reserveMinutes(trip, st), heavyMin(trip, st, cfg), sectionMinutes(trip, st, cfg));
     const work = sumObj(p) + (overRestMin / 60) * rate * 2 / 3;
     gross = work * (1 + cfg.bonus / 100) * (1 + regionalPct(cfg) / 100);
   }
@@ -250,11 +254,11 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
     const hv = heavyMin(t, st, cfg, mk);
     const section = sectionMinutes(t, st, cfg, mk);
     for (const [pct, minutes] of section) sectionTotals.set(pct, (sectionTotals.get(pct) || 0) + minutes);
-    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, t, hv, section);
+    const reserve = reserveMinutes(t, st, mk);
+    const p = hoursPay(part, rateOn(cfg, dateKeyOf(st.start)), cfg, reserve, hv, section);
     for (const k of Object.keys(acc)) acc[k] += p[k];
-    const drive = Math.max(0, part.work - (part.wait || 0) - (part.pass || 0));
-    if (t.kind === 'reserve') reserveMin += drive;
-    heavyTotal += Math.min(drive, hv);
+    reserveMin += reserve;
+    heavyTotal += hv;
     if (!st.live && monthKeyOf(st.start) === mk) comp += cfg.trip;
   }
   const lastDay = `${mk}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;

@@ -47,7 +47,7 @@ export function yearData(y) {
   }
   // километры — по маршруту каждого локомотива, манёвры не считаем (как в наградах)
   let km = 0;
-  for (const t of trips) if (t.kind !== 'shunt') for (const l of legsOf(t)) km += legKm(l);
+  for (const t of trips) for (const l of legsOf(t)) if (l.kind !== 'shunt') km += legKm(l);
   // локомотивы: любимая серия (сколько поездок на ней) и сколько разных машин. Номер на картинку не попадает.
   const series = new Map(); const machines = new Set();
   for (const t of trips) {

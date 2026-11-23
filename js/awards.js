@@ -108,8 +108,10 @@ export function computeAwards(trips = S.trips) {
     const day = dateKeyOf(st.end);
     c.trips++;
     // километры — по маршруту каждого локомотива; если у какого-то нет расстояния — подсказка в награде
-    const dists = legsOf(t).map(legKm);
-    if (t.kind !== 'shunt') { c.km += dists.reduce((a, b) => a + b, 0); if (dists.some((x) => !(x > 0))) c.noKm++; }
+    const legs = legsOf(t);
+    const dists = legs.filter(l => l.kind !== 'shunt').map(legKm);
+    c.km += dists.reduce((a, b) => a + b, 0);
+    if (dists.some((x) => !(x > 0))) c.noKm++;
     c.work += st.work;
     c.night += st.night;
     c.pass += (t.passenger || []).length;
@@ -137,7 +139,7 @@ export function computeAwards(trips = S.trips) {
     monthTrips[smk] = (monthTrips[smk] || 0) + 1;
     if (!rec.monthTrips || monthTrips[smk] > rec.monthTrips.n) rec.monthTrips = { mk: smk, n: monthTrips[smk] };
     // Длительность поездок по участку для личного рекорда.
-    if (t.kind !== 'reserve' && t.kind !== 'shunt') {
+    if (legs.every(l => l.kind !== 'reserve' && l.kind !== 'shunt')) {
       const k = routeKey(t);
       const d = (parseLocal(t.end) - parseLocal(t.start)) / MIN;
       if (k && d > 0) {
