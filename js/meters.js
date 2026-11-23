@@ -14,7 +14,7 @@ export function newMeters(type, trips) {
   for (const trip of trips) {
     for (const leg of [trip, ...(trip.legs || [])]) {
       const m = leg.meters;
-      if (!series || seriesKey(leg.locoType) !== series || !m?.sections?.length || !Object.hasOwn(meterModes, m.mode)) continue;
+      if (!series || seriesKey(leg.locoType) !== series || !Array.isArray(m?.sections) || !Object.hasOwn(meterModes, m.mode)) continue;
       const time = trip.updatedAt || trip.createdAt || 0;
       if (time < latest) continue;
       latest = time;
@@ -40,17 +40,24 @@ export function meterIssues(trip) {
   return issues;
 }
 
-export function regeneration(trips) {
-  let total = null;
+export function meterDelta(row, field) {
+  const values = [row[field + 'From'], row[field + 'To']].map(v => String(v ?? '').trim().replace(',', '.'));
+  if (!values.every(v => /^\d+(?:\.\d+)?$/.test(v))) return null;
+  return Number(values[1]) - Number(values[0]);
+}
+
+export function meterTotals(trips) {
+  const totals = { energy: null, regen: null, fuel: null };
   for (const trip of trips) {
     for (const leg of [trip, ...(trip.legs || [])]) {
-      if (leg.meters?.mode !== 'electric') continue;
-      for (const { regenFrom, regenTo } of leg.meters.sections) {
-        if (!filled(regenFrom) || !filled(regenTo)) continue;
-        const delta = Number(String(regenTo).replace(',', '.')) - Number(String(regenFrom).replace(',', '.'));
-        if (Number.isFinite(delta) && delta >= 0) total = (total || 0) + delta;
+      const m = leg.meters;
+      for (const row of m?.sections || []) {
+        for (const field of meterModes[m.mode] || []) {
+          const delta = meterDelta(row, field);
+          if (delta !== null && delta >= 0) totals[field] = (totals[field] ?? 0) + delta;
+        }
       }
     }
   }
-  return total;
+  return totals;
 }

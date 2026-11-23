@@ -1,4 +1,4 @@
-import { newMeters, meterLabels, meterModes, meterIssues, seriesKey } from './meters.js';
+import { newMeters, meterLabels, meterModes, meterDelta, meterIssues, seriesKey } from './meters.js';
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
 import { I, esc, openLayer, closeLayer, sheet, confirmDialog, infoDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe, plural, small } from './ui.js';
 import {
@@ -782,6 +782,7 @@ export function openTripForm(tripId) {
     const card = box.closest('[data-lid]');
     return card ? F.legs.find(l => l.id === card.dataset.lid) : F;
   }
+  const decreasingMeter = '«Стало» меньше «Было». Проверьте показания счётчика.';
   function renderMeters(box, leg) {
     const series = seriesKey(leg.locoType);
     if (leg.meterSeries !== undefined && leg.meterSeries !== series && !leg.meters?.sections.some(row => Object.values(row).some(Boolean))) {
@@ -801,12 +802,12 @@ export function openTripForm(tripId) {
             `<input class="input" inputmode="decimal" maxlength="15" data-section="${j}" data-reading="${key + suffix}"
               placeholder="${label}" aria-label="Секция ${j + 1}, ${title}, ${label}" value="${esc(row[key + suffix])}">`
           ).join('');
-          return `<div class="meter-group"><strong>${title}</strong><div class="meter-pair">${inputs}</div></div>`;
+          return `<div class="meter-group"><strong>${title}</strong><div class="meter-pair">${inputs}</div><small class="meter-warning" role="alert" ${meterDelta(row, key) < 0 ? '' : 'hidden'}>${decreasingMeter}</small></div>`;
         }).join('');
-        body += `<section class="interval meter-section"><b>Секция ${j + 1}</b>${groups}</section>`;
+        body += `<section class="interval meter-section"><div class="meter-header"><b>Секция ${j + 1}</b>
+          <button type="button" class="icon-btn danger" data-meter-act="remove" data-index="${j}" aria-label="Удалить секцию ${j + 1}">${I.x}</button></div>${groups}</section>`;
       });
-      body += `<div class="meter-actions"><button type="button" class="qchip" data-meter-act="add">+ Добавить секцию</button>
-        ${m.sections.length > 1 ? '<button type="button" class="qchip" data-meter-act="remove">Убрать последнюю секцию</button>' : ''}</div>`;
+      body += `<div class="meter-actions"><button type="button" class="qchip" data-meter-act="add">+ Добавить секцию</button></div>`;
     }
     setHTML(box, `<button type="button" class="add-btn" data-meter-act="toggle" aria-expanded="${!!leg.meterOpen}">${I.bolt} Эл. энергия/Топливо</button>${body}`);
   }
@@ -828,7 +829,12 @@ export function openTripForm(tripId) {
     const box = t.closest('[data-meter-box]');
     if (box) {
       const leg = meterOwner(box);
-      if (t.dataset.reading) leg.meters.sections[t.dataset.section][t.dataset.reading] = t.value.trim();
+      if (t.dataset.reading) {
+        const row = leg.meters.sections[t.dataset.section];
+        row[t.dataset.reading] = t.value.trim();
+        const field = t.dataset.reading.replace(/(From|To)$/, '');
+        t.closest('.meter-group').querySelector('.meter-warning').hidden = !(meterDelta(row, field) < 0);
+      }
       if (t.hasAttribute('data-meter-mode') && leg.meters.mode !== t.value) {
         const keep = meterModes[t.value];
         const lost = leg.meters.sections.some(row => Object.entries(row).some(([k, v]) => v && !keep.some(field => k.startsWith(field))));
@@ -876,8 +882,9 @@ export function openTripForm(tripId) {
       if (b.dataset.meterAct === 'toggle') leg.meterOpen = !leg.meterOpen;
       if (b.dataset.meterAct === 'add') leg.meters.sections.push({});
       if (b.dataset.meterAct === 'remove') {
-        if (Object.values(leg.meters.sections.at(-1)).some(Boolean) && !(await confirmDialog({ title: 'Убрать секцию с показаниями?', ok: 'Убрать' }))) return;
-        leg.meters.sections.pop();
+        const index = Number(b.dataset.index);
+        if (Object.values(leg.meters.sections[index]).some(Boolean) && !(await confirmDialog({ title: `Удалить секцию ${index + 1} с показаниями?`, ok: 'Убрать' }))) return;
+        leg.meters.sections.splice(index, 1);
       }
       renderMeters(box, leg); return;
     }
@@ -985,13 +992,14 @@ export function openTripForm(tripId) {
       // сначала ошибки в полях, потом — вид отдыха
       if (d.end && !d.restType && needRest()) { showError(el, ''); nudgeRest(); return; }
       if (d.end && needHome()) { showError(el, ''); nudgeHome(); return; }
-      for (const leg of [d, ...(d.legs || [])]) {
-        for (const row of leg.meters?.sections || []) {
+      for (const [i, leg] of [d, ...(d.legs || [])].entries()) {
+        for (const [j, row] of (leg.meters?.sections || []).entries()) {
           if (Object.values(row).some(v => v && !/^\d+(?:[.,]\d+)?$/.test(v))) {
             showError(el, 'Проверьте показания счётчиков. Введите число, например 52350,5.'); return;
           }
-          if (row.regenFrom && row.regenTo && Number(row.regenTo.replace(',', '.')) < Number(row.regenFrom.replace(',', '.'))) {
-            showError(el, 'Конечное показание рекуперации меньше начального. Проверьте значения.'); return;
+          const field = meterModes[leg.meters.mode].find(key => meterDelta(row, key) < 0);
+          if (field) {
+            showError(el, `Локомотив ${i + 1}, секция ${j + 1}, ${meterLabels[field]}. ${decreasingMeter}`); return;
           }
         }
       }
