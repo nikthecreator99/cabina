@@ -5,7 +5,7 @@
 import { MONTHS, MONTHS_GEN, toast, openLayer, closeLayer, sheet, I, saveToDevice } from './ui.js';
 import { S, statsOf, myPay } from './store.js';
 import { fmtDur } from './calc.js';
-import { payMonth, overRestIntervals, hasRate, fmtRub, fmtH, ROLES, NDFL } from './pay.js';
+import { shiftPayNote, payMonth, overRestIntervals, hasRate, fmtRub, fmtH, ROLES, NDFL } from './pay.js';
 
 // ---------------------------------------------------------------- PDF из одной JPEG-картинки
 const PAGE_W = 595.28; const PAGE_H = 841.89; // A4 в пунктах
@@ -78,7 +78,7 @@ export function drawSlip(ctx, d, { today = new Date() } = {}) {
   font(9.5);
   const bonusNote = cfg.mode === 'avg' ? 'Премия входит в средний заработок за час.' :
     `Премия за работу этого месяца — ${String(cfg.bonus).replace('.', ',')}%${cfg.bonusFromSlips ? ', примерно по вашим расчётным листкам' : ''}.`;
-  const note = `${r.shiftTest ? 'ТЕСТОВЫЙ РЕЖИМ «оплата по сменам»: переработка за месяц — первые 2 ч на каждую смену в полуторном размере, остальное — в двойном. ' : ''}Расчёт CABINA учитывает ваши поездки, отвлечения, тарифную ставку и надбавки. Премия, надбавки и удержания у каждого свои и меняются, поэтому суммы могут отличаться от начисленных. Отпускные, техучёба и разовые выплаты не учитываются${r.sickDays && !cfg.sickDay ? ', больничный — тоже: оплата дня не указана' : ''}. ${bonusNote} НДФЛ ${NDFL}%.`;
+  const note = `${r.shiftTest ? `Тестовая оплата по сменам. ${shiftPayNote([r])} ` : ''}Расчёт CABINA учитывает ваши поездки, отвлечения, тарифную ставку и надбавки. Премия, надбавки и удержания у каждого свои и меняются, поэтому суммы могут отличаться от начисленных. Отпускные, техучёба и разовые выплаты не учитываются${r.sickDays && !cfg.sickDay ? ', больничный — тоже: оплата дня не указана' : ''}. ${bonusNote} НДФЛ ${NDFL}%.`;
   const lines = wrap(ctx, note, W - 28);
   const nh = 24 + lines.length * 12 + 8;
   // высота строки таблиц: всё должно поместиться на один лист A4 над подвалом

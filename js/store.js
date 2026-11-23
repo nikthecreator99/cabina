@@ -74,7 +74,12 @@ export const refreshLive = () => S.trips.forEach((t) => { if (isLive(t)) statsOf
 
 // Набор ставок для должности из профиля и отдых сверх нормы по поездкам (минуты)
 // norms — нормы веса и длины маршрутов: по ним видно тяжёлый и длинносоставный поезд
-export const myPay = () => ({ ...payCfg(S.settings.pay, S.profile.role, S.bonusEstimate), norms: Object.fromEntries(S.routes.map((r) => [r.id, { weight: r.weightNorm, length: r.lengthNorm, distanceKm: r.distanceKm }])) });
+export function myPay() {
+  const cfg = payCfg(S.settings.pay, S.profile.role, S.bonusEstimate);
+  cfg.norms = Object.fromEntries(S.routes.map((r) => [r.id, { weight: r.weightNorm, length: r.lengthNorm, distanceKm: r.distanceKm }]));
+  if (cfg.shiftTest) cfg.homeShifts = homeShiftHistory(S.trips);
+  return cfg;
+}
 export function overRestByTrip() {
   const m = new Map();
   for (const x of overRestIntervals(S.trips, statsOf)) m.set(x.trip.id, (m.get(x.trip.id) || 0) + (x.e - x.s) / MIN);
@@ -184,6 +189,44 @@ export function legEnds(x) {
   const m = String(x?.routeLabel || '').split(/\s*(?:→|—|->)\s*/);
   return m.length === 2 && m[0] && m[1] ? { from: m[0].trim(), to: m[1].trim() } : null;
 }
+// Одна явка охватывает все записи до домашнего отдыха, включая манёвры и отдых в ПО.
+export function homeShiftHistory(trips, now = nowLocal()) {
+  const ordered = trips.filter(t => parseLocal(t.start) <= now).sort((a, b) => a.start.localeCompare(b.start));
+  const shifts = [];
+  const depots = [];
+  let shift, candidate = '', streak = 0, runStart = 0;
+  for (const t of ordered) {
+    if (!shift) {
+      shift = { month: t.start.slice(0, 7), from: stationKey(legEnds(t)?.from) };
+      shifts.push(shift);
+    }
+    if (t.restType !== 'home' || !t.end || !(parseLocal(t.end) <= now)) continue;
+    const name = legEnds(t.legs?.at(-1) || t)?.to;
+    const station = stationKey(name);
+    if (station !== candidate) {
+      candidate = station;
+      streak = 0;
+      runStart = shifts.length - 1;
+    }
+    if (station && ++streak === 3 && station !== depots.at(-1)?.station) {
+      // При переводе первая поездка на новую станцию ещё могла начаться в старом депо.
+      const firstDeparture = runStart + (shifts[runStart].from === station ? 0 : 1);
+      depots.push({ start: depots.length ? firstDeparture : 0, station, name });
+    }
+    shift = null;
+  }
+  const months = {};
+  let depotIndex = 0;
+  shifts.forEach((s, i) => {
+    if (i === depots[depotIndex + 1]?.start) depotIndex++;
+    const depot = depots[depotIndex];
+    const month = months[s.month] ??= { count: 0, missingRoute: false };
+    if (!s.from) month.missingRoute = true;
+    if (depot && s.from === depot.station) month.count++;
+  });
+  return { home: depots.at(-1)?.name || '', months };
+}
+
 // Километры плеча: весь участок — его длина; часть — длина участка / число перегонов × проеханные перегоны.
 // Станции, которых на участке больше нет, — 0 (не угадываем).
 export function legKm(x) {
@@ -195,7 +238,7 @@ export function legKm(x) {
   const n = stationsList(r).length - 1;
   return s && n > 0 ? Math.round((km * Math.abs(s.j - s.i)) / n * 10) / 10 : 0;
 }
-// Ключ «того же пути» для сравнения времени (награда «Ракета»): участок и его часть
+// Ключ «того же пути» для сравнения времени (рекорд скорости): участок и его часть
 export const legKey = (x) => (x?.routeId ? `${x.routeId}${x.stFrom && x.stTo ? `|${stationKey(x.stFrom)}|${stationKey(x.stTo)}` : ''}` : legRoute(x).toLowerCase());
 // Станции поездки по порядку: у смены локомотива — «А → Б → А». null — где-то нет маршрута или плечи не стыкуются.
 export function stationsOf(trip) {
