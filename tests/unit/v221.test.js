@@ -40,8 +40,8 @@ test('скелет: у глаз «Уставшие» больше нет под�
 
 test('«Ещё»: порядок — сохранённый, новые пункты в конце, чужое отбрасывается', () => {
   assert.deepEqual(extraOrder(undefined), EXTRA_KEYS);
-  assert.deepEqual(extraOrder(['help', 'phones']), ['help', 'phones', 'notes', 'docs', 'fix', 'ideas']);
-  assert.deepEqual(extraOrder(['fix', '<img>', 'fix', 7, 'notes']), ['fix', 'notes', 'docs', 'phones', 'help', 'ideas']);
+  assert.deepEqual(extraOrder(['help', 'phones']), ['help', 'phones', 'notes', 'docs', 'fix', 'vu45', 'ideas']);
+  assert.deepEqual(extraOrder(['fix', '<img>', 'fix', 7, 'notes']), ['fix', 'notes', 'docs', 'phones', 'vu45', 'help', 'ideas']);
   assert.deepEqual(extraOrder('notes'), EXTRA_KEYS);
   S.settings = { extraOrder: ['ideas'] };
   assert.equal(extraOrder()[0], 'ideas');

@@ -2579,3 +2579,58 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
   65% { opacity: 1; transform: translateY(-3px) scale(1.1) rotate(3deg); }
   100% { opacity: 1; transform: none; }
 }
+
+/* ВУ-45 */
+.vu { display:grid; gap:12px }
+.vu .panel,.vu-result { padding:15px }
+.vu summary { cursor:pointer; font-weight:700 }
+.vu-fields,.vu-group { display:grid; gap:12px; margin-top:12px }
+.vu label { display:grid; gap:5px; min-width:0 }
+.vu .input { width:100%; min-width:0 }
+.vu .vu-tick { display:flex; align-items:baseline; gap:8px }
+.vu-group { padding:12px; border:1px solid var(--line); border-radius:12px }
+.vu-advisory { border-inline-start:3px solid var(--accent) }
+.vu-advisory p { margin:5px 0 0 }
+.vu-result strong { font-size:1.25em }
+.vu-modes { display:flex; gap:5px; flex-wrap:wrap }
+.vu-modes .btn { flex:1; min-width:6em; padding:8px }
+.vu-modes [aria-pressed="true"] { color:var(--accent); border-color:currentColor }
+.vu-actions { display:flex; flex-wrap:wrap; gap:8px }
+.vu-paper { background:#fff; color:#151515; padding:16px; font-family:Georgia,serif; overflow-wrap:anywhere }
+.vu-paper h2,.vu-paper h2+p { text-align:center }
+.vu-paper table { border-collapse:collapse; width:100%; text-align:center }
+.vu-reverse { margin-top:20px }
+.vu-reverse table { table-layout:fixed; font-size:0.82em }
+.vu-reverse td { height:1.8em }
+.vu-paper :is(td,th) { border:1px solid #666; padding:2px }
+@media screen {
+  .vu { grid-template-columns:minmax(0,1fr); gap:10px }
+  .vu > *, .vu-fields > *, .vu-group > * { min-width:0 }
+  .vu details.panel { padding:0 }
+  .vu summary { display:grid; grid-template-columns:32px minmax(0,1fr) 18px; align-items:center; gap:12px; padding:12px 14px; list-style:none; line-height:1.3 }
+  .vu summary::-webkit-details-marker { display:none }
+  .vu-symbol { display:grid; place-items:center; border-radius:9px; height:32px; color:var(--accent-2); background:var(--accent-soft) }
+  .vu-symbol svg { width:19px; height:19px }
+  .vu-chevron svg { display:block; width:17px; height:17px; color:var(--muted) }
+  .vu details[open] .vu-chevron { transform:rotate(180deg) }
+  .vu-fields { margin:0; padding:14px; border-top:1px solid var(--line); grid-template-columns:minmax(0,1fr) }
+  .vu label { color:var(--text-2) }
+  .vu-advisory p { font-size:calc(13px * var(--fs)); line-height:1.45; color:var(--text-2) }
+  .vu-result { background:linear-gradient(115deg,var(--accent-soft),transparent 85%),var(--card-solid) }
+  .vu-result h2 { margin:0 0 8px; font-size:calc(17px * var(--fs)) }
+  .vu-result strong { font-variant-numeric:tabular-nums }
+  .vu .btn { min-width:0; min-height:44px; height:auto; white-space:normal; overflow-wrap:anywhere; line-height:1.3 }
+  .vu-modes,.vu-actions,.vu .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,9em),1fr)); gap:8px }
+  .vu-modes [aria-pressed="true"] { background:var(--accent-soft) }
+  .vu-actions [data-vu="pdf"] { grid-column:1/-1 }
+  .vu-paper { border-radius:12px; max-width:100%; min-width:0 }
+  .vu-paper table { table-layout:fixed }
+}
+@media print {
+  body:has(#vu-paper) { background:white; color:black; margin:0; padding:0 }
+  body:has(#vu-paper) :is(.tabbar,.page-head), .vu > :not(.vu-paper) { display:none!important }
+  body:has(#vu-paper) #app,body:has(#vu-paper) .screen,.vu { display:block; padding:0; margin:0; max-width:none }
+  .vu-paper { padding:0; font-size:10pt }
+  .vu-reverse { break-before:page; margin:0 }
+  .vu-paper tr { break-inside:avoid }
+}

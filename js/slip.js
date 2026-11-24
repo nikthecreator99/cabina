@@ -11,6 +11,11 @@ import { shiftPayNote, payMonth, overRestIntervals, hasRate, fmtRub, fmtH, ROLES
 const PAGE_W = 595.28; const PAGE_H = 841.89; // A4 в пунктах
 
 export function pdfFromJpeg(jpeg, w, h, { title = '' } = {}) {
+  return pdfFromJpegPages([{ jpeg, w, h }], { title });
+}
+
+export function pdfFromJpegPages(pages, { title = '' } = {}) {
+  if (!pages.length) throw new RangeError('Пустой PDF');
   const enc = new TextEncoder();
   const parts = []; const offsets = []; let len = 0;
   const add = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
@@ -20,14 +25,19 @@ export function pdfFromJpeg(jpeg, w, h, { title = '' } = {}) {
   const content = `q ${PAGE_W} 0 0 ${PAGE_H} 0 0 cm /Im0 Do Q`;
   add('%PDF-1.4\n'); add(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a])); // метка «в файле двоичные данные»
   obj(1, () => add('<< /Type /Catalog /Pages 2 0 R >>'));
-  obj(2, () => add('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'));
-  obj(3, () => add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`));
-  obj(4, () => { add(`<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`); add(jpeg); add('\nendstream'); });
-  obj(5, () => add(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
-  obj(6, () => add(`<< /Title ${utf16(title)} /Producer (CABINA) >>`));
+  const pageIds = pages.map((_, i) => 3 + 3*i);
+  obj(2, () => add(`<< /Type /Pages /Kids [${pageIds.map(id => id+' 0 R').join(' ')}] /Count ${pages.length} >>`));
+  pages.forEach(({jpeg, w, h}, i) => {
+    const id = pageIds[i];
+    obj(id, () => add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /XObject << /Im0 ${id+1} 0 R >> >> /Contents ${id+2} 0 R >>`));
+    obj(id+1, () => { add(`<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`); add(jpeg); add('\nendstream'); });
+    obj(id+2, () => add(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+  });
+  const infoId = 3 + pages.length*3;
+  obj(infoId, () => add(`<< /Title ${utf16(title)} /Producer (CABINA) >>`));
   const xref = len;
-  add(`xref\n0 7\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`);
-  add(`trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  add(`xref\n0 ${infoId+1}\n0000000000 65535 f \n${offsets.slice(1).map(o => String(o).padStart(10, '0')+' 00000 n \n').join('')}`);
+  add(`trailer\n<< /Size ${infoId+1} /Root 1 0 R /Info ${infoId} 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   const out = new Uint8Array(len); let p = 0;
   for (const b of parts) { out.set(b, p); p += b.length; }
   return out;

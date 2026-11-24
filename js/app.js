@@ -24,6 +24,7 @@ import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderGrowth, growthClick } from './growth.js';
 import { payslipCard, renderPayslip, loadPayslip, clearPayslip, payslipAction, choosePayslipMonth } from './payslip.js';
 import { initAi, renderAi, aiClick, aiInput, aiKey, aiEnter, aiCardHtml } from './ai.js';
+import { renderVu45, bindVu45 } from './vu45.js';
 import { renderFix, fixInput, fixSlope } from './fix.js';
 import { renderPhones, phonesListHtml, openPhoneForm, forgetGroup } from './phones.js';
 import { renderCareer, careerClick, careerChange, loyaltyReminder, reminderHtml } from './career.js';
@@ -48,7 +49,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.37.2';
+export const VERSION = '2.38.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -381,6 +382,7 @@ function renderExtra() {
   let html;
   if (V.extra === 'notes') html = renderNotes();
   else if (V.extra === 'docs') html = renderDocs();
+  else if (V.extra === 'vu45') html = renderVu45();
   else if (V.extra === 'fix') html = renderFix();
   else if (V.extra === 'phones') html = renderPhones(V.phonesQ, V.phonesGroup);
   else {
@@ -393,6 +395,8 @@ function renderExtra() {
           <div class="grow"><div class="t1">Рабочие документы</div><div class="t2">${docs ? `${docs} ${plural(docs, 'файл', 'файла', 'файлов')} · доступны без интернета` : 'Схемы, перемычки, фото, PDF'}</div></div>${small(I.right, 18)}</button>`,
       phones: `<button class="row" data-act="extra-phones" data-key="phones"><span class="ico" style="--c:var(--ok)">${I.book}</span>
           <div class="grow"><div class="t1">Телефоны</div><div class="t2">${S.contacts.length ? `${S.contacts.length} ${plural(S.contacts.length, 'контакт', 'контакта', 'контактов')} · только в этом телефоне` : 'Нарядчик, дежурный, коллеги'}</div></div>${small(I.right, 18)}</button>`,
+      vu45: `<button class="row" data-act="extra-vu45" data-key="vu45"><span class="ico" style="--c:var(--accent)">${I.note}</span>
+          <div class="grow"><div class="t1">ВУ-45</div><div class="t2">Тормозное нажатие и справка поезда</div></div>${small(I.right, 18)}</button>`,
       fix: `<button class="row" data-act="extra-fix" data-key="fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
           <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>`,
       help: `<button class="row" data-act="go" data-page="help" id="extra-help" data-key="help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
@@ -633,7 +637,7 @@ function render({ still = false } = {}) {
   app.classList.toggle('still', still);
   if (p) app.innerHTML = `<div class="screen" data-page="${p}">${PAGES[p]()}</div>`;
   else if (V.tab === 'home') renderHome();
-  else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); }
+  else if (V.tab === 'extra') { app.innerHTML = `<div class="screen">${renderExtra()}</div>`; if (V.extra === 'docs') hydrateThumbs(app); if (V.extra === 'vu45') bindVu45(); }
   else if (V.tab === 'learn') app.innerHTML = `<div class="screen lr-hub">${renderLearn()}</div>`; // «Обучение» — своя вкладка (2.23.0)
   else app.innerHTML = `<div class="screen">${renderProfile(colleaguesHtml(groupsRowHtml()), bellHtml())}</div>`;
   pokeNotices(!p && V.tab === 'profile');
@@ -900,6 +904,7 @@ app.addEventListener('click', async (e) => {
     case 'nag-later': await saveBackupInfo({ snoozeUntil: Date.now() + 14 * DAY }); rerender(); break;
     case 'extra-notes': V.extra = 'notes'; V.notesQ = ''; render(); window.scrollTo(0, 0); break;
     case 'extra-docs': V.extra = 'docs'; render(); window.scrollTo(0, 0); break;
+    case 'extra-vu45': V.extra = 'vu45'; render(); window.scrollTo(0, 0); break;
     case 'extra-fix': V.extra = 'fix'; render(); window.scrollTo(0, 0); break;
     case 'extra-phones': V.extra = 'phones'; V.phonesQ = ''; V.phonesGroup = null; render(); window.scrollTo(0, 0); break;
     case 'phones-group': V.phonesGroup = b.dataset.g; V.phonesQ = ''; render(); window.scrollTo(0, 0); break;
