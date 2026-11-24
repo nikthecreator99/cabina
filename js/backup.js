@@ -42,7 +42,7 @@ export async function exportBackup({ withDocs = true, version }) {
   data.trips = data.trips.map((t) => { const c = { ...t }; delete c._stats; delete c._statsAt; return c; });
   if (withDocs) {
     data.files = await db.getAll('files');
-    const blobs = await db.getAll('blobs');
+    const blobs = await db.documentBlobs();
     data.blobs = blobs.map((b) => ({ id: b.id, b64: toB64(b.data) }));
   }
   const payload = { app: 'CABINA', format: FORMAT, version, exportedAt: new Date().toISOString(), withDocs, data };
@@ -87,7 +87,7 @@ export async function importBackup(file) {
       next.blobs = (d.blobs || []).map((b) => ({ id: b.id, data: fromB64(b.b64) }));
     } else {
       next.files = await db.getAll('files');
-      next.blobs = await db.getAll('blobs');
+      next.blobs = await db.documentBlobs();
     }
     await db.replaceAll(next);
   } catch (e) {

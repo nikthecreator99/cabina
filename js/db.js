@@ -41,14 +41,21 @@ function done(tx) {
   });
 }
 
-export async function getAll(store) {
+export async function getAll(store, range) {
   const db = await openDB();
   if (!db) return [...memory[store].values()].map((v) => structuredClone(v));
   return new Promise((resolve, reject) => {
-    const r = db.transaction(store).objectStore(store).getAll();
+    const r = db.transaction(store).objectStore(store).getAll(range);
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
   });
+}
+
+// Документы используют скалярные ключи. Составной ключ [поездка, фото] остаётся только на устройстве.
+export const tripPhotoRange = id => IDBKeyRange.bound([id], [id, []]);
+export async function documentBlobs() {
+  await openDB();
+  return getAll('blobs', memory ? undefined : IDBKeyRange.upperBound([], true));
 }
 
 export async function get(store, id) {
@@ -93,7 +100,18 @@ export async function replaceAll(data) {
   const tx = db.transaction(STORES, 'readwrite');
   for (const s of STORES) {
     const os = tx.objectStore(s);
-    os.clear();
+    if (s === 'blobs' && data.trips?.length) {
+      // При восстановлении на том же телефоне сохраняем фото оставшихся поездок.
+      os.delete(IDBKeyRange.upperBound([], true));
+      const retained = new Set(data.trips.map(trip => trip.id));
+      const scan = os.openKeyCursor(IDBKeyRange.lowerBound([]));
+      scan.onsuccess = () => {
+        const cursor = scan.result;
+        if (!cursor) return;
+        if (!retained.has(cursor.key[0])) os.delete(cursor.key);
+        cursor.continue();
+      };
+    } else os.clear();
     for (const o of data[s] || []) os.put(o);
   }
   await done(tx);

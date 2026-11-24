@@ -1,3 +1,4 @@
+import { tripPhotoFields, bindTripPhotos } from './trip-photos.js';
 import { newMeters, meterLabels, meterModes, meterDelta, meterIssues, seriesKey } from './meters.js';
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
 import { I, esc, openLayer, closeLayer, sheet, confirmDialog, infoDialog, toast, uid, MONTHS, MONTHS_SHORT, MONTHS_PREP, hm, whenShort, dayMonth, dateRange, attachSwipe, plural, small } from './ui.js';
@@ -370,6 +371,7 @@ export function openTripForm(tripId) {
         <input id="tf-rn" class="input" inputmode="numeric" placeholder="Например, 123456" autocomplete="off" maxlength="20">
       </div>
     </div>
+    ${tripPhotoFields}
     <div class="field"><div id="tf-calc"></div></div>
     <div class="field rest-field" id="tf-rest-field">
       <div class="label" id="tf-rest-cap">Вид отдыха после поездки<span class="req" id="tf-rest-req" hidden> · обязательно</span></div>
@@ -388,7 +390,8 @@ export function openTripForm(tripId) {
     title, body, tall: true,
     headRight: existing ? `<button class="icon-btn danger" data-act="del-trip" aria-label="Удалить поездку">${I.trash}</button>` : '',
     foot: `<button class="btn btn-primary" data-act="save-trip">${I.check} Сохранить</button>`,
-  }));
+  }), { onClose: () => photos.dispose() });
+  const photos = bindTripPhotos(el, base.id);
 
   // начальные значения
   $(el, '#tf-sd').value = F.sd; $(el, '#tf-st').value = F.st;
@@ -1021,7 +1024,7 @@ export function openTripForm(tripId) {
       delete d._stats; delete d._statsAt;
       const before = d.end ? awardSnapshot() : null;
       try {
-        await saveTrip(d, noteOp);
+        await saveTrip(d, noteOp, await photos.operations());
       } catch (ex) {
         showError(el, 'Не удалось сохранить. Возможно, на устройстве закончилась память.');
         return;

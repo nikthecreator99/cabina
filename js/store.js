@@ -411,8 +411,8 @@ async function askPersist() {
   try { if (navigator.storage?.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); } catch {}
 }
 
-export async function saveTrip(trip, noteOp) {
-  const ops = [{ store: 'trips', put: clean(trip) }];
+export async function saveTrip(trip, noteOp, photoOps = []) {
+  const ops = [{ store: 'trips', put: clean(trip) }, ...photoOps];
   let types = S.locoTypes;
   for (const l of locosOf(trip)) {
     const t = String(l.type || '').trim();
@@ -435,7 +435,8 @@ export async function saveTrip(trip, noteOp) {
 
 export async function deleteTrip(id) {
   const linked = S.notes.filter((n) => n.tripId === id).map((n) => ({ ...n, tripId: null }));
-  await db.write([{ store: 'trips', del: id }, ...linked.map((n) => ({ store: 'notes', put: n }))]);
+  const photos = db.isMemoryMode() ? [] : [{ store: 'blobs', del: db.tripPhotoRange(id) }];
+  await db.write([{ store: 'trips', del: id }, ...photos, ...linked.map((n) => ({ store: 'notes', put: n }))]);
   S.trips = S.trips.filter((t) => t.id !== id);
   linked.forEach((n) => { const j = S.notes.findIndex((x) => x.id === n.id); if (j >= 0) S.notes[j] = n; });
   emit();
