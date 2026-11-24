@@ -118,7 +118,7 @@ function layout(canvas) {
 }
 
 // Prepare an enlarged, high-contrast crop of one handwritten entry.
-function crop(grid,x0,x1,y0,y1,straighten,penOnly=false) {
+function crop(grid,x0,x1,y0,y1,straighten,penOnly=false,crisp=false) {
   const pts=[];
   const leftEdge=Math.max(0,Math.ceil(x0)+2),rightEdge=Math.min(grid.w,Math.floor(x1)-2);
   for(let y=Math.max(0,Math.floor(y0));y<Math.min(grid.h,y1);y++){
@@ -139,7 +139,46 @@ function crop(grid,x0,x1,y0,y1,straighten,penOnly=false) {
   const scale=3, out=document.createElement('canvas');
   out.width=Math.ceil((right-left+1)*scale)+24;out.height=Math.ceil((bottom-top+1)*scale)+24;
   const ctx=out.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,out.width,out.height);ctx.fillStyle='black';
-  for(const [x,y] of points) ctx.fillRect(12+(x-left)*scale,12+(y-top)*scale,scale+0.7,scale+0.7);
+  for(const [x,y] of points){
+    const px=12+(x-left)*scale, py=12+(y-top)*scale;
+    if(crisp){
+      const x0=Math.ceil(px), y0=Math.ceil(py);
+      ctx.fillRect(x0,y0,Math.ceil(px+scale+.7)-x0,Math.ceil(py+scale+.7)-y0);
+    }else ctx.fillRect(px,py,scale+.7,scale+.7);
+  }
+  return out;
+}
+
+// Average nearby pixels when reducing a crop so thin pen strokes survive.
+function compactDigits(tile,height) {
+  const out=document.createElement('canvas');
+  out.height=Math.min(tile.height,height);
+  out.width=Math.max(1,Math.round(tile.width*out.height/tile.height));
+  const source=tile.getContext('2d').getImageData(0,0,tile.width,tile.height).data;
+  const ctx=out.getContext('2d'), image=ctx.createImageData(out.width,out.height);
+  const dx=tile.width/out.width,dy=tile.height/out.height;
+  const horizontal=new Uint8ClampedArray(out.width*tile.height);
+  for(let y=0;y<tile.height;y++) for(let x=0;x<out.width;x++){
+    const center=(x+.5)*dx-.5;
+    let sum=0,total=0;
+    for(let i=Math.max(0,Math.ceil(center-dx));i<=Math.min(tile.width-1,center+dx);i++){
+      const weight=1-Math.abs(i-center)/dx;
+      sum+=weight*source[4*(y*tile.width+i)];total+=weight;
+    }
+    horizontal[y*out.width+x]=Math.round(sum/total);
+  }
+  for(let y=0;y<out.height;y++) for(let x=0;x<out.width;x++){
+    const center=(y+.5)*dy-.5;
+    let sum=0,total=0;
+    for(let j=Math.max(0,Math.ceil(center-dy));j<=Math.min(tile.height-1,center+dy);j++){
+      const weight=1-Math.abs(j-center)/dy;
+      sum+=weight*horizontal[j*out.width+x];total+=weight;
+    }
+    const at=4*(y*out.width+x);
+    image.data.fill(Math.round(sum/total),at,at+3);
+    image.data[at+3]=255;
+  }
+  ctx.putImageData(image,0,0);
   return out;
 }
 
@@ -174,7 +213,8 @@ export async function readRoute(file,turn,signal,progress) {
       picture.getContext('2d').drawImage(canvas,x0,y0,x1-x0,y1-y0,0,0,picture.width,picture.height);
       const snippet=picture.toDataURL('image/png');
       const candidates=new Set();
-      for(const sample of [tile,crop(grid,x0,x1,y0,y1,angle,true)]){
+      const pen=crop(grid,x0,x1,y0,y1,angle,true);
+      for(const sample of [tile,pen]){
         if(!sample)continue;
         active();
         const res=await worker.recognize(sample);
@@ -183,6 +223,38 @@ export async function readRoute(file,turn,signal,progress) {
         const value=normalize(key,raw);
         if(value)candidates.add(value);
       }
+      if(key==='st'||key==='et'){
+        const sharp=crop(grid,x0,x1,y0,y1,angle,false,true);
+        for(const [sample,height] of [[sharp,28],[pen,30],[tile,64]]){
+          if(!sample)continue;
+          active();
+          const {data}=await worker.recognize(compactDigits(sample,height));
+          const raw=data.text.trim().replace(/^(\d{1,2})(\d{2})$/,'$1:$2');
+          const value=normalize(key,raw);
+          if(value)candidates.add(value);
+        }
+      }
+      if(key==='weight' && pen){
+        // Withhold a weight if the same handwriting gives inconsistent digits.
+        const readings=[];
+        for(const size of [24,32,48]){
+          active();
+          const {data}=await worker.recognize(compactDigits(pen,size));
+          readings.push(normalize(key,data.text));
+        }
+        candidates.clear();
+        if(readings[0] && readings.every(value=>value===readings[0]))candidates.add(readings[0]);
+      }
+      if(key==='axles'){
+        const sharpPen=crop(grid,x0,x1,y0,y1,angle,true,true);
+        if(sharpPen){
+          active();
+          const {data}=await worker.recognize(sharpPen);
+          const value=normalize(key,data.text);
+          if(value)candidates.add(value);
+        }
+      }
+      if(candidates.size>3)candidates.clear();
       if(!candidates.size)candidates.add('');
       for(const value of candidates)rows.push({key,value,snippet});
     }
