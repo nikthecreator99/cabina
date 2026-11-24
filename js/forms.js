@@ -1,3 +1,4 @@
+import { openRouteScan } from './route-scan.js';
 import { tripPhotoFields, bindTripPhotos } from './trip-photos.js';
 import { newMeters, meterLabels, meterModes, meterDelta, meterIssues, seriesKey } from './meters.js';
 // Формы: поездка, отвлечение, маршрут, заметки о локомотивах.
@@ -314,7 +315,7 @@ export function openTripForm(tripId) {
   const title = existing ? (wasLive ? (isPending(existing) ? 'Ждёт явки' : 'Поездка в пути') : `Поездка ${dayMonth(parseLocal(existing.start))}`) : 'Новая поездка';
 
   const body = `
-    ${existing ? '<div class="summary-top" id="tf-summary"></div>' : `<button class="btn btn-ghost btn-sm recv-btn" type="button" data-act="tf-receive">${I.qr} Получить поездки от напарника</button>`}
+    ${existing ? '<div class="summary-top" id="tf-summary"></div>' : `<div class="trip-imports"><button class="btn btn-ghost" type="button" data-act="tf-receive">${I.qr}<span>От напарника</span></button><button class="btn btn-ghost" type="button" data-act="tf-scan">${I.camera}<span>По фото</span></button></div>`}
     <div class="field" id="tf-mates-field"><div id="tf-mates"></div></div>
     <div class="field">
       <div class="label" id="tf-route-cap">Участок <span class="opt">· необязательно</span></div>
@@ -904,6 +905,38 @@ export function openTripForm(tripId) {
       refreshAll(); return;
     }
     const act = b.dataset.act;
+    if (act === 'tf-scan') {
+      openRouteScan(values => {
+        const inputs={sd:'sd',st:'st',ed:'ed',et:'et',locoType:'lt',locoNumber:'ln',routeNo:'rn',weight:'weight',axles:'axles',length:'length'};
+        for(const [key,suffix] of Object.entries(inputs)){
+          if(!values[key])continue;
+          F[key]=values[key];
+          el.querySelector('#tf-'+suffix).value=values[key];
+        }
+        if(values.routeNo){F.routeNoOpen=true;renderRouteNo();}
+        if(values.routeLabel){F.routeId=null;F.stFrom=F.stTo='';F.routeLabel=values.routeLabel;renderRoute();}
+        if(values.ed)F.endTouched=true;
+        if(values.sd||values.st||values.et)autoEnd();
+        if(values.passSt || values.passEt || values.passTrain){
+          const pass={id:uid(),sd:F.sd||today,open:true};
+          pass.st=values.passSt||'';pass.et=values.passEt||'';pass.train=values.passTrain||'';
+          if(pass.st && F.st && pass.st<F.st)pass.sd=addDays(F.sd,1);
+          pass.ed=pass.st && pass.et && pass.et<pass.st?addDays(pass.sd,1):pass.sd;
+          F.passenger.push(pass);renderPass();
+        }
+        for(const [key,value] of Object.entries(values)){
+          const m=/^([01])_(energyFrom|energyTo|regenFrom|regenTo)$/.exec(key);
+          if(!m)continue;
+          if(F.meters?.mode==='diesel'){toast('Электросчётчики пропущены: в поездке выбрано топливо.');continue;}
+          F.meters ||= {mode:'electric',sections:[]};
+          if(m[2].startsWith('regen'))F.meters.mode='electric';
+          while(F.meters.sections.length<=Number(m[1]))F.meters.sections.push({});
+          F.meters.sections[+m[1]][m[2]]=value;F.meterOpen=true;
+        }
+        refreshAll();
+      });
+      return;
+    }
     if (act === 'tf-receive') { closeLayer(el); openReceive(); return; }
     if (act === 'pick-kind') { F.kindOpen = !F.kindOpen; renderKind(); return; }
     if (act === 'pick-route') {

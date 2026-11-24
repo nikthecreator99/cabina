@@ -33,7 +33,7 @@ async function readPageText(page, viewport) {
   return pdfPageText({items}, viewport);
 }
 
-async function imageCanvas(file) {
+export async function imageCanvas(file) {
   const url=URL.createObjectURL(file);
   try {
     const image=new Image(); image.src=url; await image.decode();
