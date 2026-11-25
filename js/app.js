@@ -37,7 +37,7 @@ import { consumeAuthRedirect, touch, session, inviteFromHash, rememberInvite, is
 import { initColleagues, colleaguesHtml, renderTeam, teamReset, renderColleagues, colleaguesClick, colleaguesSubmit, colleaguesInput, colleaguesTick, colleaguesWake, myDataHtml,
   colleaguesAccountHtml, renderPrivacy, loadColleagues, colleaguesError, openShowMe, colNotesAll, notesUseful } from './colleagues.js';
 import { initPull, pullDemo, PULL_STYLES, pullStyle } from './pull.js';
-import { legalReady, policyHtml, APP_URL, GROUPS_LIVE } from './legal.js';
+import { legalReady, policyHtml, APP_URL, GROUPS_LIVE, SIGNUP_OPEN } from './legal.js';
 import { renderAwards, renderRecords, openAward, awardSnapshot, awardNews, celebrate, grantAccountAward } from './awards.js';
 import { openShareSheet, checkShareHash, shareable } from './share.js';
 import { checkDepotHash } from './depot.js';
@@ -49,7 +49,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.40.1';
+export const VERSION = '2.41.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -209,6 +209,7 @@ function backupNag(now) {
     <div class="nag-btns"><button class="btn btn-primary btn-sm" data-act="nag-save">Сохранить</button><button class="icon-btn" data-act="nag-later" aria-label="Напомнить позже">${I.x}</button></div></div>`;
 }
 
+let homeLaunchTime;
 function renderHome() {
   refreshLive();
   const now = nowLocal();
@@ -299,6 +300,16 @@ function renderHome() {
     ${trips.length ? `<div class="list">${trips.map((t) => tripRow(t, mk, payCtx)).join('')}</div>`
       : `<div class="empty"><div class="em-ico">${I.train}</div><b>В ${MONTHS_PREP[V.m - 1]} поездок нет</b><p>Нажмите «Добавить поездку» — время, ночные и праздничные часы посчитаются автоматически.</p></div>`}
   </div>${V.sel ? selBar(trips) : ''}`;
+  homeLaunchTime ??= performance.now();
+  const elapsed = performance.now() - homeLaunchTime;
+  if (elapsed < 850 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    Array.from(app.querySelector('.home-screen').children).forEach((item, index) => {
+      const delay = Math.min(index, 6) * 64 - elapsed;
+      if (delay > -410) item.animate?.([{ opacity: 0, translate: '0 -7px' }, { opacity: 1, translate: '0 0' }],
+        { duration: 410, delay, easing: 'ease-out', fill: 'backwards' });
+    });
+  }
+
 }
 
 // Отдых в пункте оборота на главном (2.24.8, просьба Никиты): пока не добавлена новая явка —
@@ -425,8 +436,13 @@ const TZ = [
   ['Asia/Kamchatka', 'Камчатка (МСК+9)'], ['auto', 'Как на устройстве'],
 ];
 let deferredInstall = null;
+let installedThisVisit = false;
+window.addEventListener('appinstalled', () => {
+  installedThisVisit = true; deferredInstall = null;
+  if (page() === 'set-install') rerender();
+});
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; if (['settings', 'set-install'].includes(page())) render(); });
-const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isStandalone = () => installedThisVisit || window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let storageInfo = null;
 async function refreshStorage() {
@@ -574,7 +590,8 @@ function renderSetInstall() {
       ${inFrame() ? `<div class="row"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">Установка на экран</div><div class="t2">Иконка CABINA на главном экране и работа без интернета доступны, когда приложение открыто по своему прямому адресу.</div></div></div>`
         : isStandalone() ? `<div class="row"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">CABINA установлена</div><div class="t2">Работает как отдельное приложение, в том числе без интернета</div></div></div>`
         : deferredInstall ? `<button class="row" data-act="install"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">Установить CABINA</div><div class="t2">Добавить иконку на главный экран</div></div>${small(I.right, 18)}</button>`
-        : `<div class="row"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">${isIOS() ? 'iPhone: Safari → «Поделиться» → «На экран „Домой“»' : 'Android: Chrome → меню ⋮ → «Добавить на гл. экран»'}</div><div class="t2">После установки приложение запускается с иконки и работает без интернета</div></div></div>`}
+        : mobileInstall() ? `<button class="row" data-act="install-guide"><span class="ico">${I.phone}</span><div class="grow">Как добавить CABINA на главный экран</div>${small(I.right,18)}</button>`
+        : `<div class="row"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div class="grow"><div class="t1">Откройте меню браузера и выберите установку приложения, если она доступна.</div><div class="t2">После установки приложение запускается с иконки и работает без интернета</div></div></div>`}
     </div>`;
 }
 function renderSetAbout() {
@@ -947,7 +964,8 @@ app.addEventListener('click', async (e) => {
       if (deferredInstall) { deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => {}); deferredInstall = null; rerender(); }
       break;
     }
-    case 'about': showOnboarding(true); break;
+    case 'install-guide': showFirstVisit(true); break;
+    case 'about': showAbout(); break;
     case 'policy': openLayer(sheet({ title: 'Политика обработки персональных данных', body: policyHtml(), tall: true, foot: '<button class="btn btn-primary" data-close>Понятно</button>' })); break;
     case 'whats-new': showWhatsNew(); break;
     case 'tours-toggle': setToursOff(!toursOff()); toast(toursOff() ? 'Подсказки выключены' : 'Подсказки включены'); rerender(); break;
@@ -1022,9 +1040,87 @@ app.addEventListener('change', async (e) => {
 });
 
 // ---------------------------------------------------------------- приветствие
-function showOnboarding(again = false) {
+function mobileInstall() {
+  return !inFrame() && !isStandalone() && (isIOS() || /Android/i.test(navigator.userAgent));
+}
+
+// Keep all steps in one sheet, including when Android returns from its install dialog.
+function showFirstVisit(settingsOnly = false) {
+  let step = settingsOnly ? 'guide' : mobileInstall() ? 'install' : 'account';
+  const ios = isIOS();
+  const safari = /Version\/.*Safari\//.test(navigator.userAgent);
+  const androidChrome = /Android/i.test(navigator.userAgent) && /Chrome\//.test(navigator.userAgent) && !/; wv\)|SamsungBrowser|EdgA|OPR\//.test(navigator.userAgent);
+  const canPoint = ios ? safari && /iPhone|iPod/.test(navigator.userAgent) : androidChrome;
+  let pointer = ios ? (/OS (?:1\d|[1-9])_/.test(navigator.userAgent) ? 'share' : 'more') : 'top';
+  const el = openLayer('', { onClose: () => {
+    window.removeEventListener('appinstalled', installed);
+    if (!settingsOnly) { setOnboarded().catch(() => {}); scheduleTours(); }
+  } });
+  const act = (id, label, primary = false) => `<button type="button" class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" data-first="${id}">${label}</button>`;
+  function draw() {
+    let title, body, foot;
+    if (step === 'install') {
+      title = 'Добро пожаловать в CABINA';
+      body = '<div class="onb-hero"><img src="icons/icon-192.png" alt=""><h2>CABINA</h2><p>Добавьте CABINA на главный экран, чтобы открывать журнал поездок в одно касание.</p></div>';
+      foot = act('install','Установить на телефон',true) + act('next','Продолжить в браузере');
+    } else if (step === 'guide') {
+      title = 'Добавить на главный экран';
+      const browser = ios ? 'Safari' : 'Chrome';
+      const inside = ios ? safari : androidChrome;
+      const first = ios ? 'Нажмите «Поделиться» на панели Safari. Если видите «⋯», откройте его и выберите «Поделиться».' : 'Откройте меню ⋮ рядом с адресной строкой Chrome.';
+      const second = ios ? 'Прокрутите список и выберите «На экран „Домой“».' : 'Выберите «Установить приложение» или «Добавить на главный экран».';
+      body = `<ol class="install-steps">${inside ? '' : '<li>Откройте cabina-app.ru в '+browser+'.</li>'}<li>${first}</li><li>${second}</li><li>${ios ? 'Если есть переключатель «Открывать как веб-приложение», включите его. Нажмите «Добавить».' : 'Подтвердите установку.'} Откройте CABINA с новой иконки.</li></ol>`;
+      if (canPoint) body += act('pointer', ios ? (pointer === 'more' ? 'На панели есть «Поделиться»' : 'На панели есть «⋯»') : (pointer === 'top' ? 'Меню находится внизу' : 'Меню находится вверху'));
+      foot = settingsOnly ? act('done','Закрыть') : act('next','Продолжить',true);
+    } else {
+      title = 'Добро пожаловать в CABINA';
+      const signup = legalReady() && !session() && !OLD_SITE;
+      body = `<div class="onb-hero"><img src="icons/icon-192.png" alt=""><h2>CABINA</h2><p>${signup ? 'Создайте аккаунт, чтобы добавить коллег из бригады и получать награды за поездки.' + (SIGNUP_OPEN ? '' : ' Для регистрации нужен код приглашения от коллеги.') : 'Ведите личный журнал поездок, часов и отдыха.'}</p></div>`;
+      foot = signup ? act('signup','Создать аккаунт',true) + act('done','Начать без регистрации') : act('done','Начать',true);
+    }
+    el.querySelector('.sheet')?.remove();
+    el.querySelector('.install-pointer')?.remove();
+    el.insertAdjacentHTML('beforeend',sheet({title,body,foot}));
+    if (step === 'guide' && canPoint) {
+      el.insertAdjacentHTML('beforeend',`<span aria-hidden="true" class="install-pointer point-${pointer}">${pointer==='top'?'↑': '↓'}</span>`);
+    }
+  }
+  function installed() {
+    if (!settingsOnly) { step='account'; draw(); } else closeLayer(el);
+  }
+  window.addEventListener('appinstalled', installed);
+  el.onclick = async e => {
+    const button=e.target.closest('[data-first]');
+    if (!button) return;
+    switch(button.dataset.first) {
+      case 'install': {
+        const event=deferredInstall;
+        if(event){
+          deferredInstall=null;
+          button.disabled=true;
+          try {
+            await event.prompt();
+            const choice=await event.userChoice;
+            if (!el.isConnected || step!=='install') return;
+            if(choice.outcome==='accepted'){installed();return;}
+          }catch{}
+          if(!el.isConnected || step!=='install')return;
+        }
+        step='guide';break;
+      }
+      case 'pointer': pointer=ios ? (pointer==='more'?'share':'more') : (pointer==='top'?'bottom':'top');break;
+      case 'next': step='account';break;
+      case 'signup': closeLayer(el); startAccount('signup');V.tab='profile';V.pages=[];go('account');return;
+      case 'done': closeLayer(el);return;
+    }
+    draw();
+  };
+  draw();
+}
+
+function showAbout() {
   const el = openLayer(sheet({
-    title: again ? 'О приложении' : 'Добро пожаловать',
+    title: 'О приложении',
     body: `<div class="onb">
       <div class="onb-hero"><img src="icons/icon-192.png" alt="" width="84" height="84"><h2>CABINA</h2><div class="hint">Личный учёт поездок, часов, отдыха и заработка</div></div>
       <div class="onb-item"><span class="ico" style="--c:var(--ok)">${I.shield}</span><div>${legalReady() ? '<b>Записи — только в телефоне</b><span>Поездки, заработок, отвлечения и документы хранятся только на этом устройстве. Аккаунт — по желанию.</span>' : '<b>Без регистрации</b><span>Все данные хранятся только на этом устройстве и никуда не передаются.</span>'}</div></div>
@@ -1033,7 +1129,7 @@ function showOnboarding(again = false) {
       <div class="onb-item"><span class="ico" style="--c:var(--accent)">${I.phone}</span><div><b>Установите на экран</b><span>${isIOS() ? 'Safari → «Поделиться» → «На экран „Домой“».' : 'Chrome → меню ⋮ → «Добавить на главный экран».'}</span></div></div>
       <div class="hint">CABINA ${VERSION}. Не является официальной системой ОАО «РЖД» и не использует корпоративные учётные записи. Расчёт заработка ориентировочный.</div>
     </div>`,
-    foot: `<button class="btn btn-primary" data-act="onb-ok">${again ? 'Закрыть' : 'Начать'}</button>`,
+    foot: `<button class="btn btn-primary" data-act="onb-ok">Закрыть</button>`,
   }));
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -1041,7 +1137,6 @@ function showOnboarding(again = false) {
     if (b.dataset.act === 'onb-ok' || b.hasAttribute('data-close')) { closeLayer(el); setTimeout(scheduleTours, 250); }
   });
   el.querySelector('.scrim').addEventListener('click', () => setTimeout(scheduleTours, 250));
-  if (!again) { S.onboarded = true; setOnboarded().catch(() => {}); }
 }
 
 // ---------------------------------------------------------------- обновление свайпом вниз
@@ -1119,7 +1214,7 @@ async function start() {
   initLock();
   if (lockOn()) await lockScreen();
   render();
-  if (!S.onboarded) showOnboarding();
+  if (!S.onboarded && !redirect && !location.hash) showFirstVisit();
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
   // ссылка с поездками от напарника (данные после «#» — сервер их не видел)
   checkShareHash();

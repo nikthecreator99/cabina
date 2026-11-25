@@ -31,6 +31,8 @@ export async function openApp(env, { onboard = true, tours = false, awards = fal
   await page.goto(env.url);
   await page.waitForSelector('.screen');
   if (onboard) {
+    const skipInstall = page.getByRole('button', { name: 'Продолжить в браузере' });
+    if (await skipInstall.count()) await skipInstall.click();
     await page.getByRole('button', { name: 'Начать' }).click();
     await page.waitForSelector('.layer', { state: 'detached' });
   }

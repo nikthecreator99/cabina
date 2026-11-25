@@ -315,7 +315,7 @@ export function openTripForm(tripId) {
   const title = existing ? (wasLive ? (isPending(existing) ? 'Ждёт явки' : 'Поездка в пути') : `Поездка ${dayMonth(parseLocal(existing.start))}`) : 'Новая поездка';
 
   const body = `
-    ${existing ? '<div class="summary-top" id="tf-summary"></div>' : `<div class="trip-imports"><button class="btn btn-ghost" type="button" data-act="tf-receive">${I.qr}<span>От напарника</span></button><button class="btn btn-ghost" type="button" data-act="tf-scan">${I.camera}<span>По фото</span></button></div>`}
+    ${existing ? '<div class="summary-top" id="tf-summary"></div>' : `<div class="trip-imports"><button class="btn btn-ghost" type="button" data-act="tf-receive">${I.qr}<span>От напарника</span></button><button class="btn btn-ghost" type="button" data-act="tf-scan">${I.camera}<span>По фото</span><small class="scan-demo">демо</small></button></div>`}
     <div class="field" id="tf-mates-field"><div id="tf-mates"></div></div>
     <div class="field">
       <div class="label" id="tf-route-cap">Участок <span class="opt">· необязательно</span></div>

@@ -4,7 +4,7 @@ import {readRoute,fields,normalize} from './route-reader.js';
 export function openRouteScan(apply) {
   const photos=[], results=new Map(), controller=new AbortController();
   let busy=false;
-  const el=openLayer(sheet({title:'По фото маршрута',tall:true,body:`
+  const el=openLayer(sheet({title:'По фото маршрута · демо',tall:true,body:`
     <div class="notice">${I.lock}<div><b>Фото остаются на телефоне</b><br>Распознавание идёт на этом устройстве. Снимки и распознанный текст никуда не отправляются.</div></div>
     <p class="hint">Выберите одну или несколько сторон одного маршрута. Поверните страницы текстом вверх.</p>
     <button type="button" class="add-btn" data-pick>${I.camera} Выбрать фото</button><input type="file" accept="image/*" multiple hidden>

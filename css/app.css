@@ -2657,3 +2657,14 @@ html[data-text="xl"] #gr-period { grid-auto-flow: row; grid-template-columns: 1f
 .scan-snippet { max-width:100%; height:auto; min-height:32px; max-height:60px; width:auto; justify-self:start; border-radius:4px }
 .scan-choices { display:flex; flex-wrap:wrap; gap:8px }
 .scan-choices button { min-height:44px; max-width:100%; white-space:normal; overflow-wrap:anywhere }
+
+.trip-imports { container-type:inline-size }
+.scan-demo { display:none; color:var(--text-2); font-size:.75em }
+@container (min-width: 22em) { .scan-demo { display:inline } }
+.layer:has([data-first]) .sheet-foot { display:grid; grid-template-columns:minmax(0,1fr) }
+.layer:has(.install-pointer:not(.point-top)) .sheet-foot { padding-bottom:calc(38px + env(safe-area-inset-bottom,0px)) }
+.install-steps { margin:0 0 18px; padding-inline-start:24px; line-height:1.45 }
+.install-steps li + li { margin-top:10px }
+.install-pointer { position:absolute; right:5%; bottom:0; font-size:30px; font-weight:700; color:var(--accent); pointer-events:none }
+.install-pointer.point-top { bottom:auto; top:0 }
+.install-pointer.point-share { right:50%; transform:translateX(50%) }
