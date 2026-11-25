@@ -277,8 +277,26 @@ function rewardNote(r) {
     <div class="av-rwtxt">${small(I.gift, 20)}<div><b>Только за приглашения.</b> ${esc(r.name)} — ${rwName(r.n)}, сейчас засчитано ${n}. Примерить можно, надеть — когда засчитают ${r.n}.</div></div>
     <button class="btn btn-primary" data-act="av-invite">${small(I.share, 18)} Отправить приглашение</button></section>`;
 }
+let shopCatalog;
+function loadShopCatalog() {
+  if (shopCatalog) return;
+  fetch('data/shop-catalog.json').then(response => {
+    if (!response.ok) throw Error();
+    return response.json();
+  }).then(items => { shopCatalog = items; refresh(); }).catch(() => {});
+}
+
 function sections() {
   const list = baseSections();
+  const selected = { sex: E.a.sex, bg: E.a.bg, hat: E.a.hat, more: E.a.mazut && 'mazut' };
+  for (const [section, sku] of Object.entries(selected)) {
+    const index = list.findIndex(entry => entry.id === section);
+    const item = shopCatalog?.[sku];
+    if (index < 0 || !item || E.prem || ownedItems().includes(sku)) continue;
+    const id = 'buy-' + sku;
+    list.splice(index + 1, 0, { id, html: () =>
+      `<div class="av-sec" data-sec="${id}" data-h="${hash(id + item.price)}"><a class="btn btn-primary" href="data/shop.html?item=${encodeURIComponent(sku)}" target="_blank" rel="noopener" aria-label="Купить: ${esc(item.name)} за ${item.price} ₽">Купить · ${item.price} ₽</a></div>` });
+  }
   const locks = A.lockedRewards(E.a, rewardsOpen());
   for (const r of locks) {
     const i = list.findIndex((x) => x.id === r.k);
@@ -290,13 +308,13 @@ const panelHtml = () => sections().map((x) => x.html()).join('');
 
 export function renderAvatarEdit() {
   if (!E.a) start();
+  loadShopCatalog();
   return `<div class="av-top"><div class="page-head">
       <button class="icon-btn" data-act="av-close" aria-label="Закрыть">${I.x}</button>
       <h1>Мой персонаж</h1>
       <button class="btn btn-primary btn-sm" data-act="av-save">Готово</button></div>
       <div class="av-stage" id="av-stage">${stageHtml()}</div>
       <div class="av-groups" id="av-groups" role="tablist">${groupsHtml()}</div></div>
-    <a class="btn btn-ghost" href="data/shop.html">Магазин оформления</a>
     <div class="av-panel" id="av-panel">${panelHtml()}</div>
     <div class="notice ok">${I.shield}<div><b>Это рисунок, а не фото.</b> Персонаж хранится только в этом телефоне и попадает в резервную копию.</div></div>`;
 }
@@ -406,8 +424,8 @@ async function save(ctx) {
     const ok = await confirmDialog({
       title: 'Это Премиум',
       text: ch
-        ? `${ch.name} — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить и купить в магазине оформления.${lockTxt} Сохранить человека с той же одеждой?`
-        : `Премиум-детали (${parts.join(', ')}) можно примерить и купить в магазине оформления.${lockTxt} Снять их и сохранить остальное?`,
+        ? `${ch.name} — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить и купить кнопкой под выбранным предметом.${lockTxt} Сохранить человека с той же одеждой?`
+        : `Премиум-детали (${parts.join(', ')}) можно примерить и купить кнопкой под выбранным предметом.${lockTxt} Снять их и сохранить остальное?`,
       ok: ch ? 'Сохранить человека' : 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
     });
     if (!ok) return;
@@ -465,3 +483,8 @@ export async function avatarClick(act, b, ctx) {
   else if (act === 'av-invite') await inviteFromAvatar(ctx);
   return true;
 }
+
+// Покупка открывается отдельно, чтобы сохранить текущую примерку.
+if (typeof window !== 'undefined') window.addEventListener('focus', () => {
+  if (document.querySelector('#av-panel')) refreshOwned().then(() => refresh()).catch(() => {});
+});

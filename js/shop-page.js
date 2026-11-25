@@ -2,7 +2,32 @@ import { avatarSvg, bgSvg } from './avatar.js';
 import { API, session, accessToken } from './auth.js';
 
 const status = document.querySelector('#status');
-const products = [...document.querySelectorAll('[data-sku]')];
+let products = [...document.querySelectorAll('[data-sku]')];
+const selected = new URLSearchParams(location.search).get('item');
+if (selected && products.some(card => card.dataset.sku === selected)) {
+  for (const card of products) if (card.dataset.sku !== selected) card.remove();
+  products = products.filter(card => card.dataset.sku === selected);
+  document.querySelector('h1').textContent = 'Оформление покупки';
+  document.querySelector('.store h1 + p').textContent = 'Разовая покупка для вашего профиля CABINA.';
+  document.querySelector('.store nav').before(document.querySelector('#goods'));
+}
+for (const id of ['terms', 'returns']) {
+  const section = document.getElementById(id);
+  const heading = section.querySelector('h2');
+  const summary = document.createElement('summary');
+  summary.textContent = heading.textContent;
+  heading.replaceWith(summary);
+  const details = document.createElement('details');
+  details.id = id;
+  details.append(...section.childNodes);
+  section.replaceWith(details);
+}
+function revealTerms() {
+  const section = document.getElementById(location.hash.slice(1));
+  if (section?.tagName === 'DETAILS') section.open = true;
+}
+window.addEventListener('hashchange', revealTerms);
+revealTerms();
 const account = session()?.sub;
 let terms, mode, busy = false;
 
@@ -63,7 +88,7 @@ try {
     else if (account && mode !== 'off') {
       const button = document.createElement('button');
       button.className = 'btn btn-primary';
-      button.textContent = 'Купить';
+      button.textContent = 'Перейти к оплате · ' + card.querySelector('strong').textContent;
       button.onclick = () => buy(card);
       action.append(button);
     }
@@ -79,5 +104,5 @@ try {
     status.append(refresh);
   }
 } catch {
-  status.textContent = 'Сейчас доступен просмотр каталога. Для покупки проверьте соединение и обновите страницу.';
+  status.textContent = 'Оплата сейчас недоступна. Попробуйте позже.';
 }

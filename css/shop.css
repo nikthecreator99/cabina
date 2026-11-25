@@ -9,3 +9,6 @@
 .product .preview { height: 7rem; width: 7rem; }
 .preview svg { width: 100%; height: 100%; }
 .action button { margin-top: .7rem; }
+
+.store details { padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.store summary { cursor: pointer; font-weight: 600; }

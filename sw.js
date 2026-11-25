@@ -1,6 +1,6 @@
 // Service worker CABINA: приложение работает без интернета после первого открытия.
 // Пользовательские данные (IndexedDB) service worker не трогает.
-const VERSION = 'cabina-v2.42.0';
+const VERSION = 'cabina-v2.42.1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/boot.js', 'js/app.js', 'js/ui.js', 'js/store.js', 'js/db.js', 'js/calc.js', 'js/checks.js', 'js/remind.js', 'js/depot.js', 'js/table.js', 'js/calendar.js', 'js/forms.js', 'js/trip-photos.js', 'js/route-scan.js', 'js/route-reader.js', 'js/meters.js', 'js/docs.js', 'js/backup.js', 'js/sun.js', 'js/tour.js', 'js/tours.js',
@@ -10,7 +10,7 @@ const SHELL = [
   'icons/learn/pte-course.webp',
   'icons/ai-loco.webp',
   'icons/learn/road-bg.webp',
-  'data/calendar.json', 'fonts/onest.woff', 'fonts/unbounded.woff',
+  'data/calendar.json', 'data/shop-catalog.json', 'fonts/onest.woff', 'fonts/unbounded.woff',
 ];
 
 self.addEventListener('install', (e) => {
