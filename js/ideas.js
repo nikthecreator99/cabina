@@ -252,20 +252,29 @@ export async function openAdminIdeas(onClose) {
       ${x.email ? `<div class="t2 idea-mail">${small(I.mail, 14)} Можно ответить: <b class="sel">${esc(x.email)}</b></div>` : ''}
       ${x.note ? `<div class="idea-note"><b>Ваш комментарий:</b> ${esc(x.note)}</div>` : ''}
       <div class="idea-ans">${x.state === 'new' ? `<button class="btn btn-primary btn-sm" data-ans="1" data-id="${esc(x.id)}">Принять</button><button class="btn btn-plain btn-sm" data-ans="0" data-id="${esc(x.id)}">Не подошла</button>` : ''}
-        <button class="btn btn-plain btn-sm" data-cm="1" data-id="${esc(x.id)}">${x.note ? 'Изменить комментарий' : 'Комментарий'}</button></div></div></div>`;
+        <button class="btn btn-plain btn-sm" data-cm="1" data-id="${esc(x.id)}">${x.note ? 'Изменить комментарий' : 'Комментарий'}</button><button class="icon-btn idea-del" data-admin-del data-id="${esc(x.id)}" aria-label="Удалить идею">${small(I.trash,18)}</button></div></div></div>`;
   const body = () => (list.length ? `<div class="hint">Новых: ${fresh()}. Почта автора видна, только если он сам отметил «Можно ответить мне на почту».</div><div class="panel idea-list">${list.map(rowHtml).join('')}</div>`
     : '<div class="hint">Идей пока нет.</div>');
   const el = openLayer(sheet({ title: 'Идеи пользователей', tall: true, body: `<div id="adm-ideas">${body()}</div>` }), { onClose });
   let busy = false;
   el.addEventListener('click', async (e) => {
     const cm = e.target.closest('[data-cm]');
-    const b = cm || e.target.closest('[data-ans]');
+    const del = e.target.closest('[data-admin-del]');
+    const b = del || cm || e.target.closest('[data-ans]');
     if (!b || busy) return;
     const id = String(b.dataset.id || '').toLowerCase();
     if (!UUID.test(id)) return;
     busy = true;
     try {
-      if (cm) {
+      if (del) {
+        const idea = list.find(x => x.id === id);
+        if (!idea || !await confirmDialog({ title: 'Удалить идею?', text: 'Идея исчезнет у вас и у автора: «' + idea.body.slice(0,100) + '».' })) return;
+        const result = await rpc('admin_delete_idea', { p_id: id });
+        if (!result?.ok) { toast(notReady(result) ? 'Удаление ещё не включено на сервере.' : ideaError(result), {error:true}); return; }
+        list = list.filter(x => x.id !== id);
+        if (D.list) D.list = D.list.filter(x => x.id !== id);
+        toast('Идея удалена');
+      } else if (cm) {
         const idea = list.find((x) => x.id === id);
         const note = idea ? await commentSheet(idea) : undefined;
         if (note === undefined) return;

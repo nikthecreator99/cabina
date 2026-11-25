@@ -1012,7 +1012,7 @@ export function avatarSvg(input, { size = 200, crop = 'full', bg = true, cls = '
     const hb = [
       bg ? background(a.bg, u) : '', horseMane(a, hg2, false), cl.back, horseNeck(a, hg2, coat), cl.s,
       a.hat ? '' : horseEars(a, hg2, coat, u), cel(u + 'hd', hg2.path, coat, dk(coat, .2), -5, -3), F2.r, horseMane(a, hg2, true), mazut(a, hg2),
-      glasses(a, F2.E, hg2), hat(a, hg2, u), a.hat ? horseEars(a, hg2, coat, u) : '', goggles(a, hg2), defenders(a, hg2),
+      glasses(a, F2.E, hg2), hat(a, hg2, u), goggles(a, hg2), defenders(a, hg2),
     ].join('');
     return wrap(hb, size, crop, cls);
   }
