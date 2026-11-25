@@ -280,6 +280,14 @@ button.stat:active { transform: scale(.98); }
 @keyframes pulse { 70% { box-shadow: 0 0 0 10px rgba(47,208,138,0); } 100% { box-shadow: 0 0 0 0 rgba(47,208,138,0); } }
 .rest-banner .t1 { font-weight: 700; font-size: calc(15px * var(--fs)); }
 .rest-banner .t2 { font-size: calc(13px * var(--fs)); color: var(--text-2); }
+@media (prefers-reduced-motion: no-preference) {
+  #app .home-screen .rest-banner:not(.pending):not(.over) .pulse {
+    animation: pulse 1.8s ease var(--rest-pulse-delay, 0ms) infinite;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-screen .rest-banner .pulse { animation: none; }
+}
 .rest-banner.pending .pulse { background: var(--warn); animation: none; }
 .rest-banner.over .pulse { background: var(--warn); animation: none; box-shadow: none; } /* переотдых (2.24.8) */
 

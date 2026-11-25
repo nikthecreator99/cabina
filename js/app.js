@@ -49,7 +49,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.41.0';
+export const VERSION = '2.41.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -302,11 +302,15 @@ function renderHome() {
   </div>${V.sel ? selBar(trips) : ''}`;
   homeLaunchTime ??= performance.now();
   const elapsed = performance.now() - homeLaunchTime;
-  if (elapsed < 850 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    Array.from(app.querySelector('.home-screen').children).forEach((item, index) => {
-      const delay = Math.min(index, 6) * 64 - elapsed;
-      if (delay > -410) item.animate?.([{ opacity: 0, translate: '0 -7px' }, { opacity: 1, translate: '0 0' }],
-        { duration: 410, delay, easing: 'ease-out', fill: 'backwards' });
+  const duration = 570, stagger = 85, maxSteps = 6;
+  const entranceEnd = duration + maxSteps * stagger;
+  // Keep the halo in phase when a calendar update rebuilds the home screen.
+  app.querySelector('.home-screen').style.setProperty('--rest-pulse-delay', (entranceEnd - elapsed) + 'ms');
+  if (elapsed < entranceEnd && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    Array.from(app.querySelectorAll('.home-screen > :not(.home-top)')).forEach((item, index) => {
+      const delay = Math.min(index + 1, maxSteps) * stagger - elapsed;
+      if (delay > -duration) item.animate?.([{ opacity: 0, translate: '0 -7px' }, { opacity: 1, translate: '0 0' }],
+        { duration, delay, easing: 'ease-out', fill: 'backwards' });
     });
   }
 
