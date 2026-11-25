@@ -78,7 +78,7 @@ export function payloadStatus(p) {
 }
 
 // Карточка: имя и должность всегда, депо и персонаж — только если включены в «Приватности». Телефона здесь нет.
-export function cardPayload(p = S.profile, { findable = false, premium = false, invited = 0 } = {}) {
+export function cardPayload(p = S.profile, { findable = false, premium = false, owned = [], invited = 0 } = {}) {
   const pv = privacyOf(p);
   const name = cleanText(p.name);
   if (!name) return null;
@@ -86,7 +86,7 @@ export function cardPayload(p = S.profile, { findable = false, premium = false, 
     p_name: name,
     p_role: own(ROLE_NAMES, p.role) ? p.role : null,
     p_depot: pv.depot ? cleanText(normDepot(p.depot)) || null : null,
-    p_avatar: pv.avatar && hasAvatar(p) ? normalizeAvatar(p.avatar, { premium, invited }) : null,
+    p_avatar: pv.avatar && hasAvatar(p) ? normalizeAvatar(p.avatar, { premium, owned, invited }) : null,
     p_searchable: findable,
   };
 }

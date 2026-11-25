@@ -49,7 +49,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.41.2';
+export const VERSION = '2.42.0';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -426,7 +426,8 @@ function renderExtra() {
         ${payslipCard()}
         <div class="extra-list" id="extra-list">${extraOrder().map((k) => rows[k]).join('')}</div>
       </div>
-      <p class="hint extra-tip">Порядок можно поменять: удержите строку пальцем и двигайте вверх или вниз.</p>`;
+      <p class="hint extra-tip">Порядок можно поменять: удержите строку пальцем и двигайте вверх или вниз.</p>
+      <footer><a class="btn btn-ghost" href="data/shop.html">Магазин оформления CABINA</a></footer>`;
   }
   return html;
 }

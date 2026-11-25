@@ -87,6 +87,12 @@ api.cabina-app.ru {
 		}
 	}
 	# CABINA AI (шаг 15): вопрос → сервер помощника. Ключ входа человека он проверяет через PostgREST.
+	handle_path /shop/v1/* {
+        request_body {
+            max_size 16KB
+        }
+        reverse_proxy shop:8788
+    }
 	handle_path /ai/v1/* {
 		request_body {
 			max_size 8KB

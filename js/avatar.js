@@ -966,10 +966,10 @@ export function normalizeAvatar(src, opts = {}) {
     bone: idx(a.bone, BONE_C, 0), sEyes: pick(a.sEyes, S_EYES, 'tired'), sJaw: pick(a.sJaw, S_JAW, 'grin'), sExtra: pick(a.sExtra, S_EXTRA, null),
   };
   if (!premium) {
-    if (isChar(o.sex)) { o.sex = has(HAIR_F, o.hair) ? 'f' : 'm'; if (o.sex === 'f') { o.mous = null; o.beard = null; } }
-    if (isPremiumHat(o.hat)) o.hat = null;
-    if (isPremiumBg(o.bg)) o.bg = 'mist';
-    o.mazut = false;
+    if (isChar(o.sex) && !opts.owned?.includes(o.sex)) { o.sex = has(HAIR_F, o.hair) ? 'f' : 'm'; if (o.sex === 'f') { o.mous = null; o.beard = null; } }
+    if (isPremiumHat(o.hat) && !opts.owned?.includes(o.hat)) o.hat = null;
+    if (isPremiumBg(o.bg) && !opts.owned?.includes(o.bg)) o.bg = 'mist';
+    if (!opts.owned?.includes('mazut')) o.mazut = false;
   }
   // вещи за приглашения: пока засчитано меньше нужного — снимаются (примерить можно, сохранить нельзя)
   if (checkRewards) for (const r of lockedRewards(o, invited)) { o[r.k] = r.off; if (r.k === 'outfit') o.outfitC = null; }
@@ -977,13 +977,13 @@ export function normalizeAvatar(src, opts = {}) {
 }
 
 // Какие премиум-детали сейчас надеты (для плашки «Примерка» и окна при сохранении)
-export function premiumParts(a) {
+export function premiumParts(a, owned = []) {
   const r = [];
   const ch = CHARS.find((c) => c.id === a.sex);
-  if (ch) r.push(ch.part);
-  if (isPremiumHat(a.hat)) r.push('фуражка');
-  if (a.mazut) r.push('мазут');
-  if (isPremiumBg(a.bg)) r.push(`фон «${BG.find((b) => b.id === a.bg).name}»`);
+  if (ch && !owned.includes(ch.id)) r.push(ch.part);
+  if (isPremiumHat(a.hat) && !owned.includes(a.hat)) r.push('фуражка');
+  if (a.mazut && !owned.includes('mazut')) r.push('мазут');
+  if (isPremiumBg(a.bg) && !owned.includes(a.bg)) r.push(`фон «${BG.find((b) => b.id === a.bg).name}»`);
   return r;
 }
 

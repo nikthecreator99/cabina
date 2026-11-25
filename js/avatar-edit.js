@@ -4,11 +4,28 @@
 import { I, esc, small, toast, confirmDialog, plural } from './ui.js';
 import { S, saveProfile } from './store.js';
 import * as A from './avatar.js';
-import { session, myRole } from './auth.js';
+import { session, myRole, API, accessToken } from './auth.js';
 import { countOf } from './awards.js';
 
 // ---- Премиум. Код открытый, поэтому это удобство для разработчика, а не защита: платного здесь ничего нет.
 const PREM_KEY = 'cabina-premium-dev';
+function ownedItems() {
+  try {
+    const value=JSON.parse(localStorage.getItem('cabina-owned-'+session()?.sub));
+    return Array.isArray(value)?value:[];
+  }catch{return [];}
+}
+async function refreshOwned(){
+  const uid=session()?.sub;
+  if(!uid)return;
+  const token=await accessToken();
+  if(!token)return;
+  const r=await fetch(API+'/shop/v1/owned',{headers:{Authorization:'Bearer '+token},cache:'no-store'});
+  if(r.ok){
+    const {owned}=await r.json();
+    if(session()?.sub===uid && Array.isArray(owned))localStorage.setItem('cabina-owned-'+uid,JSON.stringify(owned));
+  }
+}
 export function premiumOk() {
   try { const s = session(); return !!s && localStorage.getItem(PREM_KEY) === s.sub; } catch { return false; }
 }
@@ -26,7 +43,7 @@ export function notePremium(role) {
 export async function refreshPremium() {
   try {
     if (!session()) { localStorage.removeItem(PREM_KEY); return; }
-    notePremium(await myRole());
+    await Promise.all([myRole().then(notePremium),refreshOwned()]);
   } catch {}
 }
 
@@ -37,7 +54,7 @@ export const invitedCount = () => countOf('invited').n;
 const ADMIN_ALL = 1000;
 const rewardsOpen = () => (premiumOk() ? ADMIN_ALL : invitedCount());
 // Что можно сохранить и показать коллегам: Премиум (пока — только администратор) и открытые вещи за приглашения (их — только за приглашения)
-export const avatarRights = () => ({ premium: premiumOk(), invited: rewardsOpen() });
+export const avatarRights = () => ({ premium: premiumOk(), owned: ownedItems(), invited: rewardsOpen() });
 // Вещи за приглашения Премиум не открывает (2.21): только засчитанные приглашения; администратор (2.32.1) — любые
 const rewardLocked = (r) => !!r && !(rewardsOpen() >= r.n);
 const rwName = (n) => `за ${n} ${plural(n, 'приглашение', 'приглашения', 'приглашений')}`;
@@ -52,7 +69,7 @@ export const hasAvatar = (p = S.profile) => !!p.avatar && typeof p.avatar === 'o
 function start() {
   E.prem = premiumOk();
   // первый раз — спокойный персонаж по умолчанию, дальше человек меняет сам или жмёт «Случайный»
-  E.a = A.normalizeAvatar(hasAvatar() ? S.profile.avatar : {}, { premium: E.prem, invited: rewardsOpen() });
+  E.a = A.normalizeAvatar(hasAvatar() ? S.profile.avatar : {}, { premium: E.prem, owned: ownedItems(), invited: rewardsOpen() });
   E.base = JSON.stringify(E.a);
   E.hist = []; E.group = 'face'; E.drag = false; E.chars = false;
 }
@@ -124,7 +141,7 @@ function range(k, label) {
 
 // Что сейчас только примеряется: премиум-детали и неоткрытые вещи за приглашения
 function tryParts() {
-  return [...(E.prem ? [] : A.premiumParts(E.a)), ...A.lockedRewards(E.a, rewardsOpen()).map((r) => `${r.name} (за ${r.n})`)];
+  return [...(E.prem ? [] : A.premiumParts(E.a, ownedItems())), ...A.lockedRewards(E.a, rewardsOpen()).map((r) => `${r.name} (за ${r.n})`)];
 }
 function stageHtml() {
   const parts = tryParts();
@@ -279,6 +296,7 @@ export function renderAvatarEdit() {
       <button class="btn btn-primary btn-sm" data-act="av-save">Готово</button></div>
       <div class="av-stage" id="av-stage">${stageHtml()}</div>
       <div class="av-groups" id="av-groups" role="tablist">${groupsHtml()}</div></div>
+    <a class="btn btn-ghost" href="data/shop.html">Магазин оформления</a>
     <div class="av-panel" id="av-panel">${panelHtml()}</div>
     <div class="notice ok">${I.shield}<div><b>Это рисунок, а не фото.</b> Персонаж хранится только в этом телефоне и попадает в резервную копию.</div></div>`;
 }
@@ -379,17 +397,17 @@ export function avatarChange(e) {
 async function save(ctx) {
   const prem = premiumOk();
   const invited = rewardsOpen();
-  const parts = A.premiumParts(E.a);
+  const parts = A.premiumParts(E.a, ownedItems());
   const locks = A.lockedRewards(E.a, invited);
   if (parts.length && !prem) {
-    const ch = A.CHARS.find((c) => c.id === E.a.sex), rest = parts.filter((p) => !ch || p !== ch.part);
+    const ch = A.CHARS.find((c) => c.id === E.a.sex && !ownedItems().includes(c.id)), rest = parts.filter((p) => !ch || p !== ch.part);
     // вещи за приглашения — не Премиум: о них отдельной фразой
     const lockTxt = locks.length ? ` Вещи за приглашения (${locks.map((r) => `${r.name.toLowerCase()} — ${rwName(r.n)}`).join(', ')}) пока тоже снимутся.` : '';
     const ok = await confirmDialog({
       title: 'Это Премиум',
       text: ch
-        ? `${ch.name} — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить, но сохранить пока нельзя: Премиум появится позже.${lockTxt} Сохранить человека с той же одеждой?`
-        : `Премиум-детали (${parts.join(', ')}) можно примерить, но сохранить пока нельзя: Премиум появится позже.${lockTxt} Снять их и сохранить остальное?`,
+        ? `${ch.name} — премиум-персонаж${rest.length ? ` (и ещё: ${rest.join(', ')})` : ''}. Его можно примерить и купить в магазине оформления.${lockTxt} Сохранить человека с той же одеждой?`
+        : `Премиум-детали (${parts.join(', ')}) можно примерить и купить в магазине оформления.${lockTxt} Снять их и сохранить остальное?`,
       ok: ch ? 'Сохранить человека' : 'Снять и сохранить', cancel: 'Ещё примерю', danger: false,
     });
     if (!ok) return;
@@ -402,7 +420,7 @@ async function save(ctx) {
     });
     if (!ok) return;
   }
-  const avatar = A.normalizeAvatar(E.a, { premium: prem, invited });
+  const avatar = A.normalizeAvatar(E.a, { premium: prem, owned: ownedItems(), invited });
   const photo = !!S.profile.photo;
   E.a = null;
   ctx.back();

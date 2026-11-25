@@ -155,6 +155,25 @@ services:
       YC_API_KEY: ${YC_API_KEY:-}
       YC_FOLDER_ID: ${YC_FOLDER_ID:-}
 
+  shop:
+    image: python:3.13-alpine
+    restart: unless-stopped
+    <<: *logs
+    working_dir: /app
+    user: "1000:1000"
+    read_only: true
+    command: ["python", "-B", "server.py"]
+    volumes:
+      - ./shop:/app:ro
+      - ./shop-catalog.json:/app-catalog.json:ro
+      - ./shop-data:/var/lib/shop
+    environment:
+      SHOP_MODE: ${SHOP_MODE:-off}
+      SHOP_CATALOG: /app-catalog.json
+      ROBOKASSA_LOGIN: ${ROBOKASSA_LOGIN:-}
+      ROBOKASSA_PASSWORD1: ${ROBOKASSA_PASSWORD1:-}
+      ROBOKASSA_PASSWORD2: ${ROBOKASSA_PASSWORD2:-}
+
   caddy:
     container_name: cabina-caddy
     image: caddy:2.10.2

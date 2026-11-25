@@ -1,0 +1,11 @@
+.store { max-width: 54rem; margin: auto; padding: 1.5rem 1rem 4rem; overflow-wrap: anywhere; }
+.store a { color: var(--accent); }
+.store nav, .store section, .store footer { padding-block: 1rem; }
+.store h1 { line-height: 1.1; }
+#goods { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap: .8rem; }
+.product { padding: 1rem; display: flex; flex-direction: column; align-items: flex-start; }
+.product h2 { margin: .5rem 0 0; font-size: 1.15rem; }
+.product p { flex: 1; }
+.product .preview { height: 7rem; width: 7rem; }
+.preview svg { width: 100%; height: 100%; }
+.action button { margin-top: .7rem; }
