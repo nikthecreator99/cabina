@@ -1,5 +1,6 @@
 import {openLayer,closeLayer,sheet,I,esc,toast} from './ui.js';
 import {readRoute,fields,normalize} from './route-reader.js';
+import {trainDoubt} from './route-ink.js';
 
 export function openRouteScan(apply) {
   const photos=[], results=new Map(), controller=new AbortController();
@@ -45,6 +46,13 @@ export function openRouteScan(apply) {
     return [...review.querySelectorAll('[data-key]')].filter(row=>row.querySelector('[type=checkbox]').checked);
   }
   function update(){applyBtn.disabled=busy||!selected().length;}
+  // Вес, оси и длина проверяют друг друга: 5200 т на 30 осей — это ошибка чтения, а не поезд.
+  function doubt(){
+    const box=review.querySelector('[data-doubt]');if(!box)return;
+    const val=k=>review.querySelector(`[data-key=${k}] .input`)?.value.replace(/\s/g,'')||'';
+    const text=trainDoubt({weight:val('weight'),axles:val('axles'),length:val('length')});
+    box.textContent=text?text+'. Сверьте с фото.':'';box.hidden=!text;
+  }
   function fieldRow(key,value,source,checked,snippet='',extra=''){
     const hint=['sd','ed'].includes(key)?'ДД.ММ.ГГГГ':['st','et','passSt','passEt'].includes(key)?'ЧЧ:ММ':'';
     return `<div class="scan-field" data-key="${key}"><label><input type="checkbox" ${checked?'checked':''}> ${esc(fields[key])}</label>${snippet?`<img class="scan-snippet" alt="Графа на фотографии" src="${snippet}">`:''}<input class="input" placeholder="${hint}" aria-label="${esc(fields[key])}" value="${esc(value)}"><small class="hint">${esc(source)}</small>${extra}</div>`;
@@ -55,12 +63,12 @@ export function openRouteScan(apply) {
     const row=choice.closest('[data-key]');
     row.querySelector('.input').value=choice.dataset.suggestion;
     row.querySelector('[type=checkbox]').checked=true;
-    update();
+    update();doubt();
   };
   review.oninput=e=>{
     const row=e.target.closest('[data-key]');if(!row)return;
     if(e.target.classList.contains('input'))row.querySelector('[type=checkbox]').checked=!!e.target.value.trim();
-    update();
+    update();doubt();
   };
   scan.onclick=async()=>{
     if(busy)return;
@@ -75,7 +83,9 @@ export function openRouteScan(apply) {
           photos[i].turn=found.turn;drawPages();
           texts.push(found.text);
           for(const r of found.rows){
-            const values=results.get(r.key)||new Map();values.set(r.value,{source:`Фото ${i+1}`,snippet:r.snippet});results.set(r.key,values);
+            const values=results.get(r.key)||new Map(),had=values.get(r.value);
+            // одно и то же значение по графе и по смыслу — оставляем объяснение и картинку, где они есть
+            values.set(r.value,{source:`Фото ${i+1}`,snippet:r.snippet||had?.snippet,why:r.why||had?.why});results.set(r.key,values);
           }
         }catch{if(controller.signal.aborted)return;failed.push(i+1)}
       }
@@ -93,10 +103,11 @@ export function openRouteScan(apply) {
           const choices=candidates.map(([v,info])=>`<button type="button" class="qchip" data-suggestion="${esc(v)}" aria-label="${esc(info.source+' · '+v)}">${esc(v)} · ${esc(info.source)}</button>`).join('');
           extra=`<div class="hint">Варианты чтения</div><div class="scan-choices">${choices}</div>`;
         }
-        rows.push(fieldRow(key,value,src.source+(src.snippet?' · сверьте с графой':''),false,src.snippet,extra));
+        const why=candidates.length===1?candidates[0][1].why:'';
+        rows.push(fieldRow(key,value,src.source+(why?' · '+why:'')+(src.snippet?' · сверьте с графой':''),false,src.snippet,extra));
       }
-      review.innerHTML=rows.join('')+`<details><summary>Заполнить другие поля</summary>${missing.join('')}</details><details><summary>Распознанный текст</summary><pre>${esc(texts.join('\n\n')||'Текст не распознан')}</pre></details>`;
-    } finally {busy=false;scan.disabled=pick.disabled=false;update()}
+      review.innerHTML='<p class="notice" data-doubt hidden></p>'+rows.join('')+`<details><summary>Заполнить другие поля</summary>${missing.join('')}</details><details><summary>Распознанный текст</summary><pre>${esc(texts.join('\n\n')||'Текст не распознан')}</pre></details>`;
+    } finally {busy=false;scan.disabled=pick.disabled=false;update();doubt()}
   };
   applyBtn.onclick=()=>{
     const values={};

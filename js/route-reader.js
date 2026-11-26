@@ -1,5 +1,6 @@
 // Photo bytes and recognition results never leave this browser.
 import { imageCanvas } from './payslip-reader.js';
+import { penMask, penImage, tsvWords, classify } from './route-ink.js';
 const asset = name => new URL('./vendor/payslip/'+name,import.meta.url).href;
 export const fields = {
   sd:'Дата явки', st:'Явка', ed:'Дата окончания', et:'Окончание работы', routeNo:'Номер маршрута',
@@ -300,6 +301,28 @@ export async function readRoute(file,turn,signal,progress) {
       await read('weight',a[7],a[8],y-u*.65,y+u*.75,true);
       await read('axles',a[8],a[9],y-u*.65,y+u*.75,true);
     }
-    active();return {rows,text:data.text,turn:appliedTurn};
+    // Второй проход (2.43): только синяя ручка на всём листе и числа по смыслу — вес и оси проверяют друг друга.
+    progress('Ищем записи синей ручкой…');
+    const W=canvas.width,H=canvas.height,{mask,count}=penMask(canvas.getContext('2d').getImageData(0,0,W,H).data,W,H);
+    let inkText='';
+    if(count>W*H*.0004){
+      const pen=document.createElement('canvas');pen.width=W;pen.height=H;
+      pen.getContext('2d').putImageData(new ImageData(penImage(mask,W,H),W,H),0,0);
+      await worker.setParameters({tessedit_pageseg_mode:'11',tessedit_char_whitelist:'0123456789.:,/-'});
+      active();
+      const {data:ink}=await worker.recognize(pen,{},{text:true,tsv:true});
+      active();inkText=ink.text||'';pen.width=1;
+      const words=tsvWords(ink.tsv).filter(w=>w.conf>=30);
+      for(const r of classify(words,{year:new Date().getFullYear()})){
+        let snippet;
+        if(r.box){
+          const m=Math.round(r.box.h*.6),x=Math.max(0,r.box.x-m),y=Math.max(0,r.box.y-m);
+          const c=document.createElement('canvas');c.width=Math.min(W-x,r.box.w+2*m);c.height=Math.min(H-y,r.box.h+2*m);
+          c.getContext('2d').drawImage(canvas,x,y,c.width,c.height,0,0,c.width,c.height);snippet=c.toDataURL('image/png');
+        }
+        rows.push({key:r.key,value:r.value,why:r.why,snippet});
+      }
+    }
+    active();return {rows,text:data.text+(inkText.trim()?'\n\nСиней ручкой:\n'+inkText.trim():''),turn:appliedTurn};
   }finally{signal.removeEventListener('abort',stop);stop();canvas.width=original.width=1;}
 }
