@@ -49,7 +49,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.42.2';
+export const VERSION = '2.42.3';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -1064,7 +1064,7 @@ function showFirstVisit(settingsOnly = false) {
   function draw() {
     let title, body, foot;
     if (step === 'install') {
-      title = 'Добро пожаловать в CABINA';
+      title = 'Добро пожаловать';
       body = '<div class="onb-hero"><img src="icons/icon-192.png" alt=""><h2>CABINA</h2><p>Добавьте CABINA на главный экран, чтобы открывать журнал поездок в одно касание.</p></div>';
       foot = act('install','Установить на телефон',true) + act('next','Продолжить в браузере');
     } else if (step === 'guide') {
@@ -1077,7 +1077,7 @@ function showFirstVisit(settingsOnly = false) {
       if (canPoint) body += act('pointer', ios ? (pointer === 'more' ? 'На панели есть «Поделиться»' : 'На панели есть «⋯»') : (pointer === 'top' ? 'Меню находится внизу' : 'Меню находится вверху'));
       foot = settingsOnly ? act('done','Закрыть') : act('next','Продолжить',true);
     } else {
-      title = 'Добро пожаловать в CABINA';
+      title = 'Добро пожаловать';
       const signup = legalReady() && !session() && !OLD_SITE;
       body = `<div class="onb-hero"><img src="icons/icon-192.png" alt=""><h2>CABINA</h2><p>${signup ? 'Создайте аккаунт, чтобы добавить коллег из бригады и получать награды за поездки.' + (SIGNUP_OPEN ? '' : ' Для регистрации нужен код приглашения от коллеги.') : 'Ведите личный журнал поездок, часов и отдыха.'}</p></div>`;
       foot = signup ? act('signup','Создать аккаунт',true) + act('done','Начать без регистрации') : act('done','Начать',true);

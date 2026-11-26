@@ -351,7 +351,7 @@ button.stat:active { transform: scale(.98); }
 
 /* Заголовок экранов разделов */
 .page-head { display: flex; align-items: center; gap: 10px; padding-top: 14px; min-height: 60px; }
-.page-head h1 { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -.01em; flex: 1; min-width: 0; text-wrap: balance; hyphens: auto; overflow-wrap: break-word; }
+.page-head h1 { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -.01em; flex: 1; min-width: 0; text-wrap: balance; hyphens: manual; overflow-wrap: break-word; }
 .page-head h1.long { font-size: 20px; } /* очень длинное слово («Конфиденциальность») — мельче, чтобы не переносить */
 .page-sub { color: var(--text-2); font-size: calc(14px * var(--fs)); margin-top: -6px; }
 .icon-btn { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--card-2); border: 1px solid var(--line); color: var(--text); flex: none; }
@@ -594,8 +594,9 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
 .day-legs { display: grid; gap: 4px; margin-top: 10px; }
 .day-legs .kv b { font-size: calc(16px * var(--fs)); }
 .day-legs .hint { margin: 0 0 6px; }
-.train-row { display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 8px; margin-top: 10px; }
+.train-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; margin-top: 10px; }
 .train-row .mini-label { display: block; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.train-row .input { min-width: 0; width: 100%; }
 #tf-train .add-btn, #tf-note-box .add-btn, #tf-note-field, #tf-routeno-field { margin-top: 10px; }
 #tf-note-field .mini-label, #tf-routeno-field .mini-label { display: block; margin-bottom: 4px; }
 .switch-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--field); border: 1px solid var(--line-2); }

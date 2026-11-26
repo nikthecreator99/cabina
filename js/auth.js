@@ -49,8 +49,15 @@ function store(s) {
     else { localStorage.removeItem(KEY); localStorage.removeItem(TOUCH_KEY); localStorage.removeItem(COLLEAGUES_KEY); }
   } catch {}
 }
-// выход: вход забываем, а заметки коллег (2.31, это чужие данные) стираем из телефона
-export const forget = () => { store(null); try { localStorage.removeItem('cabina-col-notes'); localStorage.removeItem('cabina-ai-history'); } catch {} };
+// выход: вход забываем, а заметки коллег (2.31, это чужие данные), историю CABINA AI и список покупок аккаунта стираем из телефона
+export const forget = () => {
+  store(null);
+  try {
+    localStorage.removeItem('cabina-col-notes');
+    localStorage.removeItem('cabina-ai-history');
+    for (const key of Object.keys(localStorage)) if (key.startsWith('cabina-owned-')) localStorage.removeItem(key);
+  } catch {}
+};
 
 // Ответ сервера о входе → то, что храним в телефоне
 export function fromAuth(d, now = Date.now()) {

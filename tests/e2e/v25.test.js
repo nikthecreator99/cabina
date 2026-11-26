@@ -33,7 +33,8 @@ test('явка заранее: «Ждёт явки», «До явки остал
   assert.match(ban, /Явка завтра, 06:00/);
   assert.match(await text(page, '.trip'), /Явка в 06:00[\s\S]*Ждёт явки/);
   // в часы месяца не попадает
-  assert.match(await text(page, '.hero'), /0ч00мин/);
+  // с 2.35.2 часы и минуты — разными строками крупными цифрами
+  assert.match((await text(page, '.hero')).replace(/\s/g, ''), /0ч00мин/);
   await tab(page, 'profile');
   assert.match(await text(page, '#pr-status'), /Скоро явка/);
   // вторая открытая поездка невозможна, а явка дальше 3 суток — ошибка
