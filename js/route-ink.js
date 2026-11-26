@@ -21,17 +21,70 @@ function paperColors(data, w, h) {
 }
 
 // Маска синих штрихов: 1 — пиксель ручки. Чёрная печать (r ≈ g ≈ b) и бумага отпадают.
+// Синие штампы (медпункт, станция) отличаются оттенком: у шариковой ручки красный и зелёный почти равны,
+// у штемпельной краски зелёный заметно выше (голубая) или вся она бледнее. Решаем по целому штриху —
+// связной кучке пикселей, — а не по пикселю: по среднему цвету штрихи разделяются надёжно (сверено с фото Никиты 26.11.2026).
+export const PEN = { dark: 0.1, blue: 0.07, br: 0.12, grLoose: 0.06, grMean: 0.015, darkMean: 0.35, min: 6 };
 export function penMask(data, w, h) {
-  const { paper, tx } = paperColors(data, w, h), mask = new Uint8Array(w * h);
-  let count = 0;
+  const { paper, tx } = paperColors(data, w, h), n = w * h;
+  const loose = new Uint8Array(n), gr = new Float32Array(n), dk = new Float32Array(n), ink = new Uint8Array(n);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const k = 4 * (y * w + x), p = 3 * (Math.floor(y / TILE) * tx + Math.floor(x / TILE));
+    const i = y * w + x, k = 4 * i, p = 3 * (Math.floor(y / TILE) * tx + Math.floor(x / TILE));
     const r = Math.min(1, data[k] / paper[p]), g = Math.min(1, data[k + 1] / paper[p + 1]), b = Math.min(1, data[k + 2] / paper[p + 2]);
-    const dark = 1 - (r + g + b) / 3, blue = b - Math.max(r, g);
-    // синяя паста: заметно темнее бумаги и синий канал выше красного и зелёного; у гелевой и выцветшей — слабее
-    if (dark > 0.1 && blue > 0.07 && b - r > 0.12) { mask[y * w + x] = 1; count++; }
+    const dark = 1 - (r + g + b) / 3;
+    if (dark > 0.3 && b - Math.max(r, g) < 0.05) ink[i] = 1; // чёрная печать — для линеек бланка
+    if (dark > PEN.dark && b - Math.max(r, g) > PEN.blue && b - r > PEN.br && g - r < PEN.grLoose) { loose[i] = 1; gr[i] = g - r; dk[i] = dark; }
   }
-  return { mask, count };
+  // связные кучки (8 соседей) обходом в ширину; label хранит номер кучки
+  const label = new Int32Array(n), queue = new Int32Array(n), mask = new Uint8Array(n);
+  let count = 0, id = 0;
+  for (let s0 = 0; s0 < n; s0++) {
+    if (!loose[s0] || label[s0]) continue;
+    id++; let head = 0, tail = 0, sumGr = 0, sumDk = 0; queue[tail++] = s0; label[s0] = id;
+    while (head < tail) {
+      const i = queue[head++], x = i % w, y = (i - x) / w; sumGr += gr[i]; sumDk += dk[i];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const j = yy * w + xx; if (loose[j] && !label[j]) { label[j] = id; queue[tail++] = j; }
+      }
+    }
+    if (tail >= PEN.min && sumGr / tail < PEN.grMean && sumDk / tail > PEN.darkMean) {
+      for (let q = 0; q < tail; q++) mask[queue[q]] = 1;
+      count += tail;
+    }
+  }
+  return { mask, count, walls: wallsOf(ink, w, h) };
+}
+
+// Линейки бланка: длинные прямые чёрной печати по вертикали и горизонтали. Через них записи
+// не склеиваются — так «2185» и «3120» в соседних графах остаются разными числами.
+export function wallsOf(ink, w, h) {
+  const L = Math.max(24, Math.round(Math.max(w, h) / 90)), walls = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) for (let y = 0; y < h;) {
+    if (!ink[y * w + x]) { y++; continue; }
+    let e = y; while (e < h && ink[e * w + x]) e++;
+    if (e - y >= L) for (let q = y; q < e; q++) walls[q * w + x] = 1;
+    y = e;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w;) {
+    if (!ink[y * w + x]) { x++; continue; }
+    let e = x; while (e < w && ink[y * w + e]) e++;
+    if (e - x >= L * 2) for (let q = x; q < e; q++) walls[y * w + q] = 1;
+    x = e;
+  }
+  return walls;
+}
+
+// Есть ли линейка бланка на отрезке между центрами двух рамок
+function crossesWall(walls, w, a, b) {
+  if (!walls) return false;
+  const x0 = a.x + a.w / 2, y0 = a.y + a.h / 2, x1 = b.x + b.w / 2, y1 = b.y + b.h / 2;
+  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0));
+  for (let t = 0; t <= steps; t++) {
+    const x = Math.round(x0 + (x1 - x0) * t / steps), y = Math.round(y0 + (y1 - y0) * t / steps);
+    if (walls[y * w + x]) return true;
+  }
+  return false;
 }
 
 // Чистая картинка для распознавания: синие штрихи — чёрным на белом, на 1 пиксель толще (тонкая ручка).
@@ -42,6 +95,108 @@ export function penImage(mask, w, h) {
     if (mask[i] || mask[i - 1] || mask[i + 1] || mask[i - w] || mask[i + w]) { const k = 4 * i; out[k] = out[k + 1] = out[k + 2] = 0; }
   }
   return out;
+}
+
+// ---------------------------------------------------------------- записи по кучкам штрихов
+
+// Рамки отдельных записей: штрихи одной записи стоят рядом по горизонтали и на одной высоте.
+// Возвращает [{x, y, w, h}] — каждую потом читаем отдельно (так tesseract видит одну строку цифр).
+export function inkWords(mask, w, h, { gap: gapK = 0.7, walls = null } = {}) {
+  const seen = new Uint8Array(w * h), boxes = [], queue = new Int32Array(w * h);
+  for (let s0 = 0; s0 < w * h; s0++) {
+    if (!mask[s0] || seen[s0]) continue;
+    let head = 0, tail = 0, x0 = w, y0 = h, x1 = 0, y1 = 0; queue[tail++] = s0; seen[s0] = 1;
+    while (head < tail) {
+      const i = queue[head++], x = i % w, y = (i - x) / w;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      // соседи через 1 пиксель: разрыв штриха ручки в 1–2 пикселя не делит цифру
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const j = yy * w + xx; if (mask[j] && !seen[j]) { seen[j] = 1; queue[tail++] = j; }
+      }
+    }
+    boxes.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, n: tail });
+  }
+  // мелочь (точки, пыль) не начинает запись, но двоеточие внутри записи сохранится при склейке
+  const big = boxes.filter(b => b.n >= 12 && b.h >= 6);
+  const hMed = big.length ? big.map(b => b.h).sort((a, b) => a - b)[Math.floor(big.length / 2)] : 10;
+  let words = boxes.filter(b => b.h <= hMed * 4 && b.w <= w * 0.5).map(b => ({ ...b }));
+  // склеиваем соседей: просвет между рамками меньше доли высоты обычной цифры (hMed — по отдельным
+  // кускам, не по склеенным, иначе слово «растёт» и съедает соседние графы). Цифры в узкой графе пишут
+  // наискосок, поэтому соседа ищем и выше-ниже, но только по направлению письма: центры не круче ~60°,
+  // так не слипаются строки, стоящие друг над другом
+  for (let changed = true; changed;) {
+    changed = false;
+    words.sort((a, b) => a.x - b.x);
+    for (let i = 0; i < words.length && !changed; i++) for (let j = i + 1; j < words.length; j++) {
+      const a = words[i], b = words[j], gx = Math.max(0, b.x - (a.x + a.w));
+      if (gx > hMed * gapK) break;
+      const gy = Math.max(0, b.y - (a.y + a.h), a.y - (b.y + b.h));
+      if (Math.hypot(gx, gy) > hMed * gapK) continue;
+      const dx = Math.abs(b.x + b.w / 2 - a.x - a.w / 2), dy = Math.abs(b.y + b.h / 2 - a.y - a.h / 2);
+      if (dy > dx * 2 && dy > hMed * 0.5) continue;
+      const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), y2 = Math.max(a.y + a.h, b.y + b.h);
+      if (y2 - y > hMed * 4 || crossesWall(walls, w, a, b)) continue;
+      words[i] = { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: y2 - y, n: a.n + b.n };
+      words.splice(j, 1); changed = true; break;
+    }
+  }
+  return words.filter(b => b.n >= 20 && b.h >= hMed * 0.5);
+}
+
+// Направление записи: главная ось штрихов слова (по моментам). Цифры, вписанные в узкую
+// графу наискосок, лежат под углом; возвращаем угол в радианах (0 — горизонтально).
+export function angleOf(mask, w, h, box) {
+  let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (let y = box.y; y < box.y + box.h; y++) for (let x = box.x; x < box.x + box.w; x++) if (mask[y * w + x]) {
+    n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+  }
+  if (n < 20) return 0;
+  const mx = sx / n, my = sy / n, a = sxx / n - mx * mx, c = syy / n - my * my, b = sxy / n - mx * my;
+  const t = 0.5 * Math.atan2(2 * b, a - c);
+  const l1 = (a + c) / 2 + Math.sqrt(((a - c) / 2) ** 2 + b * b), l2 = (a + c) / 2 - Math.sqrt(((a - c) / 2) ** 2 + b * b);
+  // слово заметно вытянуто — тогда угол надёжен; круглые «0», «8» не поворачиваем
+  return l1 > l2 * 2.2 && Math.abs(t) < 1.1 ? t : 0;
+}
+
+// Наклон почерка: сдвиг строк, при котором столбцы штрихов самые «острые» (у прямых цифр
+// проекция на ось x — частокол). Возвращает k: x' = x + k * (y − середина).
+export function slantOf(mask, w, h, box) {
+  let best = 0, bestScore = -1;
+  const mid = box.y + box.h / 2;
+  for (let k = -0.1; k <= 0.7; k += 0.05) {
+    const cols = new Map();
+    for (let y = box.y; y < box.y + box.h; y++) for (let x = box.x; x < box.x + box.w; x++) if (mask[y * w + x]) {
+      const c = Math.round(x + k * (y - mid)); cols.set(c, (cols.get(c) || 0) + 1);
+    }
+    let score = 0; for (const v of cols.values()) score += v * v;
+    if (score > bestScore) { bestScore = score; best = k; }
+  }
+  return Math.round(best * 100) / 100;
+}
+
+// Слово отдельной картинкой: повернуть к горизонтали, выпрямить наклон, обрезать по штрихам.
+// Возвращает {m, w, h} — маска, готовая к увеличению и распознаванию.
+export function wordMask(mask, w, h, box) {
+  const t = angleOf(mask, w, h, box), cs = Math.cos(-t), sn = Math.sin(-t);
+  const cx = box.x + box.w / 2, cy = box.y + box.h / 2, pts = [];
+  for (let y = box.y; y < box.y + box.h; y++) for (let x = box.x; x < box.x + box.w; x++) if (mask[y * w + x]) {
+    const dx = x - cx, dy = y - cy; pts.push(dx * cs - dy * sn, dx * sn + dy * cs);
+  }
+  if (!pts.length) return { m: new Uint8Array(0), w: 0, h: 0, angle: t, slant: 0 };
+  const bounds = (arr) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < arr.length; i += 2) { x0 = Math.min(x0, arr[i]); x1 = Math.max(x1, arr[i]); y0 = Math.min(y0, arr[i + 1]); y1 = Math.max(y1, arr[i + 1]); }
+    return { x0, y0, x1, y1 }; };
+  const raster = (arr) => { const b = bounds(arr), W = Math.ceil(b.x1 - b.x0) + 2, H = Math.ceil(b.y1 - b.y0) + 2, m = new Uint8Array(W * H);
+    for (let i = 0; i < arr.length; i += 2) { const x = Math.round(arr[i] - b.x0), y = Math.round(arr[i + 1] - b.y0);
+      // поворот оставляет дырки между пикселями — закрашиваем и соседа справа и снизу
+      m[y * W + x] = 1; if (x + 1 < W) m[y * W + x + 1] = 1; if (y + 1 < H) m[(y + 1) * W + x] = 1; }
+    return { m, w: W, h: H }; };
+  const r = raster(pts), k = slantOf(r.m, r.w, r.h, { x: 0, y: 0, w: r.w, h: r.h }), mid = r.h / 2;
+  if (!k) return { ...r, angle: t, slant: 0 };
+  const sh = [];
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) if (r.m[y * r.w + x]) sh.push(x + k * (y - mid), y);
+  return { ...raster(sh), angle: t, slant: k };
 }
 
 // ---------------------------------------------------------------- слова из распознавания
@@ -102,10 +257,38 @@ export function readingOrder(tokens) {
 
 const fmt = n => n.toLocaleString('ru-RU');
 
+// Запись иногда склеивает две соседние графы («10:4511:03»): делим на части-числа, рамку — пропорционально.
+export function splitToken(t) {
+  const text = clean(t.text), parts = [...text.matchAll(/\d{1,2}[.,/-]\d{1,2}[.,/-]\d{2,4}|\d{1,2}[:.]\d{2}(?!\d)|\d+/g)];
+  if (parts.length <= 1) return [t];
+  return parts.map(m => ({ ...t, text: m[0], x: t.x + Math.round(t.w * m.index / text.length), w: Math.max(1, Math.round(t.w * m[0].length / text.length)) }));
+}
+
+// Дату пишут в клеточках: «23 11 26» — три отдельных числа подряд в строке → одна дата.
+function joinDate(line) {
+  const out = [];
+  for (let i = 0; i < line.length; i++) {
+    const [a, b, c] = line.slice(i, i + 3);
+    const near = (p, q) => q && q.x - (p.x + p.w) < Math.max(p.h, q.h) * 3;
+    if (c && a.digits <= 2 && b.digits <= 2 && (c.digits === 2 || c.digits === 4) && !a.date && !b.date && !c.date
+      && a.n >= 1 && a.n <= 31 && b.n >= 1 && b.n <= 12 && near(a, b) && near(b, c)) {
+      const y = c.digits === 2 ? 2000 + c.n : c.n;
+      if (y >= 2020 && y <= 2040) {
+        const x = a.x, y0 = Math.min(a.y, b.y, c.y);
+        out.push({ text: `${a.n}.${b.n}.${c.n}`, x, y: y0, w: c.x + c.w - x, h: Math.max(a.y + a.h, b.y + b.h, c.y + c.h) - y0, date: { d: a.n, m: b.n, y } });
+        i += 2; continue;
+      }
+    }
+    out.push(line[i]);
+  }
+  return out;
+}
+
 // tokens: [{text, x, y, w, h}] → rows [{key, value, why}] — предложения, человек сверяет их со снимком.
 export function classify(tokens, { year = null } = {}) {
-  const lines = readingOrder(tokens.map(t => ({ ...t, ...kindOf(t.text) })));
+  const lines = readingOrder(tokens.flatMap(splitToken).map(t => ({ ...t, ...kindOf(t.text) }))).map(joinDate);
   const all = lines.flat(), used = new Set(), rows = [];
+  const where = new Map(); lines.forEach((l, i) => l.forEach((t, j) => where.set(t, [i, j])));
   const add = (key, value, why, t) => { rows.push({ key, value: String(value), why, ...(t ? { box: { x: t.x, y: t.y, w: t.w, h: t.h } } : {}) }); if (t) used.add(t); };
 
   // показания счётчиков: большие числа парами «было → стало» в одной строке; строки сверху вниз — секции
@@ -132,7 +315,14 @@ export function classify(tokens, { year = null } = {}) {
   for (const W of [null, ...weights]) for (const A of [null, ...axles]) for (const L of [null, ...lengths]) {
     if (!W || !A) continue; // без пары «вес + оси» числа слишком двусмысленны
     if (new Set([W, A, L].filter(Boolean)).size !== [W, A, L].filter(Boolean).length) continue;
-    const s = trainFit(W.n, A.n, L?.n);
+    let s = trainFit(W.n, A.n, L?.n);
+    // на обороте маршрута графы идут подряд: № поезда, нетто, брутто, оси — брутто стоит сразу слева
+    // от осей, а слева от него — нетто, оно меньше брутто (так проверили на маршрутах Никиты)
+    const [wl, wi] = where.get(W) || [], [al, ai] = where.get(A) || [];
+    if (s > 0 && wl === al && wi === ai - 1) {
+      s += 1.5;
+      if (lines[wl].slice(0, wi).some(t => t.n >= 1000 && t.n < W.n && !t.date)) s += 0.5;
+    }
     if (s > 0 && (!best || s > best.s)) best = { W, A, L, s };
   }
   if (best) {
@@ -152,6 +342,8 @@ export function classify(tokens, { year = null } = {}) {
   const dateTok = v => dates.find(t => ymd(t.date) === v);
   if (dateVals[0]) add('sd', dateVals[0], 'первая дата на листе — явка', dateTok(dateVals[0]));
   if (dateVals.length > 1) add('ed', dateVals.at(-1), 'последняя дата на листе — окончание', dateTok(dateVals.at(-1)));
+  // нашлись вес и оси — это оборот маршрута: там время по станциям, а не явка и окончание работы
+  if (best) return rows;
   const times = all.filter(t => t.time && !used.has(t));
   const sureTimes = times.filter(t => t.sure), pick = sureTimes.length >= 2 ? sureTimes : times;
   if (pick.length >= 2) {

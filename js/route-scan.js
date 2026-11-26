@@ -96,14 +96,18 @@ export function openRouteScan(apply) {
         const values=results.get(key);
         if(!values){missing.push(fieldRow(key,'','',false));continue}
         const entries=[...values], candidates=entries.filter(([v])=>v);
-        const value=candidates.length===1?candidates[0][0]:'';
+        // несколько прочтений: подставляем то, что сошлось по смыслу (вес с осями, «было» меньше «стало»),
+        // остальные — кнопками рядом; человек всё равно сверяет со снимком
+        const sensible=candidates.filter(([,info])=>info.why);
+        const chosen=candidates.length===1?candidates[0]:sensible.length===1?sensible[0]:null;
+        const value=chosen?chosen[0]:'';
         const src=entries.find(([,info])=>info.snippet)?.[1] || entries[0][1];
         let extra='';
         if(candidates.length>1){
           const choices=candidates.map(([v,info])=>`<button type="button" class="qchip" data-suggestion="${esc(v)}" aria-label="${esc(info.source+' · '+v)}">${esc(v)} · ${esc(info.source)}</button>`).join('');
           extra=`<div class="hint">Варианты чтения</div><div class="scan-choices">${choices}</div>`;
         }
-        const why=candidates.length===1?candidates[0][1].why:'';
+        const why=chosen?chosen[1].why:'';
         rows.push(fieldRow(key,value,src.source+(why?' · '+why:'')+(src.snippet?' · сверьте с графой':''),false,src.snippet,extra));
       }
       review.innerHTML='<p class="notice" data-doubt hidden></p>'+rows.join('')+`<details><summary>Заполнить другие поля</summary>${missing.join('')}</details><details><summary>Распознанный текст</summary><pre>${esc(texts.join('\n\n')||'Текст не распознан')}</pre></details>`;

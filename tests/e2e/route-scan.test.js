@@ -50,17 +50,20 @@ test('Синяя ручка (2.43): печать не читается, вес �
     await page.locator('[data-act=add-trip]').click();
     await page.locator('[data-act=tf-scan]').click();
     const dialog=page.locator('.layer').last();
-    // жёлтоватый лист: чёрная печать (в том числе числа) и синие записи от руки
-    const img=await page.evaluate(()=>{
-      const c=document.createElement('canvas');c.width=900;c.height=420;const ctx=c.getContext('2d');
-      ctx.fillStyle='#f3ecd6';ctx.fillRect(0,0,900,420);
-      ctx.fillStyle='#161616';ctx.font='26px sans-serif';
-      ctx.fillText('Форма ТУ-3  код 1234  графа 7777',20,40);ctx.fillRect(20,200,860,2);
-      ctx.fillStyle='#2a3f9e';ctx.font='italic 46px sans-serif';
-      [['8:29',40,130],['20:19',640,130],['5200',40,300],['216',300,300],['54',520,300]].forEach(([s,x,y])=>ctx.fillText(s,x,y));
-      return c.toDataURL('image/png').split(',')[1];
+    // два снимка на жёлтоватой бумаге: лицо (явка и окончание) и оборот (графы поезда с линейками);
+    // чёрная печать (в том числе числа) и записи синей ручкой — цвет как на маршрутах Никиты
+    const sheets=await page.evaluate(()=>{
+      const draw=(fn)=>{const c=document.createElement('canvas');c.width=900;c.height=420;const ctx=c.getContext('2d');
+        ctx.fillStyle='#f3ecd6';ctx.fillRect(0,0,900,420);ctx.fillStyle='#161616';ctx.font='26px sans-serif';
+        ctx.fillText('Форма ТУ-3  код 1234  графа 7777',20,40);fn(ctx);return c.toDataURL('image/png').split(',')[1];};
+      const pen=(ctx,list)=>{ctx.fillStyle='#4e488c';ctx.font='56px sans-serif';list.forEach(([s,x,y])=>ctx.fillText(s,x,y));};
+      return [
+        draw(ctx=>pen(ctx,[['8:29',60,170],['20:19',600,170]])),
+        draw(ctx=>{ctx.fillStyle='#161616';for(const x of [20,200,380,560,720,880])ctx.fillRect(x,80,3,300);ctx.fillRect(20,80,863,3);ctx.fillRect(20,377,863,3);
+          pen(ctx,[['2185',45,260],['3120',225,260],['5200',405,260],['216',590,260],['54',770,260]]);}),
+      ];
     });
-    await dialog.locator('input[type=file]').setInputFiles({name:'route.png',mimeType:'image/png',buffer:Buffer.from(img,'base64')});
+    await dialog.locator('input[type=file]').setInputFiles(sheets.map((b,i)=>({name:`route-${i+1}.png`,mimeType:'image/png',buffer:Buffer.from(b,'base64')})));
     await dialog.locator('[data-read]').click();
     const axles=dialog.locator('[data-review] > [data-key=axles]');
     await axles.waitFor({timeout:180000});

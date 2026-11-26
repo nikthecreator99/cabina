@@ -1,7 +1,7 @@
 // «По фото» (2.43): только синяя ручка и числа по смыслу.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { penMask, penImage, tsvWords, kindOf, classify, trainDoubt, readingOrder } from '../../js/route-ink.js';
+import { penMask, penImage, inkWords, tsvWords, kindOf, classify, trainDoubt, readingOrder } from '../../js/route-ink.js';
 
 // картинка: жёлтая бумага, чёрная печать слева, синяя ручка справа
 function sheet(w = 96, h = 64) {
@@ -9,25 +9,40 @@ function sheet(w = 96, h = 64) {
   for (let i = 0; i < w * h; i++) d.set([238, 228, 190, 255], 4 * i);
   const box = (x0, y0, x1, y1, rgb) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) d.set([...rgb, 255], 4 * (y * w + x)); };
   box(4, 10, 40, 14, [25, 25, 28]);      // печатная линия
-  box(50, 10, 90, 14, [40, 60, 150]);    // шариковая синяя
-  box(50, 30, 90, 33, [110, 130, 205]);  // бледная гелевая
+  box(50, 10, 90, 14, [100, 92, 150]);   // шариковая синяя — цвет как на фото маршрутов Никиты
+  box(50, 30, 90, 33, [150, 150, 200]);  // штемпель: бледнее и с зеленцой — не ручка
   box(4, 30, 40, 33, [120, 118, 110]);   // серая тень/карандаш
   return { d, w, h };
 }
 
-test('маска оставляет только синюю ручку: печать, тень и жёлтая бумага уходят', () => {
+test('маска оставляет только синюю ручку: печать, штемпель, тень и жёлтая бумага уходят', () => {
   const { d, w, h } = sheet();
   const { mask, count } = penMask(d, w, h);
   const at = (x, y) => mask[y * w + x];
   assert.equal(at(60, 12), 1);
-  assert.equal(at(60, 31), 1);
+  assert.equal(at(60, 31), 0);
   assert.equal(at(20, 12), 0);
   assert.equal(at(20, 31), 0);
   assert.equal(at(70, 50), 0);
-  assert.equal(count, 40 * 4 + 40 * 3);
+  assert.equal(count, 40 * 4);
   const img = penImage(mask, w, h);
   assert.equal(img[4 * (12 * w + 60)], 0);
   assert.equal(img[4 * (12 * w + 20)], 255);
+});
+
+test('линейки бланка: длинные чёрные линии, через них записи не склеиваются', () => {
+  const w = 120, h = 64, d = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) d.set([238, 228, 190, 255], 4 * i);
+  const box = (x0, y0, x1, y1, rgb) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) d.set([...rgb, 255], 4 * (y * w + x)); };
+  box(58, 2, 61, 62, [25, 25, 28]);      // графа бланка
+  box(10, 30, 14, 34, [25, 25, 28]);     // короткая печать — не линейка
+  box(30, 20, 50, 40, [100, 92, 150]);   // «цифра» слева от линейки
+  box(70, 20, 90, 40, [100, 92, 150]);   // «цифра» справа
+  const { mask, walls } = penMask(d, w, h);
+  assert.equal(walls[30 * w + 59], 1);
+  assert.equal(walls[31 * w + 12], 0);
+  assert.equal(inkWords(mask, w, h, { gap: 3 }).length, 1, 'без линеек — одно слово');
+  assert.equal(inkWords(mask, w, h, { gap: 3, walls }).length, 2, 'линейка делит на два');
 });
 
 test('синяя бумага в тени не становится ручкой', () => {
@@ -77,9 +92,22 @@ test('вес и оси, которые не сходятся, не подста�
 });
 
 test('явка и окончание — первое и последнее время, даты — по порядку', () => {
-  const rows = classify([tok('10.11.2026', 50, 40), tok('8:29', 300, 40), tok('11.11.2026', 50, 400), tok('20:19', 300, 400), tok('5200', 50, 600), tok('216', 200, 600)]);
+  const rows = classify([tok('10.11.2026', 50, 40), tok('8:29', 300, 40), tok('11.11.2026', 50, 400), tok('20:19', 300, 400)]);
   const by = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  assert.deepEqual([by.sd, by.ed, by.st, by.et, by.weight, by.axles], ['2026-11-10', '2026-11-11', '08:29', '20:19', '5200', '216']);
+  assert.deepEqual([by.sd, by.ed, by.st, by.et], ['2026-11-10', '2026-11-11', '08:29', '20:19']);
+});
+
+test('дата в клеточках «23 11 26» — три числа подряд', () => {
+  const rows = classify([tok('23', 50, 40), tok('11', 90, 40), tok('26', 130, 40), tok('8:29', 300, 40), tok('20:19', 400, 40)]);
+  const by = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  assert.deepEqual([by.sd, by.st, by.et], ['2026-11-23', '08:29', '20:19']);
+});
+
+test('оборот маршрута: брутто — сразу слева от осей, больше нетто; время станций не берём', () => {
+  // № поезда 2185, нетто 3120, брутто 5200, оси 216; ниже — время по станциям
+  const rows = classify([tok('2185', 100, 300), tok('3120', 200, 300), tok('5200', 300, 300), tok('216', 400, 300), tok('9:20', 100, 360), tok('19:00', 100, 420)]);
+  const by = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  assert.deepEqual([by.weight, by.axles, by.st, by.et], ['5200', '216', undefined, undefined]);
 });
 
 test('показания счётчиков: пары «было → стало» по строкам — секции', () => {

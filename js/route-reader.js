@@ -1,6 +1,7 @@
 // Photo bytes and recognition results never leave this browser.
 import { imageCanvas } from './payslip-reader.js';
-import { penMask, penImage, tsvWords, classify } from './route-ink.js';
+import { penMask, inkWords, wordMask, classify } from './route-ink.js';
+import { loadDigits, readDigits } from './route-digits.js';
 const asset = name => new URL('./vendor/payslip/'+name,import.meta.url).href;
 export const fields = {
   sd:'Дата явки', st:'Явка', ed:'Дата окончания', et:'Окончание работы', routeNo:'Номер маршрута',
@@ -303,17 +304,21 @@ export async function readRoute(file,turn,signal,progress) {
     }
     // Второй проход (2.43): только синяя ручка на всём листе и числа по смыслу — вес и оси проверяют друг друга.
     progress('Ищем записи синей ручкой…');
-    const W=canvas.width,H=canvas.height,{mask,count}=penMask(canvas.getContext('2d').getImageData(0,0,W,H).data,W,H);
+    const W=canvas.width,H=canvas.height,{mask,count,walls}=penMask(canvas.getContext('2d').getImageData(0,0,W,H).data,W,H);
     let inkText='';
     if(count>W*H*.0004){
-      const pen=document.createElement('canvas');pen.width=W;pen.height=H;
-      pen.getContext('2d').putImageData(new ImageData(penImage(mask,W,H),W,H),0,0);
-      await worker.setParameters({tessedit_pageseg_mode:'11',tessedit_char_whitelist:'0123456789.:,/-'});
-      active();
-      const {data:ink}=await worker.recognize(pen,{},{text:true,tsv:true});
-      active();inkText=ink.text||'';pen.width=1;
-      const words=tsvWords(ink.tsv).filter(w=>w.conf>=30);
-      for(const r of classify(words,{year:new Date().getFullYear()})){
+      // каждую запись отдельно: поворачиваем к горизонтали, выпрямляем наклон почерка, делим на цифры
+      // и узнаём каждую цифру своей маленькой сетью (tesseract рукописные цифры почти не читает)
+      const words=inkWords(mask,W,H,{gap:.9,walls}).sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,160),tokens=[];
+      const net=await loadDigits();
+      for(const [i,b] of words.entries()){
+        if(i%20===0){active();progress(`Читаем записи ручкой: ${i+1} из ${words.length}…`);await new Promise(r=>setTimeout(r));}
+        const wm=wordMask(mask,W,H,b);if(!wm.w)continue;
+        const r=readDigits(wm.m,wm.w,wm.h,net);
+        if(r.digits&&r.digits<=8&&r.conf>=.3)tokens.push({text:r.text,x:b.x,y:b.y,w:b.w,h:b.h,conf:Math.round(r.conf*100)});
+      }
+      inkText=tokens.map(t=>t.text).join(' ');
+      for(const r of classify(tokens,{year:new Date().getFullYear()})){
         let snippet;
         if(r.box){
           const m=Math.round(r.box.h*.6),x=Math.max(0,r.box.x-m),y=Math.max(0,r.box.y-m);
