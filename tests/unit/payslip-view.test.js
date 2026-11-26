@@ -71,9 +71,11 @@ test('строка без часов (023Q) не мешает сверить н�
   assert.match(night.detail, /023Q/);
 });
 
-test('норма не совпала — подсказываем, где выбрать неделю', () => {
+test('норма по закону — по пятидневке, как в листке', () => {
   const trip = {start: '2026-10-02T08:00', end: '2026-10-02T20:00'};
   const norm = compareTrips({period: 'октябрь 2026', worked: 12, norm: 170, rows: []}, '2026-10', [trip], [], {}).rows.find(r => /Норма/.test(r.title));
   assert.equal(norm.status, 'diff');
-  assert.match(norm.detail, /Календарь и часовой пояс/);
+  assert.match(norm.detail, /пятидневки/);
+  const same = compareTrips({period: 'октябрь 2026', worked: 12, norm: 176, rows: []}, '2026-10', [trip], [], {}).rows.find(r => /Норма/.test(r.title));
+  assert.equal(same.status, 'ok', 'октябрь 2026: 176 ч по пятидневке, хотя на экране — 179 по шестидневке');
 });

@@ -31,12 +31,14 @@ test('месяц в тестовом режиме: переработка мес
   const days = ['01', '02', '05', '06', '07', '08', '09', '12', '13', '14', '15', '16', '19', '20', '21', '22', '23', '26', '27', '28'];
   const trips = days.map((d) => T(`t${d}`, `2026-10-${d}T06:00`, `2026-10-${d}T17:00`));
   const usual = payMonth(2026, 10, trips, [], cfgOf(), st);
-  assert.deepEqual([line(usual, 'overOther').hours, line(usual, 'overOther').pct], [44, 50], 'обычный режим — переработка ×1,5');
+  assert.deepEqual([line(usual, 'overOther').hours, line(usual, 'overOther').pct], [2, 50], 'обычный режим — первые 2 ч ×1,5');
+  assert.deepEqual([line(usual, 'overOther2').hours, line(usual, 'overOther2').pct], [42, 100], 'остальное ×2');
   assert.equal(line(usual, 'shift1'), undefined);
 
   const r = payMonth(2026, 10, trips, [], cfgOf({ shiftTest: true }), st);
   assert.equal(r.shiftTest, true);
   assert.equal(line(r, 'overOther'), undefined, 'обычной строки переработки нет');
+  assert.equal(line(r, 'overOther2'), undefined);
   assert.equal(line(r, 'overWeekend'), undefined);
   const s1 = line(r, 'shift1');
   const s2 = line(r, 'shift2');

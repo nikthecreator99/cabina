@@ -6,8 +6,10 @@
 //    («ДоплРабЛокомБрТяжДлинПоез»); у резерва и манёвров, следования и ожидания этой доплаты нет;
 //  • ночные (22:00–06:00) +40% ставки, «вредность» +4% на все часы, надбавка за класс — на все часы;
 //  • праздничные часы +100%;
-//  • переработка в том же месяце: часы сверх нормы (с учётом отвлечений) — ещё +50%,
-//    а те, что пришлись на выходные и праздники, — ещё +100% (ориентировочно);
+//  • переработка в том же месяце: часы сверх нормы по закону (пятидневка, с учётом отвлечений — как
+//    «Норма часов (по закону)» в листке; на экране норма — по выбранной неделе): сначала часы выходных
+//    и праздников — ещё +100% (праздничные уже оплачены вдвойне), остальное — первые 2 ч +50%, дальше +100%
+//    (ст. 152 ТК, строки 073L и 073M листка);
 //  • отдых в пункте оборота сверх нормы — 2/3 ставки (норма = привезённое рабочее время);
 //  • премия — процент от заработка за работу этого же месяца;
 //  • районный коэффициент, северная, зональная и бамовская надбавки — на заработок вместе с премией;
@@ -167,6 +169,8 @@ export function sectionMinutes(trip, st, cfg, mk) {
   return minutes;
 }
 
+// Обычная переработка месяца: первые 2 ч — ×1,5, остальное — ×2 (ст. 152 ТК; в листке 073L 0,5 и 073M 1,0)
+export const OVER_FIRST = 120;
 // На каждую явку из дома приходится до 90 минут месячной переработки по ставке ×1,5.
 export const SHIFT_FIRST = 90;
 export const averageDailyPay = (annual) => round2(annual / 12 / 29.3);
@@ -268,13 +272,18 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
   res.homeAppearances = monthShifts?.count || 0;
   res.shiftPending = !!cfg.shiftTest && (!cfg.homeShifts?.home || !!monthShifts?.missingRoute);
   const useShifts = cfg.shiftTest && !res.shiftPending;
-  const O = useShifts ? 0 : sum.overtime / 60;
+  // переработка — от нормы по закону (пятидневка), как в листке
+  const over = sum.payOvertime ?? sum.overtime;
+  const O = useShifts ? 0 : over / 60;
   const Ow = Math.min(O, (sum.restDay || 0) / 60);
   const hOw = Math.min(Ow, sum.holiday / 60);
   // праздничные часы сверх нормы уже оплачены вдвойне строкой «Праздничные», поэтому здесь только выходные
   const overWeekend = (Ow - hOw) * rateEnd;
-  const overOther = (O - Ow) * rateEnd * 0.5;
-  const shift = useShifts ? shiftSplit(sum.overtime - Math.min(sum.overtime, sum.holiday), res.homeAppearances) : shiftSplit(0, 0);
+  const Oo1 = Math.min(O - Ow, OVER_FIRST / 60);
+  const Oo2 = O - Ow - Oo1;
+  const overOther = Oo1 * rateEnd * 0.5;
+  const overOther2 = Oo2 * rateEnd;
+  const shift = useShifts ? shiftSplit(over - Math.min(over, sum.holiday), res.homeAppearances) : shiftSplit(0, 0);
   shift.pay1 = (shift.first / 60) * rateEnd * 0.5;
   shift.pay2 = (shift.rest / 60) * rateEnd;
   const orMin = minutesInMonth(overRest || [], mk);
@@ -312,12 +321,13 @@ export function payMonth(y, m, trips, absences, cfg, statsOf, { overRest } = {})
     const key = `section${pct}`;
     L(key, '151 · Работа на удлинённых участках', acc[key], { pct, hours: h(sectionTotals.get(pct) || 0) });
   }
-  L('overOther', 'Переработка', noAvg(overOther), { pct: 50, hours: O - Ow });
+  L('overOther', 'Переработка, первые 2 ч', noAvg(overOther), { pct: 50, hours: Oo1 });
+  L('overOther2', 'Переработка сверх 2 ч', noAvg(overOther2), { pct: 100, hours: Oo2 });
   L('overWeekend', 'Переработка в выходные', noAvg(overWeekend), { pct: 100, hours: Ow - hOw });
   L('shift1', 'Переработка, до 1,5 ч на явку', noAvg(shift.pay1), { pct: 50, hours: h(shift.first) });
   L('shift2', 'Переработка сверх 1,5 ч на явку', noAvg(shift.pay2), { pct: 100, hours: h(shift.rest) });
   L('overRest', 'Отдых сверх нормы в пункте оборота', noAvg(orPay), { hours: h(orMin) });
-  const workPay = avg ? avgPay : sumObj(acc) + overOther + overWeekend + shift.pay1 + shift.pay2 + orPay;
+  const workPay = avg ? avgPay : sumObj(acc) + overOther + overOther2 + overWeekend + shift.pay1 + shift.pay2 + orPay;
   const bonus = avg ? 0 : workPay * cfg.bonus / 100;
   L('bonus', 'Премия', bonus, { pct: cfg.bonus });
   const withBonus = workPay + bonus;
@@ -393,7 +403,7 @@ export function payTotal(months) {
     for (const d of r.deductions) add(out.deductions, d);
     out.gross += r.gross; out.net += r.net; out.comp += r.comp || 0;
   }
-  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', ...sectionRates.map((pct) => `section${pct}`), 'overOther', 'overWeekend', 'shift1', 'shift2', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension', 'alimony'];
+  const order = ['avg', 'base', 'pass', 'wait', 'reserve', 'night', 'harm', 'klass', 'holiday', 'heavy', ...sectionRates.map((pct) => `section${pct}`), 'overOther', 'overOther2', 'overWeekend', 'shift1', 'shift2', 'overRest', 'bonus', 'rk', 'sn', 'zone', 'bam', 'sick', 'study', 'ndfl', 'union', 'pension', 'alimony'];
   const byOrder = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
   out.lines = [...out.lines.values()].sort(byOrder).map((l) => ({ ...l, amount: round2(l.amount) }));
   out.deductions = [...out.deductions.values()].sort(byOrder).map((d) => ({ ...d, amount: round2(d.amount) }));
