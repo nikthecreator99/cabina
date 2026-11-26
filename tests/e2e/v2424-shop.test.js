@@ -2,7 +2,7 @@
 // товары плитками по группам, карточка ведёт к оформлению, реквизиты продавца видны сразу, 320 px с очень крупным текстом.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startEnv } from './helpers.js';
+import { startEnv, openApp } from './helpers.js';
 
 async function shopPage(env, { width = 390, theme = 'dark', text = 'm', mode = 'off' } = {}) {
   const context = await env.browser.newContext({ viewport: { width, height: 800 }, locale: 'ru-RU', serviceWorkers: 'block' });
@@ -66,5 +66,24 @@ test('магазин на 320 px с очень крупным текстом в 
       assert.deepEqual(errors, []);
       await context.close();
     }
+  } finally { await env.stop(); }
+});
+
+test('«Ещё» → «Магазин» открывает страницу магазина, «Назад» возвращает в приложение', async () => {
+  const env = await startEnv();
+  try {
+    const { page, errors, context } = await openApp(env);
+    await context.route('https://api.cabina-app.ru/shop/**', (r) => r.fulfill({ json: { terms: '2026-11-25', mode: 'off' }, headers: { 'access-control-allow-origin': '*' } }));
+    await page.locator('.tab[data-tab=extra]').click();
+    const row = page.locator('#extra-list > .row[data-key=shop]');
+    assert.match(await row.innerText(), /Магазин\s+Персонажи, фоны и детали для профиля/);
+    await row.click();
+    await page.waitForURL(/\/data\/shop\.html$/);
+    await page.locator('.shop-grid').first().waitFor();
+    assert.equal(await page.locator('h1').innerText(), 'Магазин оформления');
+    await page.locator('.checkout-back').click();
+    await page.waitForSelector('#extra-list');
+    assert.deepEqual(errors.filter((e) => !/api\.cabina-app\.ru/.test(e)), []);
+    await context.close();
   } finally { await env.stop(); }
 });

@@ -29,7 +29,7 @@ test('нижнее меню (2.5, с 2.23.0 — и «Обучение», с 2.24
   await tab(page, 'extra');
   assert.match(await text(page, '.page-head'), /^Ещё$/);
   // пункты одним списком (2.6: + «Телефоны»; 2.21: и «Помощь», «Предложить идею» — в том же списке)
-  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.key)), ['notes', 'docs', 'phones', 'fix', 'vu45', 'help', 'ideas']);
+  assert.deepEqual(await page.locator('.extra-list > .row').evaluateAll((a) => a.map((b) => b.dataset.key)), ['notes', 'docs', 'phones', 'fix', 'vu45', 'help', 'ideas', 'shop']);
   await tab(page, 'profile');
   await page.locator('.screen [data-page=profile-edit]').click();
   assert.match(await text(page, '.page-head'), /Редактировать профиль/);
