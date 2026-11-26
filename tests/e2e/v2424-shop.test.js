@@ -42,7 +42,7 @@ test('магазин: группы, цены, реквизиты продавц�
     await page.waitForURL(/\?item=depot$/);
     assert.equal(await page.locator('h1').innerText(), 'Оформление покупки');
     assert.equal(await page.locator('[data-sku]').count(), 1);
-    assert.match(await page.locator('.checkout-pay').innerText(), /Оплата недоступна · 459 ₽/);
+    assert.match(await page.locator('.checkout-pay').innerText(), /Оплата недоступна · 459\s₽/);
     assert.deepEqual(errors, []);
     await context.close();
   } finally { await env.stop(); }
@@ -102,6 +102,8 @@ test('редактор персонажа → «Оформить»: в офор�
     await page.locator('[data-act=av-set][data-k=metal][data-v="3"]').click();
     const order = page.locator('[data-act=av-order][data-sku=robot]');
     assert.match(await order.innerText(), /Оформить за 299 ₽/);
+    // 2.43.3: покупается робот, а не эта примерка — под кнопкой сказано, что настраивать можно и потом
+    assert.match(await page.locator('[data-sec=buy-robot] .av-order-note').innerText(), /^Робот останется в вашем аккаунте — это разовая покупка, без подписки\. Настраивать его можно сколько угодно/);
     await order.click();
     await page.waitForURL(/\/data\/shop\.html\?item=robot$/);
     await page.locator('.checkout-info .preview svg').waitFor();
@@ -114,6 +116,7 @@ test('редактор персонажа → «Оформить»: в офор�
       return { mine: html === htmlOf(A.avatarSvg(A.normalizeAvatar(back.look, { premium: true }))), plain: html === htmlOf(A.avatarSvg({ sex: 'robot' })), metal: back.look.metal };
     });
     assert.deepEqual(same, { mine: true, plain: false, metal: 3 });
+    assert.match(await page.locator('.checkout-note').innerText(), /^Робот останется в вашем аккаунте/);
     await page.locator('.checkout-back').click();
     await page.locator('.screen[data-page=avatar]').waitFor();
     assert.equal(await page.locator('[data-act=av-set][data-k=metal][data-v="3"]').getAttribute('aria-pressed'), 'true');
@@ -166,6 +169,47 @@ test('оформление по прямой ссылке: «Назад» вед
     await page.waitForURL(/\/data\/shop\.html$/);
     await page.locator('.shop-grid').first().waitFor();
     assert.deepEqual(errors, []);
+    await context.close();
+  } finally { await env.stop(); }
+});
+
+// 2.43.3 (жалоба Никиты: «на долю секунды открывается другая страница»): пока скрипт магазина не собрал страницу, её не видно
+test('магазин не показывает «сырую» разметку, пока страница не собрана; политика видна сразу', async () => {
+  const env = await startEnv();
+  try {
+    const context = await env.browser.newContext({ viewport: { width: 390, height: 800 }, locale: 'ru-RU', serviceWorkers: 'block' });
+    await context.route('https://api.cabina-app.ru/**', (r) => r.fulfill({ json: { terms: '2026-11-25', mode: 'off' }, headers: { 'access-control-allow-origin': '*' } }));
+    let release;
+    const held = new Promise((r) => { release = r; });
+    await context.route('**/js/shop-page.js', async (r) => { await held; await r.continue(); });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    // скрипт модуля держит DOMContentLoaded — ждём только саму разметку
+    await page.goto(env.url + 'data/shop.html', { waitUntil: 'commit' });
+    await page.locator('main.store').waitFor({ state: 'attached' });
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator('main.store').evaluate((m) => getComputedStyle(m).visibility), 'hidden');
+    release();
+    await page.locator('main.store.ready').waitFor();
+    assert.equal(await page.locator('main.store').evaluate((m) => getComputedStyle(m).visibility), 'visible');
+    assert.ok(await page.locator('.shop-grid').first().isVisible());
+    // Отдельной странице политики скрипт не нужен — она видна сразу
+    await page.goto(env.url + 'data/shop-privacy.html');
+    assert.equal(await page.locator('main.store').evaluate((m) => getComputedStyle(m).visibility), 'visible');
+    assert.deepEqual(errors, []);
+    await context.close();
+  } finally { await env.stop(); }
+});
+
+test('без скрипта магазин всё равно появляется через 2,5 с', async () => {
+  const env = await startEnv();
+  try {
+    const context = await env.browser.newContext({ viewport: { width: 390, height: 800 }, locale: 'ru-RU', serviceWorkers: 'block' });
+    await context.route('**/js/shop-page.js', (r) => r.abort());
+    const page = await context.newPage();
+    await page.goto(env.url + 'data/shop.html', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('main.store')).visibility === 'visible', null, { timeout: 5000 });
     await context.close();
   } finally { await env.stop(); }
 });
