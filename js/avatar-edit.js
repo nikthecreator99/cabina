@@ -74,6 +74,14 @@ function start() {
   E.hist = []; E.group = 'face'; E.drag = false; E.chars = false;
 }
 
+// Возврат со страницы магазина: тот же редактор и та же примерка, что были до «Оформить»
+export function resumeAvatarEditor(look, group) {
+  start();
+  if (look && typeof look === 'object') E.a = norm(look);
+  if (GROUPS.some((g) => g[0] === group)) E.group = group;
+  refreshPremium().then(() => { if (E.a && premiumOk() !== E.prem) { E.prem = premiumOk(); refresh(); } });
+}
+
 export function openAvatarEditor(ctx) {
   start();
   ctx.go('avatar');
@@ -295,7 +303,7 @@ function sections() {
     if (index < 0 || !item || E.prem || ownedItems().includes(sku)) continue;
     const id = 'buy-' + sku;
     list.splice(index + 1, 0, { id, html: () =>
-      `<div class="av-sec" data-sec="${id}" data-h="${hash(id + item.price)}"><a class="av-order" href="data/shop.html?item=${encodeURIComponent(sku)}" aria-label="Оформить: ${esc(item.name)} за ${item.price} ₽">${I.bag}<span>Оформить за ${item.price} ₽</span>${I.right}</a></div>` });
+      `<div class="av-sec" data-sec="${id}" data-h="${hash(id + item.price)}"><button class="av-order" data-act="av-order" data-sku="${esc(sku)}" aria-label="Оформить: ${esc(item.name)} за ${item.price} ₽">${I.bag}<span>Оформить за ${item.price} ₽</span>${I.right}</button></div>` });
   }
   const locks = A.lockedRewards(E.a, rewardsOpen());
   for (const r of locks) {
@@ -481,6 +489,9 @@ export async function avatarClick(act, b, ctx) {
   else if (act === 'av-undo' && E.hist.length) { E.a = norm(JSON.parse(E.hist.pop())); refresh(); }
   else if (act === 'av-save') await save(ctx);
   else if (act === 'av-invite') await inviteFromAvatar(ctx);
+  // «Оформить» (2.43.1, просьба Никиты): в оформление уходит настроенный персонаж (картинка покупки), а «Назад» оттуда
+  // возвращает в редактор с той же примеркой. Только в этой вкладке браузера (sessionStorage), никуда не отправляется.
+  else if (act === 'av-order' && /^[a-z]+$/.test(b.dataset.sku || '')) ctx.leave(`data/shop.html?item=${b.dataset.sku}`, { look: E.a, group: E.group });
   return true;
 }
 

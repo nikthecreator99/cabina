@@ -347,7 +347,7 @@ export function monthSummary(y, m, trips, absences) {
   const normMin = Math.round(norm * 60);
   const pct = normMin > 0 ? work / normMin : null;
   const overtime = normMin > 0 || work > 0 ? Math.max(0, work - normMin) : 0;
-  // Оплата переработки (2.43.1, по расчётным листкам Никиты май–октябрь 2026): в листке «Норма часов (по закону)» —
+  // Оплата переработки (2.43.2, по расчётным листкам Никиты май–октябрь 2026): в листке «Норма часов (по закону)» —
   // всегда по пятидневке, отвлечения вычитаются по ней же. На экране норма остаётся по выбранной неделе.
   const lawBase = monthNorm(y, m, 5).hours;
   let lawAbs = 0;
