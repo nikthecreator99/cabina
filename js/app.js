@@ -18,7 +18,7 @@ import { lockOn, lockScreen, initLock, openLockSettings } from './lock.js';
 import { initMoney, applyMoney, toggleMoney, eyeBtn, flipOn, setFlip } from './money.js';
 import { renderWork, renderRoutes, renderTariffs, renderHouses, workClick, workChange } from './work.js';
 import { renderProfile, renderProfileEdit, profileClick, profileChange } from './profile.js';
-import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, refreshPremium, hasAvatar, avatarRights } from './avatar-edit.js';
+import { renderAvatarEdit, avatarClick, avatarInput, avatarChange, premiumOk, refreshPremium, hasAvatar, avatarRights, resumeAvatarEditor } from './avatar-edit.js';
 import { avatarSvg, normalizeAvatar } from './avatar.js';
 import { renderStats, statsClick, statsTap, statsAt } from './stats.js';
 import { renderGrowth, growthClick } from './growth.js';
@@ -49,7 +49,7 @@ import { initIdeas, renderIdeas, ideasClick, ideasInput, loadIdeas, ideasRowHtml
 import { initNotices, bellHtml, renderNotices, noticesEnter, noticesClick, noticeCount } from './notices.js';
 import { initLearn, renderLearn, renderLearnRoad, renderLearnModules, renderLearnMe, learnClick, learnAfter, learnResume, streakNagHtml, streakNudgeNow, streakClick } from './learn.js';
 
-export const VERSION = '2.43.0';
+export const VERSION = '2.43.1';
 const app = document.getElementById('app');
 // tab — вкладка нижнего меню; pages — открытые поверх неё экраны (последний — текущий)
 const V = { tab: 'home', pages: [], y: 2026, m: 10, extra: null, notesQ: '', tripQ: '', phonesQ: '', phonesGroup: null, sel: null, helpQ: '', helpOpen: new Set() };
@@ -825,7 +825,31 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
 const swipe = attachSwipe(app);
 attachReorder(app, '#extra-list', '.row', async (keys) => { await saveSettings({ extraOrder: [...keys, ...extraOrder().filter((k) => !keys.includes(k))].filter((k) => EXTRA_KEYS.includes(k)) }); toast('Порядок сохранён'); });
 attachLongPress(app, '.swipe > .trip.swipe-row', (row) => { if (!V.sel && V.tab === 'home' && !V.pages.length) startSel(row.dataset.id); });
-const ctx = { rerender, go, back, closeSwipes: () => swipe.closeAll(), openAbsenceForm, myDataHtml };
+// Уход на страницу магазина (2.42.4, 2.43.1): «Назад» оттуда перезагружает приложение, поэтому запоминаем, где были —
+// вкладку, экраны и (из редактора персонажа) примерку. sessionStorage — только эта вкладка, 30 минут, никуда не уходит.
+const BACK_KEY = 'cabina-back';
+const BACK_MIN = 30;
+function leave(href, extra = {}) {
+  const to = new URL(href, location.href);
+  const pages = V.pages.filter((p) => p !== 'avatar' && PAGES[p]);
+  try { sessionStorage.setItem(BACK_KEY, JSON.stringify({ t: Date.now(), url: to.pathname + to.search, tab: V.tab, pages, ...extra })); } catch {}
+  location.assign(to.href);
+}
+function takeBack() {
+  let back = null;
+  try {
+    const raw = sessionStorage.getItem(BACK_KEY);
+    sessionStorage.removeItem(BACK_KEY);
+    back = raw && JSON.parse(raw);
+  } catch {}
+  if (!back || typeof back !== 'object' || !(Date.now() - back.t < BACK_MIN * 60000)) return;
+  if (['home', 'extra', 'learn', 'profile'].includes(back.tab)) V.tab = back.tab;
+  V.pages = Array.isArray(back.pages) ? back.pages.filter((p) => typeof p === 'string' && p !== 'avatar' && PAGES[p]).slice(0, 6) : [];
+  if (back.look && !isGuest()) { resumeAvatarEditor(back.look, back.group); V.pages.push('avatar'); }
+}
+// вернулись «Назад» из магазина без перезагрузки (страница взята из памяти браузера) — отметка больше не нужна
+window.addEventListener('pageshow', (e) => { if (e.persisted) try { sessionStorage.removeItem(BACK_KEY); } catch {} });
+const ctx = { rerender, go, back, leave, closeSwipes: () => swipe.closeAll(), openAbsenceForm, myDataHtml };
 
 async function doExport() {
   const ok = await confirmDialog({
@@ -930,7 +954,7 @@ app.addEventListener('click', async (e) => {
     case 'extra-vu45': V.extra = 'vu45'; render(); window.scrollTo(0, 0); break;
     case 'extra-fix': V.extra = 'fix'; render(); window.scrollTo(0, 0); break;
     // «Назад» со страницы магазина перезагружает приложение — вернуть человека в «Ещё» (только эта вкладка браузера, 30 мин)
-    case 'extra-shop': try { sessionStorage.setItem('cabina-back', String(Date.now())); } catch {} location.assign('data/shop.html'); break;
+    case 'extra-shop': leave('data/shop.html'); break;
     case 'extra-phones': V.extra = 'phones'; V.phonesQ = ''; V.phonesGroup = null; render(); window.scrollTo(0, 0); break;
     case 'phones-group': V.phonesGroup = b.dataset.g; V.phonesQ = ''; render(); window.scrollTo(0, 0); break;
     case 'phones-up': V.phonesGroup = null; render(); window.scrollTo(0, 0); break;
@@ -1221,11 +1245,7 @@ async function start() {
   initMoney();
   initLock();
   if (lockOn()) await lockScreen();
-  try {
-    const back = Number(sessionStorage.getItem('cabina-back'));
-    sessionStorage.removeItem('cabina-back');
-    if (back && Date.now() - back < 30 * 60000) V.tab = 'extra';
-  } catch {}
+  takeBack();
   render();
   if (!S.onboarded && !redirect && !location.hash) showFirstVisit();
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }

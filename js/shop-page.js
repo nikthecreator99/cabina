@@ -1,8 +1,17 @@
 import { I } from './ui.js';
-import { avatarSvg, bgSvg } from './avatar.js';
+import { avatarSvg, bgSvg, normalizeAvatar } from './avatar.js';
 import { API, session, accessToken } from './auth.js';
 
 const status = document.querySelector('#status');
+// Откуда пришли (2.43.1): приложение кладёт отметку в sessionStorage этой вкладки перед уходом сюда — адрес страницы
+// магазина и (из редактора персонажа) примерку. Referer сайт не передаёт (Referrer-Policy: no-referrer), поэтому так.
+function readJson(key) {
+  try { return JSON.parse(sessionStorage.getItem(key)); } catch { return null; }
+}
+const fromApp = (() => {
+  const back = readJson('cabina-back');
+  return back && typeof back === 'object' && Date.now() - back.t < 30 * 60000 ? back : null;
+})();
 let products = [...document.querySelectorAll('[data-sku]')];
 const selected = new URLSearchParams(location.search).get('item');
 const checkout = products.some(card => card.dataset.sku === selected);
@@ -39,9 +48,18 @@ if (!checkout) store.classList.add('catalog');
   back.className = 'checkout-back';
   back.innerHTML = I.left;
   back.setAttribute('aria-label', checkout ? 'Назад' : 'В CABINA');
-  if (document.referrer && new URL(document.referrer).origin === location.origin) {
-    back.onclick = event => { event.preventDefault(); history.back(); };
-  }
+  // «Назад» — туда, откуда пришли: из общего списка магазина — в список, из приложения — в приложение (на тот же экран).
+  // Открыли страницу по ссылке напрямую — из оформления в общий список, из списка — в CABINA.
+  const here = location.pathname + location.search;
+  let fromList = false;
+  try { fromList = checkout && sessionStorage.getItem('cabina-shop-nav') === location.search; } catch {}
+  const fromHere = fromApp?.url === here;
+  back.href = checkout ? 'shop.html' : '../';
+  back.onclick = event => {
+    if (!fromList && !fromHere) return;
+    event.preventDefault();
+    history.back();
+  };
   const nav = store.querySelector('nav');
   const privacy = nav.querySelector('[href="shop-privacy.html"]');
   const footer = store.querySelector('footer');
@@ -94,6 +112,7 @@ if (!checkout) {
     link.className = 'product-link';
     link.href = '?item=' + encodeURIComponent(card.dataset.sku);
     link.setAttribute('aria-label', name + ', ' + price.textContent);
+    link.addEventListener('click', () => { try { sessionStorage.setItem('cabina-shop-nav', link.search); } catch {} });
     card.querySelector('.action').before(Object.assign(document.createElement('div'), {className: 'product-foot'}));
     const foot = card.querySelector('.product-foot');
     price.className = 'product-price';
@@ -102,6 +121,7 @@ if (!checkout) {
     card.append(link);
   }
   status.classList.add('shop-note');
+  try { sessionStorage.removeItem('cabina-shop-nav'); } catch {}
 }
 function revealTerms() {
   const section = document.getElementById(location.hash.slice(1));
@@ -124,7 +144,22 @@ async function call(path, body) {
   return data;
 }
 
+// Примерка из редактора: показываем именно её, если в ней есть этот предмет (иначе — обычная картинка предмета)
+function hasItem(look, sku) {
+  if (['robot', 'horse', 'skeleton'].includes(sku)) return look.sex === sku;
+  if (['depot', 'ocean'].includes(sku)) return look.bg === sku;
+  if (sku === 'peaked') return look.hat === 'peaked';
+  if (sku === 'mazut') return look.mazut === true;
+  return false;
+}
 function preview(sku) {
+  const look = checkout && fromApp?.url === location.pathname + location.search && fromApp.look;
+  if (look && typeof look === 'object') {
+    try {
+      const a = normalizeAvatar(look, {premium: true});
+      if (hasItem(a, sku)) return avatarSvg(a);
+    } catch {}
+  }
   if (['depot', 'ocean'].includes(sku)) return bgSvg(sku);
   if (sku === 'peaked') return avatarSvg({hat: 'peaked'});
   if (sku === 'mazut') return avatarSvg({mazut: true});
