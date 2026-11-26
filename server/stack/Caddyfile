@@ -86,13 +86,14 @@ api.cabina-app.ru {
 			import nocors
 		}
 	}
-	# CABINA AI (шаг 15): вопрос → сервер помощника. Ключ входа человека он проверяет через PostgREST.
+	# Магазин оформления (2.42): заказы и покупки, server/shop. Сервис сам CORS-заголовков не ставит.
 	handle_path /shop/v1/* {
-        request_body {
-            max_size 16KB
-        }
-        reverse_proxy shop:8788
-    }
+		request_body {
+			max_size 16KB
+		}
+		reverse_proxy shop:8788
+	}
+	# CABINA AI (шаг 15): вопрос → сервер помощника. Ключ входа человека он проверяет через PostgREST.
 	handle_path /ai/v1/* {
 		request_body {
 			max_size 8KB

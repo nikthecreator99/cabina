@@ -344,11 +344,12 @@ function tripsView(R) {
   }
   if (ST.period === 'month') html += block('Календарь', monthCalendar(ST.y, ST.m));
   const totals = meterTotals(R.trips);
-  const readings = Object.entries(totals).map(([key, value]) => {
+  // Пустую статистику не показываем: только те счётчики, которые человек вписывал.
+  const readings = Object.entries(totals).filter(([, value]) => value !== null).map(([key, value]) => {
     const unit = key === 'fuel' ? '' : ' кВт·ч';
-    return kv(meterLabels[key], value === null ? '—' : value.toLocaleString('ru-RU') + unit);
+    return kv(meterLabels[key], value.toLocaleString('ru-RU') + unit);
   });
-  html += block('Показания счётчиков', `<div class="kv-grid">${readings.join('')}</div>`);
+  if (readings.length) html += block('Показания счётчиков', `<div class="kv-grid">${readings.join('')}</div>`);
   // поездки
   if (R.count) {
     const longest = R.longest ? statsOf(R.longest) : null;
