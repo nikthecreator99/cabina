@@ -87,3 +87,85 @@ test('«Ещё» → «Магазин» открывает страницу ма
     await context.close();
   } finally { await env.stop(); }
 });
+
+// 2.43.1 (просьба Никиты 26.11.2026): в оформлении — тот персонаж, которого человек настроил, а «Назад» — туда, откуда пришёл
+test('редактор персонажа → «Оформить»: в оформлении настроенный робот, «Назад» — в редактор с той же примеркой', async () => {
+  const env = await startEnv();
+  try {
+    const { page, errors, context } = await openApp(env);
+    await context.route('https://api.cabina-app.ru/shop/**', (r) => r.fulfill({ json: { terms: '2026-11-25', mode: 'off', owned: [] }, headers: { 'access-control-allow-origin': '*' } }));
+    await page.locator('.tab[data-tab=profile]').click();
+    await page.locator('[data-act=av-open]').first().click();
+    await page.locator('.screen[data-page=avatar]').waitFor();
+    await page.locator('[data-act=av-chars]').click();
+    await page.locator('[data-act=av-set][data-k=sex][data-v=robot]').click();
+    await page.locator('[data-act=av-set][data-k=metal][data-v="3"]').click();
+    const order = page.locator('[data-act=av-order][data-sku=robot]');
+    assert.match(await order.innerText(), /Оформить за 299 ₽/);
+    await order.click();
+    await page.waitForURL(/\/data\/shop\.html\?item=robot$/);
+    await page.locator('.checkout-info .preview svg').waitFor();
+    // Картинка — из примерки (корпус цвета 3), а не робот по умолчанию
+    const same = await page.evaluate(async () => {
+      const A = await import('/js/avatar.js');
+      const d0 = document.createElement('div'); const htmlOf = (svg) => { d0.innerHTML = svg; return d0.innerHTML.replace(/\b[a-z]+\d+_/g, 'x_'); };
+      const back = JSON.parse(sessionStorage.getItem('cabina-back'));
+      const html = document.querySelector('.checkout-info .preview').innerHTML.replace(/\b[a-z]+\d+_/g, 'x_');
+      return { mine: html === htmlOf(A.avatarSvg(A.normalizeAvatar(back.look, { premium: true }))), plain: html === htmlOf(A.avatarSvg({ sex: 'robot' })), metal: back.look.metal };
+    });
+    assert.deepEqual(same, { mine: true, plain: false, metal: 3 });
+    await page.locator('.checkout-back').click();
+    await page.locator('.screen[data-page=avatar]').waitFor();
+    assert.equal(await page.locator('[data-act=av-set][data-k=metal][data-v="3"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('.tab[data-tab=profile]').getAttribute('aria-current'), 'page');
+    assert.ok(await page.evaluate(() => document.body.classList.contains('av-editing')));
+    assert.deepEqual(errors.filter((e) => !/api\.cabina-app\.ru/.test(e)), []);
+    await context.close();
+  } finally { await env.stop(); }
+});
+
+test('магазин: предмет → «Назад» возвращает в общий список, оттуда «Назад» — в «Ещё»', async () => {
+  const env = await startEnv();
+  try {
+    const { page, errors, context } = await openApp(env);
+    await context.route('https://api.cabina-app.ru/shop/**', (r) => r.fulfill({ json: { terms: '2026-11-25', mode: 'off' }, headers: { 'access-control-allow-origin': '*' } }));
+    await page.locator('.tab[data-tab=extra]').click();
+    await page.locator('#extra-list > .row[data-key=shop]').click();
+    await page.waitForURL(/\/data\/shop\.html$/);
+    await page.locator('[data-sku=horse] .product-link').click();
+    await page.waitForURL(/\?item=horse$/);
+    // без примерки — обычная картинка предмета
+    assert.ok(await page.evaluate(async () => {
+      const A = await import('/js/avatar.js');
+      const d0 = document.createElement('div'); const htmlOf = (svg) => { d0.innerHTML = svg; return d0.innerHTML.replace(/\b[a-z]+\d+_/g, 'x_'); };
+      return document.querySelector('.checkout-info .preview').innerHTML.replace(/\b[a-z]+\d+_/g, 'x_') === htmlOf(A.avatarSvg({ sex: 'horse' }));
+    }));
+    await page.locator('.checkout-back').click();
+    await page.waitForURL(/\/data\/shop\.html$/);
+    await page.locator('.shop-grid').first().waitFor();
+    assert.equal(await page.locator('h1').innerText(), 'Магазин оформления');
+    await page.locator('.checkout-back').click();
+    await page.waitForSelector('#extra-list');
+    assert.deepEqual(errors.filter((e) => !/api\.cabina-app\.ru/.test(e)), []);
+    await context.close();
+  } finally { await env.stop(); }
+});
+
+test('оформление по прямой ссылке: «Назад» ведёт в общий список магазина', async () => {
+  const env = await startEnv();
+  try {
+    const { page, errors, context } = await shopPage(env);
+    await page.goto(env.url + 'data/shop.html?item=ocean');
+    await page.locator('.checkout-info').waitFor();
+    assert.ok(await page.evaluate(async () => {
+      const A = await import('/js/avatar.js');
+      const d0 = document.createElement('div'); const htmlOf = (svg) => { d0.innerHTML = svg; return d0.innerHTML.replace(/\b[a-z]+\d+_/g, 'x_'); };
+      return document.querySelector('.checkout-info .preview').innerHTML.replace(/\b[a-z]+\d+_/g, 'x_') === htmlOf(A.bgSvg('ocean'));
+    }));
+    await page.locator('.checkout-back').click();
+    await page.waitForURL(/\/data\/shop\.html$/);
+    await page.locator('.shop-grid').first().waitFor();
+    assert.deepEqual(errors, []);
+    await context.close();
+  } finally { await env.stop(); }
+});

@@ -2750,3 +2750,4 @@ html[data-text=xl] .ps-panel .ps-v-copy p { grid-column: 1 / -1; margin: 0; }
 .av-order svg { color: #ff5256; }
 .av-order svg:last-child { margin-left: auto; width: 18px; }
 .av-order:active { background: #5c1b24; }
+button.av-order { width: 100%; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
