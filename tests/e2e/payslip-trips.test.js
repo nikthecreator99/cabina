@@ -30,7 +30,7 @@ test('сверка с поездками определяет месяц из PD
     await page.locator('#ps-month').selectOption('2026-04');
     assert.match(await report.innerText(),/Выбран апрель 2026, в листке указан май 2026/);
     await page.locator('#ps-month').selectOption('2026-05');
-    assert.match(await report.innerText(),/Всего отработано[\s\S]*CABINA · 7 ч/);
+    assert.match(await report.innerText(),/Всего отработано[\s\S]*?CABINA\s+7 ч/);
     await page.getByRole('button',{name:'Назад'}).click();
     assert.equal(await page.locator('#ps-month').count(),0);
     await page.getByRole('heading',{name:'Проверить начисления'}).waitFor();

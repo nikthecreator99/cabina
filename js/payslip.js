@@ -5,6 +5,7 @@ import {paySet,rateOn} from './pay.js';
 import {parsePayslip,months} from './payslip-parse.js';
 import {auditPayslip,rub,takeHome} from './payslip-report.js';
 import {readPayslip} from './payslip-reader.js';
+import {breakdown,breakdownHtml,compareRowHtml,compareVerdict,factsHtml,moneyHtml,slipFacts,verdict,verdictHtml} from './payslip-view.js';
 const title='Расчётный листок';
 const slipArt='<img class="ps-art" src="icons/payslip.webp" alt="" width="320" height="320">';
 const labels={ok:['✓','Сошлось'],approx:['≈','Приблизительно'],diff:['!','Расхождение'],info:['i','Справочно'],unknown:['?','Недостаточно данных']};
@@ -50,10 +51,13 @@ function row(x,entry=false) {
   return '<li class="ps-row ps-'+x.status+'"><span class="ps-mark" aria-label="'+label+'">'+symbol+'</span><div><b>'+(entry?esc(x.code)+' · ':'')+esc(x.title)+'</b>'+
     (entry?' <strong>'+esc(rub(x.amount))+'</strong><small>'+esc(x.month)+'</small>':'')+'<p>'+esc(x.detail)+'</p></div></li>';
 }
+// Группы строк: сначала то, что требует внимания; «Не сошлось» открыта сразу. Пустые группы не показываем.
 const sections=[
+  {key:'diff',label:'Не сошлось',icon:'!',statuses:['diff'],open:true},
+  {key:'approx',label:'Приблизительно',icon:'≈',statuses:['approx']},
   {key:'ok',label:'Сошлось',icon:'✓',statuses:['ok']},
-  {key:'approx',label:'Требует внимания',icon:'≈',statuses:['approx','unknown']},
-  {key:'diff',label:'Не сошлось',icon:'!',statuses:['diff']}
+  {key:'none',label:'Не проверить по одному листку',icon:'?',statuses:['unknown','info'],
+    intro:'Это не ошибки. Для этих строк нужны данные, которых в листке нет: показатели премии, средний заработок, тариф прошлых месяцев.'}
 ];
 function list(title,rows,entries=false) {
   return rows.length?'<h3>'+title+'</h3><ul>'+rows.map(x=>row(x,entries)).join('')+'</ul>':'';
@@ -62,26 +66,22 @@ function section(spec,checks,items) {
   const matches=x=>spec.statuses.includes(x.status);
   const audits=checks.filter(matches), lines=items.filter(matches);
   const count=audits.length+lines.length;
-  let body=list('Проверки',audits);
+  if(!count) return '';
+  let body=(spec.intro?'<p class="ps-intro">'+esc(spec.intro)+'</p>':'')+list('Проверки за месяц',audits);
   for(const [kind,label] of Object.entries(groups)) body+=list(label,lines.filter(x=>x.kind===kind),true);
-  if(!count) body='<p class="ps-empty">'+({ok:'Пока нет подтверждённых совпадений.',approx:'Уточнений не требуется.',diff:'Расхождений по выполненным проверкам нет.'}[spec.key])+'</p>';
-  if(spec.key==='approx') {
-    const infoChecks=checks.filter(x=>x.status==='info'),infoRows=items.filter(x=>x.status==='info');
-    if(infoChecks.length || infoRows.length) {
-      body+='<details class="ps-info"><summary>Справочно <span>'+ (infoChecks.length+infoRows.length)+'</span></summary>'+
-        list('За месяц',infoChecks)+list('Строки листка',infoRows,true)+'</details>';
-    }
-  }
-  return '<details class="ps-group ps-'+spec.key+'" data-ps-group="'+spec.key+'"><summary><span class="ps-mark" aria-hidden="true">'+spec.icon+
+  return '<details class="ps-group ps-'+spec.key+'" data-ps-group="'+spec.key+'"'+(spec.open?' open':'')+'><summary><span class="ps-mark" aria-hidden="true">'+spec.icon+
     '</span><b>'+spec.label+'</b><span class="ps-count">'+count+'</span><i aria-hidden="true"></i></summary><div class="ps-body">'+body+'</div></details>';
 }
 function report(sheet,ocr) {
   if(compare){
     const key=selectedMonth||periodKey(sheet.period);
-    const {message,rows,count}=compareTrips(sheet,key,S.trips,S.absences,myPay());
-    const value=h=>Number.isFinite(h)?h.toLocaleString('ru-RU')+' ч':'—';
-    const body=message?'<p>'+esc(message)+'</p>':'<p>Поездок за месяц — '+count+'</p><ul>'+rows.map(x=>row({...x,detail:'CABINA · '+value(x.cabina)+' / Листок · '+value(x.sheet)+'. '+x.detail})).join('')+'</ul>';
-    return '<section class="panel ps-panel" id="ps-details" data-report="'+generation+'"><h2>Сверка за '+esc(validMonth(key)?monthLabel(key):'выбранный месяц')+'</h2>'+body+'<button class="btn btn-ghost" data-act="ps-clear">Очистить отчёт</button></section>';
+    const {message,rows,count,money}=compareTrips(sheet,key,S.trips,S.absences,myPay());
+    const empty=message&&/нет поездок/.test(message);
+    const body=message?'<div class="ps-verdict ps-v-none" data-verdict="'+(empty?'empty':'none')+'"><span class="ps-v-ico" aria-hidden="true">'+(empty?'0':'?')+'</span><div class="ps-v-copy"><strong>'+(empty?'Поездок за этот месяц нет':'Сверить не получилось')+'</strong><p>'+esc(message)+'</p></div></div>'+
+        (empty?'<p class="hint">CABINA сравнит часы из листка — всего, ночные, следование, ожидание, тяжёлые поезда, отдых сверх нормы — с поездками, которые вы записали.</p>':'')
+      :verdictHtml(compareVerdict(rows))+'<p class="hint">Сравнили с '+count+' '+(count%10===1&&count%100!==11?'поездкой':'поездками')+' в CABINA.</p>'+moneyHtml(money)+
+        '<section class="ps-block"><h3>Часы: CABINA и листок</h3><ul class="ps-cmps">'+rows.map(compareRowHtml).join('')+'</ul></section>';
+    return '<section class="panel ps-panel ps-report" id="ps-details" data-report="'+generation+'"><h2>Сверка за '+esc(validMonth(key)?monthLabel(key):'выбранный месяц')+'</h2>'+body+'<button class="btn btn-ghost ps-clear" data-act="ps-clear">Очистить отчёт</button></section>';
   }
   const payout=takeHome(sheet);
   const raw=paySet(S.settings.pay,S.profile.role),profile={};
@@ -94,8 +94,11 @@ function report(sheet,ocr) {
   const totals=[['Начислено',sheet.gross],['Удержано и перечислено',sheet.deducted],['На руки',payout.total]];
   return '<section class="panel ps-panel ps-report" id="ps-details" data-report="'+generation+'"><h2>Листок'+(sheet.period?' за '+esc(sheet.period):'')+'</h2>'+
     (ocr?'<p class="ps-alert">Данные распознаны с изображения. Сверьте коды, часы и суммы с оригиналом.</p>':'')+
-    '<dl class="ps-totals">'+totals.map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+rub(v)+'</dd></div>').join('')+'</dl>'+
-    (payout.total!=null?'<p class="hint">Аванс '+rub(payout.advance)+' + зарплата через банк '+rub(payout.bank)+(payout.cash?' + через кассу '+rub(payout.cash):'')+'.</p>':'<p class="hint">Для итога на руки нужны все строки выплат и удержаний.</p>')+
+    verdictHtml(verdict(checks,items))+
+    '<dl class="ps-totals">'+totals.map(([k,v])=>'<div><dt>'+k+'</dt><dd class="money">'+rub(v)+'</dd></div>').join('')+'</dl>'+
+    (payout.total!=null?'<p class="hint money">Аванс '+rub(payout.advance)+' + зарплата через банк '+rub(payout.bank)+(payout.cash?' + через кассу '+rub(payout.cash):'')+'.</p>':'<p class="hint">Для итога на руки нужны все строки выплат и удержаний.</p>')+
+    factsHtml(slipFacts(sheet,payout))+breakdownHtml(breakdown(sheet),sheet.gross)+
+    '<h3 class="ps-rows-title">Каждая строка листка</h3>'+
     sections.map(spec=>section(spec,checks.filter(x=>!x.code),items)).join('')+
     '<button class="btn btn-ghost ps-clear" data-act="ps-clear">Очистить отчёт</button></section>';
 }
@@ -106,6 +109,8 @@ export function renderPayslip() {
   const opened=existing?.dataset.report===String(generation)
     ? [...existing.querySelectorAll('details[open]')].map(el=>el.dataset.psGroup || 'info') : [];
   let shown=result;
+  // та же проверка перерисована (выбор месяца, обновление) — группы открыты так, как их оставил человек
+  if(existing?.dataset.report===String(generation)) shown=shown.replace(/(data-ps-group="[a-z]+") open>/g,'$1>');
   for(const key of opened) {
     const attr=key==='info'?'class="ps-info"':'data-ps-group="'+key+'"';
     shown=shown.replace(attr+'>',attr+' open>');
