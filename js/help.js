@@ -3,7 +3,8 @@
 // Только справка: ничего не хранит и никуда не отправляет. Ответы — наш статичный текст (в нём допустим <b>),
 // данных пользователя в нём нет. Если меняется поведение приложения — поправить ответ здесь же.
 import { GROUPS_LIVE } from './legal.js';
-import { I, esc, small, pageHead, highlight, searchWords, normSearch } from './ui.js';
+import { I, esc, small, pageHead } from './ui.js';
+import { buildIndex, rankHelp, sureAnswer, markText, queryTerms } from './help-match.js';
 
 // open: [надпись, экран, элемент на экране для прокрутки?]. need у группы: 'account' — только когда раздел аккаунта есть;
 // need у вопроса: 'signed' — кнопка «Открыть» только после входа. k — слова, по которым ещё ищем.
@@ -193,40 +194,50 @@ export const HELP = [
 
 export const helpCount = () => HELP.reduce((n, g) => n + g.items.filter((it) => it.need !== 'groups' || GROUPS_LIVE).length, 0);
 
-const plain = (html) => html.replace(/<[^>]+>/g, '');
-// все слова запроса должны найтись в вопросе, ответе или ключевых словах
-const matches = (it, words) => {
-  const hay = normSearch(`${it.q} ${plain(it.a)} ${it.k || ''}`);
-  return words.every((w) => hay.includes(w));
-};
 const allowed = (need, ctx) => need === 'groups' ? GROUPS_LIVE && ctx.account && ctx.signed : !need || (need === 'account' ? ctx.account : need === 'signed' ? ctx.account && ctx.signed : true);
 
+// индекс для умного поиска — один раз, при первом вопросе
+let INDEX = null;
+const index = () => (INDEX ||= buildIndex(HELP.flatMap((g) => g.items.map((it) => ({ ...it, src: it, gneed: g.need })))));
+const shown = (d, ctx) => allowed(d.gneed, ctx) && (d.need !== 'groups' || allowed('groups', ctx));
+
+// Подходящие ответы на вопрос человека, лучшие — первыми (для экрана и тестов)
+export function helpAnswers(q, ctx) {
+  return rankHelp(index(), q, { limit: 20 }).filter((r) => shown(r.it, ctx)).slice(0, 6).map((r) => ({ ...r, it: r.it.src }));
+}
+
 // auto — открыт только из-за поиска: app.js не запоминает его как открытый человеком
-function itemHtml(it, words, open, auto, ctx) {
+function itemHtml(it, q, open, auto, ctx) {
   const go = it.open && allowed(it.need, ctx) ? it.open : null;
   return `<details class="faq" data-id="${it.id}"${open ? ' open' : ''}${open && auto ? ' data-auto="1"' : ''}>
-    <summary><span class="faq-q">${highlight(it.q, words)}</span></summary>
+    <summary><span class="faq-q">${q ? markText(it.q, q, esc) : esc(it.q)}</span></summary>
     <div class="faq-a"><p>${it.a}</p>${go ? `<button class="btn btn-ghost btn-sm faq-go" data-act="go" data-page="${go[1]}"${go[2] ? ` data-focus="${go[2]}"` : ''}>Открыть «${go[0]}» ${small(I.right, 16)}</button>` : ''}</div>
   </details>`;
 }
 
-// ctx: { account — раздел аккаунта есть, signed — вошли }; opened — какие ответы открыл человек
-export function helpListHtml(q, opened, ctx) {
-  const words = searchWords(q);
+// ctx: { account — раздел аккаунта есть, signed — вошли }; opened — какие ответы открыл человек;
+// ask — человек нажал «Найти» (Enter): лучший ответ открыть, даже если он не единственный подходящий
+export function helpListHtml(q, opened, ctx, ask = false) {
+  // пока в вопросе только «как», «что», «где» — показываем все частые вопросы
+  if (queryTerms(q).length) {
+    const found = helpAnswers(q, ctx);
+    if (!found.length) return `<p class="hint faq-none" role="status">Ответа не нашлось. Спросите по-другому — например, «как считается отдых», «где указать ставку» или «как перенести записи».</p>`;
+    const sure = sureAnswer(found);
+    const top = sure || ask || found.length === 1 ? found[0].it.id : null;
+    return `<div class="group" id="help-found"><div class="group-title">${top ? 'Ответ' : 'Похоже на ваш вопрос'}</div>
+      <div class="panel faq-list">${found.map((r) => itemHtml(r.it, q, r.it.id === top || opened.has(r.it.id), r.it.id === top && !opened.has(r.it.id), ctx)).join('')}</div></div>`;
+  }
   const groups = HELP.filter((g) => allowed(g.need, ctx))
-    .map((g) => ({ g: g.g, items: g.items.filter((it) => (it.need !== 'groups' || allowed('groups', ctx)) && (!words.length || matches(it, words))) }))
+    .map((g) => ({ g: g.g, items: g.items.filter((it) => it.need !== 'groups' || allowed('groups', ctx)) }))
     .filter((g) => g.items.length);
-  const found = groups.reduce((n, g) => n + g.items.length, 0);
-  if (!found) return `<p class="hint faq-none">Ничего не нашлось. Попробуйте другое слово, например «отдых», «ставка» или «копия».</p>`;
-  // по поиску немного ответов — сразу открыты
-  const openAll = words.length && found <= 3;
-  return groups.map((g) => `<div class="group"><div class="group-title">${g.g}</div>
-    <div class="panel faq-list">${g.items.map((it) => itemHtml(it, words, openAll || opened.has(it.id), openAll && !opened.has(it.id), ctx)).join('')}</div></div>`).join('');
+  return `<div class="group-title faq-top">Частые вопросы</div>${groups.map((g) => `<div class="group"><div class="group-title">${g.g}</div>
+    <div class="panel faq-list">${g.items.map((it) => itemHtml(it, '', opened.has(it.id), false, ctx)).join('')}</div></div>`).join('')}`;
 }
 
-export function renderHelp(q, opened, ctx) {
-  return `${pageHead('Помощь', { back: true })}
-    <div class="search"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="help-q" placeholder="Поиск: отдых, ставка, копия…" autocomplete="off" enterkeyhint="search" value="${esc(q || '')}" aria-label="Поиск по вопросам">${q ? `<button class="search-x" data-act="help-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>
-    <div id="help-list" class="faq-groups">${helpListHtml(q, opened, ctx)}</div>
+export function renderHelp(q, opened, ctx, ask = false) {
+  return `${pageHead('Помощь и поддержка', { back: true })}
+    <p class="hint help-lead">Спросите своими словами — CABINA подберёт ответ, пока вы пишете. Вопрос никуда не отправляется.</p>
+    <div class="search help-ask"><span aria-hidden="true">${small(I.search, 18)}</span><input type="search" class="input" id="help-q" placeholder="Например: как считается отдых" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="search" maxlength="200" value="${esc(q || '')}" aria-label="Ваш вопрос" aria-controls="help-list">${q ? `<button class="search-x" data-act="help-clear" aria-label="Очистить поиск">${small(I.x, 16)}</button>` : ''}</div>
+    <div id="help-list" class="faq-groups">${helpListHtml(q, opened, ctx, ask)}</div>
     <p class="hint faq-foot">Расчёты в CABINA ориентировочные и считаются по данным, которые вы вписали. Записи хранятся только в этом телефоне.</p>`;
 }

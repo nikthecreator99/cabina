@@ -296,7 +296,8 @@ export const notesFor = (type, num) => {
 // «Ещё»: порядок строк (2.21, settings.extraOrder). Сохранённое — сначала, новые пункты — в конец; неизвестное отбрасываем.
 // 'shop' — «Магазин» (2.42.4, просьба Никиты 26.11.2026): страница data/shop.html. В будущем iOS-приложении строки быть не должно
 // (App Store 3.1.1: ни кнопки оплаты, ни ссылки на неё).
-export const EXTRA_KEYS = ['notes', 'docs', 'phones', 'fix', 'vu45', 'help', 'ideas', 'shop'];
+// «Помощь и поддержка» — первой (решение Никиты 26.11.2026); у тех, кто сам менял порядок, остаётся их порядок
+export const EXTRA_KEYS = ['help', 'notes', 'docs', 'phones', 'fix', 'vu45', 'ideas', 'shop'];
 export function extraOrder(saved = S.settings.extraOrder) {
   const mine = Array.isArray(saved) ? saved.filter((k, i) => EXTRA_KEYS.includes(k) && saved.indexOf(k) === i) : [];
   return [...mine, ...EXTRA_KEYS.filter((k) => !mine.includes(k))];

@@ -157,19 +157,21 @@ test('«Ещё»: все пункты одним списком, порядок 
   const { context, page, errors } = await openApp(env);
   const cdp = await context.newCDPSession(page);
   await tab(page, 'extra');
-  assert.deepEqual(await extraKeys(page), ['notes', 'docs', 'phones', 'fix', 'vu45', 'help', 'ideas', 'shop']);
-  assert.equal(await page.locator('.screen .extra-list').count(), 1, 'один список переставляемых пунктов');
-  // «Помощь» — наверх
-  const help = page.locator('#extra-list > .row[data-key=help]');
-  const h = (await help.boundingBox()).height;
-  await hold(page, cdp, help, -h * 5.2);
+  // с 2.44 «Помощь и поддержка» — первой (решение Никиты 26.11.2026)
   assert.deepEqual(await extraKeys(page), ['help', 'notes', 'docs', 'phones', 'fix', 'vu45', 'ideas', 'shop']);
-  assert.equal(await page.locator('.screen[data-page]').count(), 0, 'отпустили — экран «Помощь» не открылся');
-  assert.deepEqual((await settingsOf(page)).extraOrder, ['help', 'notes', 'docs', 'phones', 'fix', 'vu45', 'ideas', 'shop']);
+  assert.equal(await page.locator('.screen .extra-list').count(), 1, 'один список переставляемых пунктов');
+  // «ВУ-45» — наверх
+  const vu = page.locator('#extra-list > .row[data-key=vu45]');
+  const h = (await vu.boundingBox()).height;
+  await hold(page, cdp, vu, -h * 6.5);
+  const want = ['vu45', 'help', 'notes', 'docs', 'phones', 'fix', 'ideas', 'shop'];
+  assert.deepEqual(await extraKeys(page), want);
+  assert.equal(await page.locator('.screen[data-page]').count(), 0, 'отпустили — экран не открылся');
+  assert.deepEqual((await settingsOf(page)).extraOrder, want);
   // после перезапуска — тот же порядок; обычное нажатие по-прежнему открывает пункт
   await page.reload(); await page.waitForSelector('.screen');
   await tab(page, 'extra');
-  assert.deepEqual(await extraKeys(page), ['help', 'notes', 'docs', 'phones', 'fix', 'vu45', 'ideas', 'shop']);
+  assert.deepEqual(await extraKeys(page), want);
   await page.locator('#extra-list > .row[data-key=phones]').click();
   await page.waitForFunction(() => /Телефоны/.test(document.querySelector('.screen').innerText));
   assert.deepEqual(errors, []);

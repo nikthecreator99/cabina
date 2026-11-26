@@ -415,7 +415,7 @@ function renderExtra() {
       fix: `<button class="row" data-act="extra-fix" data-key="fix"><span class="ico" style="--c:var(--night)">${I.shoe}</span>
           <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>`,
       help: `<button class="row" data-act="go" data-page="help" id="extra-help" data-key="help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
-          <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button>`,
+          <div class="grow"><div class="t1">Помощь и поддержка</div><div class="t2">Спросите своими словами: отдых, заработок, данные</div></div>${small(I.right, 18)}</button>`,
       shop: `<button class="row" data-act="extra-shop" data-key="shop"><span class="ico" style="--c:var(--accent)">${I.bag}</span>
           <div class="grow"><div class="t1">Магазин</div><div class="t2">Персонажи, фоны и детали для профиля</div></div>${small(I.right, 18)}</button>`,
       ideas: legalReady() ? ideasRowHtml('extra-ideas').replace('<button class="row"', '<button class="row" data-key="ideas"') : '',
@@ -603,7 +603,7 @@ function renderSetInstall() {
 function renderSetAbout() {
   return `${pageHead('О приложении', { back: true })}
     <div class="panel">
-      <button class="row" data-act="go" data-page="help" id="settings-help"><span class="ico" style="--c:var(--accent)">${I.help}</span><div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы и ответы</div></div>${small(I.right, 18)}</button>
+      <button class="row" data-act="go" data-page="help" id="settings-help"><span class="ico" style="--c:var(--accent)">${I.help}</span><div class="grow"><div class="t1">Помощь и поддержка</div><div class="t2">Спросите своими словами</div></div>${small(I.right, 18)}</button>
       ${legalReady() ? ideasRowHtml('settings-ideas') : ''}
       <button class="row" data-act="whats-new"><span class="ico" style="--c:var(--ok)">${I.check}</span><div class="grow"><div class="t1">Что нового</div><div class="t2">Изменения по версиям</div></div>${small(I.right, 18)}</button>
       <div class="row"><span class="ico" style="--c:var(--accent)">${I.info}</span><div class="grow"><div class="t1">Подсказки</div><div class="t2">Короткие объяснения при первом открытии</div></div>
@@ -617,7 +617,7 @@ function renderSetAbout() {
 // ---------------------------------------------------------------- рендер и навигация
 // Гость (2.26): награды, рекорды и персонаж — с аккаунтом; вместо экрана — что там будет и «Зарегистрироваться»
 const locked = (kind, fn) => () => (isGuest() ? guestLockHtml(kind) : fn());
-const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx()), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe, growth: renderGrowth, ai: renderAi, payslip: renderPayslip };
+const PAGES = { search: () => renderSearch(V.tripQ), work: renderWork, routes: renderRoutes, tariffs: renderTariffs, houses: renderHouses, stats: renderStats, settings: renderSettings, 'set-look': renderSetLook, 'set-privacy': renderSetPrivacy, 'set-data': renderSetData, 'set-time': renderSetTime, 'set-install': renderSetInstall, 'set-about': renderSetAbout, 'profile-edit': renderProfileEdit, avatar: locked('avatar', renderAvatarEdit), career: renderCareer, awards: locked('awards', renderAwards), records: locked('records', renderRecords), team: renderTeam, account: () => renderAccount(colleaguesAccountHtml()), privacy: renderPrivacy, colleagues: renderColleagues, help: () => renderHelp(V.helpQ, V.helpOpen, helpCtx(), V.helpAsk === V.helpQ), invites: renderInvites, ideas: renderIdeas, notices: renderNotices, groups: renderGroups, group: renderGroup, 'learn-road': renderLearnRoad, 'learn-modules': renderLearnModules, 'learn-me': renderLearnMe, growth: renderGrowth, ai: renderAi, payslip: renderPayslip };
 // «Помощь»: вопросы об аккаунте — только когда раздел аккаунта есть; кнопки на экраны аккаунта — после входа
 const helpCtx = () => ({ account: legalReady(), signed: !!session() });
 // Уведомления (2.28): ответы на мои идеи и (у администратора) новые идеи подгружаем не чаще раза в 2 минуты, на «Профиле» — раз в 30 секунд;
@@ -709,7 +709,7 @@ function go(name) {
   if (name === 'team') teamReset();
   if (name === 'groups') groupsReset();
   if (name === 'groups' || name === 'group') loadColleagues({ force: true });
-  if (name === 'help') { V.helpQ = ''; V.helpOpen = new Set(); }
+  if (name === 'help') { V.helpQ = ''; V.helpAsk = null; V.helpOpen = new Set(); }
   if (name === 'invites') loadInvites({ force: true });
   if (name === 'ideas') loadIdeas({ force: true });
   if (name === 'ai') aiEnter();
@@ -987,6 +987,15 @@ app.addEventListener('submit', (e) => { if (e.target.id === 'col-form') colleagu
 // карточка итогов — тоже кнопка (клавиатура)
 app.addEventListener('keydown', (e) => {
   if (aiKey(e)) return;
+  // «Помощь»: Enter («Найти» на клавиатуре телефона) — открыть лучший ответ и спрятать клавиатуру
+  if (e.key === 'Enter' && e.target.id === 'help-q') {
+    e.preventDefault();
+    V.helpQ = e.target.value; V.helpAsk = V.helpQ;
+    app.querySelector('#help-list').innerHTML = helpListHtml(V.helpQ, V.helpOpen, helpCtx(), true);
+    e.target.blur();
+    app.querySelector('#help-found')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.hero[data-act=stats]')) { e.preventDefault(); go('stats'); }
 });
 
@@ -998,7 +1007,7 @@ app.addEventListener('input', (e) => {
   if (ideasInput(e.target)) return;
   if (aiInput(e.target)) return;
   if (e.target.id === 'help-q') {
-    V.helpQ = e.target.value;
+    V.helpQ = e.target.value; V.helpAsk = null;
     app.querySelector('#help-list').innerHTML = helpListHtml(V.helpQ, V.helpOpen, helpCtx());
     const head = e.target.parentElement;
     const x = head.querySelector('.search-x');

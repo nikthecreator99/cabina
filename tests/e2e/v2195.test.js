@@ -26,10 +26,10 @@ async function openHelpFromExtra(page) {
 test('«Ещё» → «Помощь»: вопросы по группам, ответ раскрывается, «Открыть» ведёт на экран и подсвечивает строку, «Назад» — к открытому ответу', async () => {
   const { context, page, errors } = await openApp(env);
   await tab(page, 'extra');
-  assert.match(await text(page, '#extra-help'), /Помощь\s+Частые вопросы/);
+  assert.match(await text(page, '#extra-help'), /Помощь и поддержка\s+Спросите своими словами/);
   await page.locator('#extra-help').click();
   await page.waitForSelector('#help-q');
-  assert.match(await text(page, '.page-head'), /Помощь/);
+  assert.match(await text(page, '.page-head'), /Помощь и поддержка/);
   assert.equal(await page.locator('details.faq').count(), shownCount(), 'аккаунт есть в приложении — видны все вопросы (кроме групп без входа)');
   assert.match(await text(page, '.screen'), /Поездки[\s\S]*Отдых[\s\S]*Часы и заработок[\s\S]*Отвлечения[\s\S]*Данные и безопасность[\s\S]*Аккаунт и коллеги[\s\S]*Прочее/i);
   assert.match(await text(page, '.screen'), /ориентировочные[\s\S]*только в этом телефоне/);
@@ -57,21 +57,21 @@ test('«Ещё» → «Помощь»: вопросы по группам, от�
   await context.close();
 });
 
-test('поиск: «копия» — три ответа и сразу открыты; лишнее слово — «Ничего не нашлось»; крестик очищает', async () => {
+test('поиск (с 2.44 — умный): «копия» — подходящие ответы, Enter открывает лучший; лишнее слово — «Ответа не нашлось»; крестик очищает', async () => {
   const { context, page, errors } = await openApp(env);
   await openHelpFromExtra(page);
   await page.locator('#help-q').fill('копия');
-  // с 2.21.9 ещё «Выгрузить в Excel» — он в разделе «Данные и резервная копия»
-  await page.waitForFunction(() => document.querySelectorAll('details.faq').length === 3);
-  assert.equal(await isOpen(page, 'table-excel'), true);
-  assert.equal(await isOpen(page, 'data-lost'), true);
-  assert.equal(await isOpen(page, 'data-move'), true);
-  assert.ok(await page.locator('details.faq mark').count() > 0 || await page.locator('#help-list').innerText().then((t) => /копи/i.test(t)));
+  await page.waitForSelector('#help-found');
+  const found = await page.locator('details.faq').evaluateAll((a) => a.map((d) => d.dataset.id));
+  assert.ok(found.includes('data-lost') && found.includes('data-move'), String(found));
   // поле поиска не теряет фокус при наборе
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'help-q');
   await page.locator('#help-q').pressSequentially(' абракадабра');
+  await page.locator('#help-q').press('Enter');
+  await page.waitForFunction(() => document.querySelector('#help-found details.faq[open]'));
+  await page.locator('#help-q').fill('абракадабра');
   await page.waitForSelector('.faq-none');
-  assert.match(await text(page, '.faq-none'), /Ничего не нашлось/);
+  assert.match(await text(page, '.faq-none'), /Ответа не нашлось/);
   await page.locator('[data-act=help-clear]').click();
   await page.waitForFunction((n) => document.querySelectorAll('details.faq').length === n, shownCount());
   assert.equal(await page.locator('#help-q').inputValue(), '');

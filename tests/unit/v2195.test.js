@@ -70,11 +70,11 @@ test('поиск: без учёта регистра и «ё», все слов�
   const trips = helpListHtml('поездк', new Set(['trip-share']), ALL);
   assert.ok(ids(trips).length > 3);
   assert.deepEqual([...trips.matchAll(/data-id="([\w-]+)" open/g)].map((m) => m[1]), ['trip-share']);
-  // три и меньше — открыты все
+  // с 2.44 поиск умный: одинаково подходящие ответы — свёрнуты, уверенный ответ — сразу открыт (подробно — v244-help.test.js)
   const few = helpListHtml('копия', new Set(), ALL);
-  assert.ok(ids(few).length <= 3);
-  assert.equal([...few.matchAll(/ open data-auto/g)].length, ids(few).length);
-  assert.match(helpListHtml('абракадабра', new Set(), ALL), /Ничего не нашлось/);
+  assert.equal([...few.matchAll(/ open data-auto/g)].length, 0, '«копия» — два одинаково подходящих ответа, оба свёрнуты');
+  assert.match(helpListHtml('копия', new Set(), ALL, true), /data-id="data-(lost|move)" open data-auto/, 'Enter — открыт лучший');
+  assert.match(helpListHtml('абракадабра', new Set(), ALL), /Ответа не нашлось/);
 });
 
 test('поисковая строка экранируется; на экране — честная строка о хранении и расчёте', () => {
