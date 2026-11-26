@@ -36,8 +36,10 @@ test('приватная проверка PDF, фото и сканирован�
         await input.fill(text.replace(/004[1I|]/g,'004L'));
         await page.locator('[data-act=ps-apply]').click();
       }
-      const groups=page.locator('#ps-details > details');
-      assert.equal(await groups.count(),3);
+      // 2.43: сверху итог проверки, пустые группы не показываем, раскрыта только «Не сошлось»
+      assert.equal(await page.locator('#ps-details [data-verdict]').count(),1);
+      assert.equal(await page.locator('#ps-details > details[data-ps-group=diff]').count(),0);
+      assert.ok(await page.locator('#ps-details > details').count()>=1);
       assert.equal(await page.locator('#ps-details > details[open]').count(),0);
       await page.locator('[data-ps-group=ok] > summary').click();
       const detail=await page.locator('[data-ps-group=ok]').innerText();

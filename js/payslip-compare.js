@@ -18,6 +18,9 @@ export function compareTrips(sheet,key,trips,absences,cfg={}) {
   const current=sheet.rows.filter(r=>r.kind==='earnings' && r.month===months[month-1]);
   const tariff=!incomplete && cfg.mode==='tariff' && summary.monthTrips.every(t=>cfg.rates?.some(r=>r.rate>0&&(!r.from||r.from<=t.start.slice(0,10))));
   const pay=tariff?payMonth(year,month,trips,absences,cfg,stats,{overRest:rest}):null;
+  // прогноз CABINA на месяц (как на главной) против «Всего начислено» в листке — ориентировочно
+  const est=!incomplete&&Number.isFinite(sheet.gross)?(pay||payMonth(year,month,trips,absences,cfg,stats,{overRest:rest})):null;
+  const money=est?.hasRate&&est.gross>0?{cabina:est.gross,sheet:sheet.gross}:null;
   const rows=[];
   function metric(title,minutes,sheetHours,reason,count=1) {
     const cabina=Number.isFinite(minutes)?Math.round(minutes/60*100)/100:null;
@@ -31,19 +34,28 @@ export function compareTrips(sheet,key,trips,absences,cfg={}) {
     return row;
   }
   metric('Всего отработано',summary.work,sheet.worked,incomplete);
-  if(Number.isFinite(sheet.norm)) metric('Норма часов по закону',summary.base*60,sheet.norm);
+  if(Number.isFinite(sheet.norm)){
+    const norm=metric('Норма часов по закону',summary.base*60,sheet.norm);
+    if(norm.status==='diff') norm.detail+=' CABINA считает норму по шестидневке или пятидневке — как выбрано в Настройках → «Календарь и часовой пояс».';
+  }
   function hours(title,minutes,code,reason='',payKey) {
-    const matches=current.filter(r=>code.test(r.code));
-    if (!minutes && !matches.length && !/^Ночные/.test(title)) return;
-    if (!reason && (!matches.length || matches.some(r=>!Number.isFinite(r.hours)||(r.amount<0&&r.hours>0)))) reason='Проверьте часы в строках листка за выбранный месяц.';
+    const all=current.filter(r=>code.test(r.code));
+    if (!minutes && !all.length && !/^Ночные/.test(title)) return;
+    // строки без часов (доплата разовой суммой, например 023Q) не мешают сверить часы по остальным
+    const matches=all.filter(r=>Number.isFinite(r.hours)), noHours=all.filter(r=>!Number.isFinite(r.hours));
+    if (!reason && (!matches.length || matches.some(r=>r.amount<0&&r.hours>0))) reason='Проверьте часы в строках листка за выбранный месяц.';
     const total=reason?null:matches.reduce((n,r)=>n+Math.round(r.hours*100),0)/100;
     const row=metric(title,minutes,total,incomplete||reason,matches.length);
+    if(noHours.length && row.status!=='unknown'){
+      if(row.status==='ok') row.status='approx';
+      row.detail+=' Без часов в листке: '+noHours.map(r=>r.code).join(', ')+' — эти строки не сверяли.';
+    }
     if(sheet.unread && row.status!=='unknown'){
       row.status='approx'; row.detail+=' Сравнение по прочитанным строкам. Часть строк листка не распознана.';
     }
     if(pay && payKey && row.status!=='unknown'){
       const expected=pay.lines.filter(l=>payKey.test(l.key)).reduce((n,l)=>n+Math.round(l.amount*100),0);
-      const actual=matches.reduce((n,r)=>n+Math.round(r.amount*100),0);
+      const actual=all.reduce((n,r)=>n+Math.round(r.amount*100),0);
       row.detail+=' По тарифам CABINA '+rub(expected/100)+', в листке '+rub(actual/100)+'.';
       if(actual!==expected && row.status==='ok') row.status=Math.abs(actual-expected)<=matches.length?'approx':'diff';
     }
@@ -69,5 +81,5 @@ export function compareTrips(sheet,key,trips,absences,cfg={}) {
   const latest=trips.reduce((last,t)=>!last||stats(t).start>stats(last).start?t:last,null);
   const missing=latest?.restType==='turnaround'&&summary.monthTrips.includes(latest);
   hours('Отдых в пункте оборота сверх нормы',missing?null:minutesInMonth(rest,key),/^172L$/,missing?'Нужна следующая явка.':'');
-  return {rows,count:summary.monthTrips.length};
+  return {rows,count:summary.monthTrips.length,money};
 }
