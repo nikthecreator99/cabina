@@ -29,37 +29,79 @@ function decorateRow(row, icon, end) {
   row.insertAdjacentHTML('afterbegin', icon);
   row.insertAdjacentHTML('beforeend', end);
 }
-if (checkout) {
-  const store = document.querySelector('.store');
-  store.classList.add('checkout');
+// Оба вида (весь магазин и один предмет) — в одном стиле: «Назад», строки оферты, возврата и политики.
+// Реквизиты продавца в общем списке видны сразу (их проверяет Робокасса), в оформлении — под «О продавце».
+const store = document.querySelector('.store');
+store.classList.add('checkout');
+if (!checkout) store.classList.add('catalog');
+{
   const back = store.querySelector('a');
   back.className = 'checkout-back';
   back.innerHTML = I.left;
-  back.setAttribute('aria-label', 'Назад');
+  back.setAttribute('aria-label', checkout ? 'Назад' : 'В CABINA');
   if (document.referrer && new URL(document.referrer).origin === location.origin) {
     back.onclick = event => { event.preventDefault(); history.back(); };
   }
   const nav = store.querySelector('nav');
   const privacy = nav.querySelector('[href="shop-privacy.html"]');
   const footer = store.querySelector('footer');
-  const seller = document.createElement('details');
-  seller.id = 'seller';
-  seller.innerHTML = '<summary>О продавце</summary>';
-  seller.append(footer.querySelector('p'));
-  footer.removeAttribute('id');
-  footer.querySelector('h2').remove();
-  footer.querySelector('br')?.remove();
   const terms = store.querySelector('#terms');
   const returns = store.querySelector('#returns');
-  nav.replaceChildren(terms, returns, privacy, seller);
-  nav.before(status);
+  const rows = [terms, returns, privacy];
+  if (checkout) {
+    const seller = document.createElement('details');
+    seller.id = 'seller';
+    seller.innerHTML = '<summary>О продавце</summary>';
+    seller.append(footer.querySelector('p'));
+    footer.removeAttribute('id');
+    footer.querySelector('h2').remove();
+    footer.querySelector('br')?.remove();
+    rows.push(seller);
+    decorateRow(seller.querySelector('summary'), I.user, I.down);
+  } else {
+    footer.querySelector('h2').textContent = 'Продавец';
+    footer.querySelector('h2').className = 'seller-head';
+    footer.querySelector('p').className = 'seller-req';
+    footer.querySelector(':scope > br')?.remove();
+    footer.before(Object.assign(document.createElement('h2'), {className: 'shop-group', textContent: 'Условия покупки'}));
+    footer.before(nav);
+  }
+  nav.replaceChildren(...rows);
+  if (checkout) nav.before(status);
   decorateRow(terms.querySelector('summary'), I.file, I.down);
   decorateRow(returns.querySelector('summary'), I.swap, I.down);
   decorateRow(privacy, I.shield, I.external);
-  decorateRow(seller.querySelector('summary'), I.user, I.down);
   for (const link of footer.querySelectorAll('a')) {
     decorateRow(link, link.protocol === 'tel:' ? I.call : I.mail, I.right);
   }
+}
+// Общий список: товары по группам, карточка целиком ведёт к оформлению этого предмета.
+const GROUPS = [['Персонажи', ['robot', 'horse', 'skeleton']], ['Фоны', ['ocean', 'depot']], ['Детали', ['mazut', 'peaked']]];
+if (!checkout) {
+  const goods = document.querySelector('#goods');
+  for (const [title, skus] of GROUPS) {
+    const cards = skus.map(sku => products.find(card => card.dataset.sku === sku)).filter(Boolean);
+    if (!cards.length) continue;
+    const grid = document.createElement('div');
+    grid.className = 'shop-grid';
+    grid.append(...cards);
+    goods.append(Object.assign(document.createElement('h2'), {className: 'shop-group', textContent: title}), grid);
+  }
+  for (const card of products) {
+    const name = card.querySelector('h2').textContent;
+    const price = card.querySelector('strong');
+    const link = document.createElement('a');
+    link.className = 'product-link';
+    link.href = '?item=' + encodeURIComponent(card.dataset.sku);
+    link.setAttribute('aria-label', name + ', ' + price.textContent);
+    card.querySelector('.action').before(Object.assign(document.createElement('div'), {className: 'product-foot'}));
+    const foot = card.querySelector('.product-foot');
+    price.className = 'product-price';
+    foot.append(price, card.querySelector('.action'));
+    foot.insertAdjacentHTML('beforeend', '<span class="product-go" aria-hidden="true">' + I.right + '</span>');
+    card.append(link);
+  }
+  status.classList.add('shop-note');
 }
 function revealTerms() {
   const section = document.getElementById(location.hash.slice(1));
@@ -143,12 +185,12 @@ try {
   if (account && session()?.sub === account) localStorage.setItem('cabina-owned-' + account, JSON.stringify(owned));
   for (const card of products) {
     const action = card.querySelector('.action');
-    if (owned.includes(card.dataset.sku)) action.textContent = 'Уже в профиле';
-    else if (account && mode !== 'off') {
+    if (owned.includes(card.dataset.sku)) { action.textContent = 'Уже в профиле'; card.classList.add('owned'); }
+    else if (checkout && account && mode !== 'off') {
       paymentButton(card, true);
     }
   }
-  status.textContent = mode === 'off' ? (checkout ? '' : 'Приём оплаты пока закрыт.') :
+  status.textContent = mode === 'off' ? (checkout ? '' : 'Приём оплаты скоро откроется.') :
     mode === 'test' ? 'Тестовый режим оплаты.' : account ? '' : 'Для покупки войдите в свой аккаунт в CABINA.';
   if (new URLSearchParams(location.search).has('InvId')) {
     status.textContent = 'После подтверждения платежа у предмета появится отметка «Уже в профиле».';
@@ -159,5 +201,5 @@ try {
     status.append(refresh);
   }
 } catch {
-  status.textContent = checkout ? '' : 'Оплата сейчас недоступна. Попробуйте позже.';
+  status.textContent = checkout ? '' : 'Приём оплаты скоро откроется.';
 }

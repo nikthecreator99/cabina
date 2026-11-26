@@ -416,6 +416,8 @@ function renderExtra() {
           <div class="grow"><div class="t1">Закрепление состава</div><div class="t2">Сколько башмаков и ручных тормозных осей нужно на уклоне</div></div>${small(I.right, 18)}</button>`,
       help: `<button class="row" data-act="go" data-page="help" id="extra-help" data-key="help"><span class="ico" style="--c:var(--accent)">${I.help}</span>
           <div class="grow"><div class="t1">Помощь</div><div class="t2">Частые вопросы: поездки, отдых, заработок, данные</div></div>${small(I.right, 18)}</button>`,
+      shop: `<button class="row" data-act="extra-shop" data-key="shop"><span class="ico" style="--c:var(--accent)">${I.bag}</span>
+          <div class="grow"><div class="t1">Магазин</div><div class="t2">Персонажи, фоны и детали для профиля</div></div>${small(I.right, 18)}</button>`,
       ideas: legalReady() ? ideasRowHtml('extra-ideas').replace('<button class="row"', '<button class="row" data-key="ideas"') : '',
     };
     // один общий список; порядок меняется удержанием пальца (2.21) и хранится в настройках
@@ -927,6 +929,8 @@ app.addEventListener('click', async (e) => {
     case 'extra-docs': V.extra = 'docs'; render(); window.scrollTo(0, 0); break;
     case 'extra-vu45': V.extra = 'vu45'; render(); window.scrollTo(0, 0); break;
     case 'extra-fix': V.extra = 'fix'; render(); window.scrollTo(0, 0); break;
+    // «Назад» со страницы магазина перезагружает приложение — вернуть человека в «Ещё» (только эта вкладка браузера, 30 мин)
+    case 'extra-shop': try { sessionStorage.setItem('cabina-back', String(Date.now())); } catch {} location.assign('data/shop.html'); break;
     case 'extra-phones': V.extra = 'phones'; V.phonesQ = ''; V.phonesGroup = null; render(); window.scrollTo(0, 0); break;
     case 'phones-group': V.phonesGroup = b.dataset.g; V.phonesQ = ''; render(); window.scrollTo(0, 0); break;
     case 'phones-up': V.phonesGroup = null; render(); window.scrollTo(0, 0); break;
@@ -1217,6 +1221,11 @@ async function start() {
   initMoney();
   initLock();
   if (lockOn()) await lockScreen();
+  try {
+    const back = Number(sessionStorage.getItem('cabina-back'));
+    sessionStorage.removeItem('cabina-back');
+    if (back && Date.now() - back < 30 * 60000) V.tab = 'extra';
+  } catch {}
   render();
   if (!S.onboarded && !redirect && !location.hash) showFirstVisit();
   if (accountRedirect(redirect)) { V.tab = 'profile'; V.pages = []; go('account'); }
