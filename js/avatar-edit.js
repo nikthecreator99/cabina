@@ -303,7 +303,7 @@ function sections() {
     if (index < 0 || !item || E.prem || ownedItems().includes(sku)) continue;
     const id = 'buy-' + sku;
     list.splice(index + 1, 0, { id, html: () =>
-      `<div class="av-sec" data-sec="${id}" data-h="${hash(id + item.price)}"><button class="av-order" data-act="av-order" data-sku="${esc(sku)}" aria-label="Оформить: ${esc(item.name)} за ${item.price} ₽">${I.bag}<span>Оформить за ${item.price} ₽</span>${I.right}</button></div>` });
+      `<div class="av-sec" data-sec="${id}" data-h="${hash(id + item.price + item.name)}"><button class="av-order" data-act="av-order" data-sku="${esc(sku)}" aria-label="Оформить: ${esc(item.name)} за ${item.price} ₽">${I.bag}<span>Оформить за ${item.price} ₽</span>${I.right}</button><p class="av-order-note">${esc(A.ownNote(sku, item.name))}</p></div>` });
   }
   const locks = A.lockedRewards(E.a, rewardsOpen());
   for (const r of locks) {

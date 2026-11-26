@@ -1,3 +1,7 @@
+/* Пока shop-page.js не собрал страницу, её не видно: иначе на миг мелькает «сырая» разметка (2.43.3, жалоба Никиты).
+   Если скрипт не загрузился — через 2,5 с страница всё равно появится (без скриптов — сразу, см. <noscript>). */
+.store[data-shop]:not(.ready) { visibility: hidden; animation: store-show 0s 2.5s forwards; }
+@keyframes store-show { to { visibility: visible; } }
 .store { max-width: 54rem; margin: auto; padding: 1.5rem 1rem 4rem; overflow-wrap: anywhere; }
 .store a { color: var(--accent); }
 .store nav, .store section, .store footer { padding-block: 1rem; }
@@ -89,3 +93,5 @@
 .catalog .seller-head { margin: 0; padding: .75rem .85rem .2rem; font: 800 calc(16px * var(--fs))/1.2 var(--font-body); border: 0; }
 .catalog footer > .seller-head + * { border-top: 0; }
 .catalog .seller-req { margin: 0; padding: 0 .85rem .75rem; color: var(--text-2); line-height: 1.45; }
+.checkout .checkout-note { margin: -.2rem .15rem 0; color: var(--text-2); font-size: calc(14px * var(--fs)); line-height: 1.4; }
+.checkout .checkout-info p, .checkout .checkout-info h2 { overflow-wrap: break-word; hyphens: auto; }

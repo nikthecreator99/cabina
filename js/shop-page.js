@@ -1,5 +1,5 @@
 import { I } from './ui.js';
-import { avatarSvg, bgSvg, normalizeAvatar } from './avatar.js';
+import { avatarSvg, bgSvg, normalizeAvatar, ownNote } from './avatar.js';
 import { API, session, accessToken } from './auth.js';
 
 const status = document.querySelector('#status');
@@ -195,7 +195,8 @@ async function buy(card) {
 
 for (const card of products) card.querySelector('.preview').innerHTML = preview(card.dataset.sku);
 function paymentButton(card, available) {
-  const price = card.querySelector('strong').textContent;
+  // «299 ₽» не разрывается: знак рубля не уходит на отдельную строку
+  const price = card.querySelector('strong').textContent.replace(/\s+₽/, '\u00a0₽');
   const button = document.createElement('button');
   button.className = 'btn btn-primary checkout-pay';
   button.disabled = !available;
@@ -213,7 +214,11 @@ if (checkout) {
   info.className = 'checkout-info';
   info.append(card.querySelector('.preview'), card.querySelector('h2'), card.querySelector('p'));
   card.prepend(info);
+  // Покупается предмет, а не примерка: настраивать можно и потом (2.43.3, просьба Никиты)
+  info.after(Object.assign(document.createElement('p'), {className: 'checkout-note', textContent: ownNote(card.dataset.sku, card.querySelector('h2').textContent)}));
 }
+// Страница собрана — можно показывать (до этого её прячет shop.css, иначе на миг видна «сырая» разметка)
+store.classList.add('ready');
 try {
   ({terms, mode} = await call('catalog'));
   const owned = account ? (await call('owned')).owned : [];
