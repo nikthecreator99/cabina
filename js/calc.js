@@ -258,11 +258,12 @@ export function eachDate(startKey, endKey, fn) {
   while (t <= end && guard++ < 3700) { fn(dateKeyOf(t)); t += DAY; }
 }
 
-export function autoAbsenceHours(startKey, endKey) {
+// w — неделя (6 или 5); без неё — выбранная в Настройках
+export function autoAbsenceHours(startKey, endKey, w) {
   const byMonth = {};
   eachDate(startKey, endKey, (k) => {
     const mk = k.slice(0, 7);
-    byMonth[mk] = (byMonth[mk] || 0) + normDay(k).hours;
+    byMonth[mk] = (byMonth[mk] || 0) + normDay(k, w).hours;
   });
   return byMonth;
 }
@@ -296,8 +297,8 @@ export function absenceMonths(startKey, endKey) {
   return [...set];
 }
 
-export function absenceHoursByMonth(a) {
-  if (a.auto !== false) return autoAbsenceHours(a.start, a.end);
+export function absenceHoursByMonth(a, w) {
+  if (a.auto !== false) return autoAbsenceHours(a.start, a.end, w);
   const out = {};
   for (const mk of absenceMonths(a.start, a.end)) out[mk] = Math.max(0, Number(a.monthHours?.[mk]) || 0);
   return out;
@@ -346,7 +347,14 @@ export function monthSummary(y, m, trips, absences) {
   const normMin = Math.round(norm * 60);
   const pct = normMin > 0 ? work / normMin : null;
   const overtime = normMin > 0 || work > 0 ? Math.max(0, work - normMin) : 0;
-  return { mk, base, absTotal, norm, normMin, work, night, holiday, restDay, wait, pass, overtime, absByType, pct, monthTrips, monthAbs };
+  // Оплата переработки (2.43.2, по расчётным листкам Никиты май–октябрь 2026): в листке «Норма часов (по закону)» —
+  // всегда по пятидневке, отвлечения вычитаются по ней же. На экране норма остаётся по выбранной неделе.
+  const lawBase = monthNorm(y, m, 5).hours;
+  let lawAbs = 0;
+  for (const { a } of monthAbs) lawAbs += absenceHoursByMonth(a, 5)[mk] || 0;
+  const lawNormMin = Math.round(Math.max(0, lawBase - lawAbs) * 60);
+  const payOvertime = lawNormMin > 0 || work > 0 ? Math.max(0, work - lawNormMin) : 0;
+  return { mk, base, absTotal, norm, normMin, work, night, holiday, restDay, wait, pass, overtime, lawBase, lawNormMin, payOvertime, absByType, pct, monthTrips, monthAbs };
 }
 
 // Недоработка в статистике: только завершённый месяц, за который есть записи.

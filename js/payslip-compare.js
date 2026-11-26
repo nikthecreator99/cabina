@@ -35,8 +35,9 @@ export function compareTrips(sheet,key,trips,absences,cfg={}) {
   }
   metric('Всего отработано',summary.work,sheet.worked,incomplete);
   if(Number.isFinite(sheet.norm)){
-    const norm=metric('Норма часов по закону',summary.base*60,sheet.norm);
-    if(norm.status==='diff') norm.detail+=' CABINA считает норму по шестидневке или пятидневке — как выбрано в Настройках → «Календарь и часовой пояс».';
+    // в листке норма по закону — по пятидневке; от неё CABINA считает и оплату переработки
+    const norm=metric('Норма часов по закону',(summary.lawBase??summary.base)*60,sheet.norm);
+    if(norm.status==='diff') norm.detail+=' CABINA берёт норму по производственному календарю для пятидневки. Проверьте, что листок за этот месяц.';
   }
   function hours(title,minutes,code,reason='',payKey) {
     const all=current.filter(r=>code.test(r.code));

@@ -65,7 +65,7 @@ test('переработка: часы сверх нормы в выходные
   assert.equal(line(r, 'base').amount, 184 * 300);
 });
 
-test('переработка в будни: +50% ставки', () => {
+test('переработка в будни: первые 2 ч +50%, дальше +100%', () => {
   // только будни: 23 будних дня октября по 8 ч, кроме одного — 184 ч, выходных часов нет
   const days = [];
   for (let d = 1; d <= 31 && days.length < 22; d++) { const k = String(d).padStart(2, '0'); const wd = new Date(Date.UTC(2026, 9, d)).getUTCDay(); if (wd !== 0 && wd !== 6) days.push(k); }
@@ -73,7 +73,10 @@ test('переработка в будни: +50% ставки', () => {
   const r = payMonth(2026, 10, trips, [], cfgOf({ bonus: 0, harm: 0 }), st);
   // 22 × 8 ч 20 мин = 183 ч 20 мин, сверх нормы 7 ч 20 мин
   assert.equal(r.sum.overtime, 440);
-  assert.equal(line(r, 'overOther').amount, Math.round((440 / 60) * 300 * 0.5 * 100) / 100);
+  assert.deepEqual([line(r, 'overOther').hours, line(r, 'overOther').pct, line(r, 'overOther').amount], [2, 50, 300]);
+  const o2 = line(r, 'overOther2');
+  assert.deepEqual([o2.label, o2.pct, Math.round(o2.hours * 60)], ['Переработка сверх 2 ч', 100, 320]);
+  assert.equal(o2.amount, Math.round((320 / 60) * 300 * 100) / 100);
   assert.equal(line(r, 'overWeekend'), undefined);
 });
 
