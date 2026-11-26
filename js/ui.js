@@ -2,6 +2,9 @@
 const sv = (d, extra = '') => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 
 export const I = {
+  bag: sv('<rect x="4" y="7" width="16" height="14" rx="3"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/>'),
+  cart: sv('<path d="M2 3h3l3 13h11l3-10H6"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>'),
+  external: sv('<path d="M14 3h7v7M21 3l-11 11M10 5H4v15h15v-6"/>'),
   bolt: sv('<path d="m14 2-10 12h7l-1 8 10-13h-7z"/>'),
   home: sv('<path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/>'),
   route: sv('<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H16a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6h7.5"/>'),

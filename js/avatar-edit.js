@@ -295,7 +295,7 @@ function sections() {
     if (index < 0 || !item || E.prem || ownedItems().includes(sku)) continue;
     const id = 'buy-' + sku;
     list.splice(index + 1, 0, { id, html: () =>
-      `<div class="av-sec" data-sec="${id}" data-h="${hash(id + item.price)}"><a class="btn btn-primary" href="data/shop.html?item=${encodeURIComponent(sku)}" target="_blank" rel="noopener" aria-label="Купить: ${esc(item.name)} за ${item.price} ₽">Купить · ${item.price} ₽</a></div>` });
+      `<div class="av-sec" data-sec="${id}" data-h="${hash(id + item.price)}"><a class="av-order" href="data/shop.html?item=${encodeURIComponent(sku)}" aria-label="Оформить: ${esc(item.name)} за ${item.price} ₽">${I.bag}<span>Оформить за ${item.price} ₽</span>${I.right}</a></div>` });
   }
   const locks = A.lockedRewards(E.a, rewardsOpen());
   for (const r of locks) {

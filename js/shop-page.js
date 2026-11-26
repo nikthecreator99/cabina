@@ -1,10 +1,12 @@
+import { I } from './ui.js';
 import { avatarSvg, bgSvg } from './avatar.js';
 import { API, session, accessToken } from './auth.js';
 
 const status = document.querySelector('#status');
 let products = [...document.querySelectorAll('[data-sku]')];
 const selected = new URLSearchParams(location.search).get('item');
-if (selected && products.some(card => card.dataset.sku === selected)) {
+const checkout = products.some(card => card.dataset.sku === selected);
+if (checkout) {
   for (const card of products) if (card.dataset.sku !== selected) card.remove();
   products = products.filter(card => card.dataset.sku === selected);
   document.querySelector('h1').textContent = 'Оформление покупки';
@@ -21,6 +23,43 @@ for (const id of ['terms', 'returns']) {
   details.id = id;
   details.append(...section.childNodes);
   section.replaceWith(details);
+}
+function decorateRow(row, icon, end) {
+  row.classList.add('checkout-row');
+  row.insertAdjacentHTML('afterbegin', icon);
+  row.insertAdjacentHTML('beforeend', end);
+}
+if (checkout) {
+  const store = document.querySelector('.store');
+  store.classList.add('checkout');
+  const back = store.querySelector('a');
+  back.className = 'checkout-back';
+  back.innerHTML = I.left;
+  back.setAttribute('aria-label', 'Назад');
+  if (document.referrer && new URL(document.referrer).origin === location.origin) {
+    back.onclick = event => { event.preventDefault(); history.back(); };
+  }
+  const nav = store.querySelector('nav');
+  const privacy = nav.querySelector('[href="shop-privacy.html"]');
+  const footer = store.querySelector('footer');
+  const seller = document.createElement('details');
+  seller.id = 'seller';
+  seller.innerHTML = '<summary>О продавце</summary>';
+  seller.append(footer.querySelector('p'));
+  footer.removeAttribute('id');
+  footer.querySelector('h2').remove();
+  footer.querySelector('br')?.remove();
+  const terms = store.querySelector('#terms');
+  const returns = store.querySelector('#returns');
+  nav.replaceChildren(terms, returns, privacy, seller);
+  nav.before(status);
+  decorateRow(terms.querySelector('summary'), I.file, I.down);
+  decorateRow(returns.querySelector('summary'), I.swap, I.down);
+  decorateRow(privacy, I.shield, I.external);
+  decorateRow(seller.querySelector('summary'), I.user, I.down);
+  for (const link of footer.querySelectorAll('a')) {
+    decorateRow(link, link.protocol === 'tel:' ? I.call : I.mail, I.right);
+  }
 }
 function revealTerms() {
   const section = document.getElementById(location.hash.slice(1));
@@ -78,6 +117,26 @@ async function buy(card) {
 }
 
 for (const card of products) card.querySelector('.preview').innerHTML = preview(card.dataset.sku);
+function paymentButton(card, available) {
+  const price = card.querySelector('strong').textContent;
+  const button = document.createElement('button');
+  button.className = 'btn btn-primary checkout-pay';
+  button.disabled = !available;
+  button.innerHTML = I.cart;
+  const label = document.createElement('span');
+  label.textContent = available ? 'Купить за ' + price : 'Оплата недоступна · ' + price;
+  button.append(label);
+  if (available) button.onclick = () => buy(card);
+  card.querySelector('.action').replaceChildren(button);
+}
+if (checkout) {
+  paymentButton(products[0], false);
+  const card = products[0];
+  const info = document.createElement('div');
+  info.className = 'checkout-info';
+  info.append(card.querySelector('.preview'), card.querySelector('h2'), card.querySelector('p'));
+  card.prepend(info);
+}
 try {
   ({terms, mode} = await call('catalog'));
   const owned = account ? (await call('owned')).owned : [];
@@ -86,14 +145,10 @@ try {
     const action = card.querySelector('.action');
     if (owned.includes(card.dataset.sku)) action.textContent = 'Уже в профиле';
     else if (account && mode !== 'off') {
-      const button = document.createElement('button');
-      button.className = 'btn btn-primary';
-      button.textContent = 'Перейти к оплате · ' + card.querySelector('strong').textContent;
-      button.onclick = () => buy(card);
-      action.append(button);
+      paymentButton(card, true);
     }
   }
-  status.textContent = mode === 'off' ? 'Приём оплаты пока закрыт.' :
+  status.textContent = mode === 'off' ? (checkout ? '' : 'Приём оплаты пока закрыт.') :
     mode === 'test' ? 'Тестовый режим оплаты.' : account ? '' : 'Для покупки войдите в свой аккаунт в CABINA.';
   if (new URLSearchParams(location.search).has('InvId')) {
     status.textContent = 'После подтверждения платежа у предмета появится отметка «Уже в профиле».';
@@ -104,5 +159,5 @@ try {
     status.append(refresh);
   }
 } catch {
-  status.textContent = 'Оплата сейчас недоступна. Попробуйте позже.';
+  status.textContent = checkout ? '' : 'Оплата сейчас недоступна. Попробуйте позже.';
 }
